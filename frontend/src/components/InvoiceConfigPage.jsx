@@ -17,7 +17,7 @@ export default function InvoiceConfigPage() {
   const [configError, setConfigError] = useState("");
   const [configSuccess, setConfigSuccess] = useState("");
 
-  const API_CONFIG_URL = "http://localhost:5000/api/clients/config";
+  const API_CONFIG_URL = `${import.meta.env.VITE_BACKEND_URL}/api/clients/config`;
 
   const fetchConfig = async () => {
     try {
@@ -27,7 +27,8 @@ export default function InvoiceConfigPage() {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
-      if (!res.ok) throw new Error("Failed to load invoice layout configuration.");
+      if (!res.ok)
+        throw new Error("Failed to load invoice layout configuration.");
       const data = await res.json();
       setConfig({
         companyName: data.companyName || "",
@@ -82,7 +83,7 @@ export default function InvoiceConfigPage() {
       const data = await res.json();
       setConfig((prev) => ({ ...prev, companyLogo: data.companyLogo }));
       setConfigSuccess("Company logo updated successfully!");
-      
+
       // Dispatch layout config event so that header / previews sync up immediately
       window.dispatchEvent(new Event("companyConfigUpdated"));
       setTimeout(() => setConfigSuccess(""), 4000);
@@ -110,7 +111,7 @@ export default function InvoiceConfigPage() {
 
       if (!res.ok) throw new Error("Failed to save invoice configuration.");
       setConfigSuccess("Invoice layout settings updated successfully!");
-      
+
       window.dispatchEvent(new Event("companyConfigUpdated"));
       setTimeout(() => setConfigSuccess(""), 4000);
     } catch (err) {
@@ -123,13 +124,15 @@ export default function InvoiceConfigPage() {
   return (
     <div className="max-w-2xl mx-auto animate-fade-in font-sans">
       <div className="bg-white border border-slate-100 rounded-2xl p-6 custom-shadow">
-        
         <div className="flex items-center gap-2 pb-4 mb-5 border-b border-slate-100">
           <Sliders className="h-5 w-5 text-[#5D5FEF]" />
           <div>
-            <h3 className="text-base font-extrabold text-slate-900">Company & Layout Settings</h3>
+            <h3 className="text-base font-extrabold text-slate-900">
+              Company & Layout Settings
+            </h3>
             <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-              Customize company details, GSTIN parameters, brand logos, and invoice footnotes.
+              Customize company details, GSTIN parameters, brand logos, and
+              invoice footnotes.
             </p>
           </div>
         </div>
@@ -149,18 +152,19 @@ export default function InvoiceConfigPage() {
         {loadingConfig ? (
           <div className="py-16 flex flex-col items-center justify-center gap-2">
             <div className="w-6 h-6 border-2 border-[#5D5FEF] border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-slate-400 font-semibold">Loading settings...</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              Loading settings...
+            </span>
           </div>
         ) : (
           <div className="space-y-6">
-            
             {/* BRAND LOGO FILE UPLOAD MODULE */}
             <div className="p-4 rounded-2xl border border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-4">
                 {config.companyLogo ? (
                   <div className="h-16 w-24 bg-white border border-slate-200/60 rounded-xl overflow-hidden flex items-center justify-center p-1.5 shadow-sm shrink-0">
                     <img
-                      src={`http://localhost:5000/uploads/${config.companyLogo}`}
+                      src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${config.companyLogo}`}
                       alt="Company Logo Preview"
                       className="h-full w-full object-contain"
                     />
@@ -171,13 +175,16 @@ export default function InvoiceConfigPage() {
                   </div>
                 )}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-900">Brand Logo Image</h4>
+                  <h4 className="text-xs font-bold text-slate-900">
+                    Brand Logo Image
+                  </h4>
                   <p className="text-[10px] text-slate-450 font-semibold mt-0.5">
-                    Upload a custom company logo (PNG, JPG) to print on invoice headers.
+                    Upload a custom company logo (PNG, JPG) to print on invoice
+                    headers.
                   </p>
                 </div>
               </div>
-              
+
               <div>
                 <input
                   type="file"
@@ -197,7 +204,6 @@ export default function InvoiceConfigPage() {
 
             {/* General Form Fields */}
             <form onSubmit={handleSaveConfig} className="space-y-4">
-              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Company Name */}
                 <div>

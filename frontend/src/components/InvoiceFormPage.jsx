@@ -76,9 +76,12 @@ export default function InvoiceFormPage({
 
       // Fetch company profile settings
       try {
-        const res = await fetch("http://localhost:5000/api/clients/config", {
-          headers,
-        });
+        const res = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/clients/config`,
+          {
+            headers,
+          },
+        );
         if (res.ok) {
           const data = await res.json();
           setConfig({
@@ -91,9 +94,12 @@ export default function InvoiceFormPage({
 
       // Fetch pre-configured services settings
       try {
-        const res = await fetch("http://localhost:5000/api/services", {
-          headers,
-        });
+        const res = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/services`,
+          {
+            headers,
+          },
+        );
         if (res.ok) {
           const servicesData = await res.json();
           setBackendServices(servicesData);
@@ -126,7 +132,9 @@ export default function InvoiceFormPage({
   useEffect(() => {
     const sourceInvoice = invoice || draftInvoice;
     if (sourceInvoice) {
-      setSelectedClientId(sourceInvoice.client?._id || sourceInvoice.client || "");
+      setSelectedClientId(
+        sourceInvoice.client?._id || sourceInvoice.client || "",
+      );
       setInvoiceDate(
         new Date(sourceInvoice.invoiceDate || sourceInvoice.createdAt)
           .toISOString()

@@ -27,14 +27,17 @@ export default function PasswordModal({ isOpen, onClose, showToast }) {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/update-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+      const res = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/auth/update-password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ currentPassword, newPassword }),
         },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
+      );
 
       const data = await res.json();
       if (!res.ok) {
@@ -56,12 +59,13 @@ export default function PasswordModal({ isOpen, onClose, showToast }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl border border-slate-100 max-w-sm w-full custom-shadow overflow-hidden animate-fade-in">
-        
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-2">
             <Lock className="h-4.5 w-4.5 text-indigo-600" />
-            <h3 className="text-sm font-bold text-slate-900">Change Admin Password</h3>
+            <h3 className="text-sm font-bold text-slate-900">
+              Change Admin Password
+            </h3>
           </div>
           <button
             onClick={onClose}
@@ -73,7 +77,6 @@ export default function PasswordModal({ isOpen, onClose, showToast }) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          
           {/* Current Password */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
@@ -147,7 +150,6 @@ export default function PasswordModal({ isOpen, onClose, showToast }) {
               <span>Update Password</span>
             </button>
           </div>
-
         </form>
       </div>
     </div>

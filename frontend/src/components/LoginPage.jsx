@@ -17,11 +17,14 @@ export default function LoginPage({
     setError("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/auth/login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        },
+      );
 
       const data = await res.json();
       if (!res.ok) {
@@ -39,13 +42,12 @@ export default function LoginPage({
   return (
     <div className="min-h-screen bg-slate-50 w-screen flex items-center justify-center p-4 grid-bg font-sans">
       <div className="w-full max-w-md bg-white border border-slate-100 rounded-2xl p-8 custom-shadow animate-fade-in">
-        
         {/* Branding header */}
         <div className="flex flex-col items-center mb-8 text-center select-none">
           {companyLogo ? (
             <div className="h-16 w-28 bg-white border border-slate-100 rounded-2xl mb-4 shadow-sm flex items-center justify-center p-2 overflow-hidden">
               <img
-                src={`http://localhost:5000/uploads/${companyLogo}`}
+                src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${companyLogo}`}
                 alt={companyName}
                 className="h-full w-full object-contain"
               />
@@ -55,7 +57,9 @@ export default function LoginPage({
               {companyName}
             </h1>
           )}
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Welcome back</h2>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            Welcome back
+          </h2>
           <p className="text-xs text-slate-400 font-bold mt-1.5 uppercase tracking-widest">
             Invoice Management Admin Portal
           </p>

@@ -35,21 +35,22 @@ export default function Sidebar({
 
   return (
     <aside className="w-56 bg-[#0B0C24] text-slate-400 h-screen sticky top-0 flex flex-col select-none shrink-0 border-r border-slate-900/50">
-
       {/* Brand Header */}
       <div className="py-6 flex-1">
         <div className="flex items-center gap-3 px-5 mb-6">
           {companyLogo && (
             <div className="h-9 w-9 rounded-xl bg-white/95 flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0 overflow-hidden p-1">
               <img
-                src={`http://localhost:5000/uploads/${companyLogo}`}
+                src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${companyLogo}`}
                 alt={companyName}
                 className="h-full w-full object-contain"
               />
             </div>
           )}
           <div>
-            <h2 className="text-sm font-bold text-white leading-tight tracking-tight break-words">{companyName}</h2>
+            <h2 className="text-sm font-bold text-white leading-tight tracking-tight break-words">
+              {companyName}
+            </h2>
             <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider block mt-1">
               Invoice Management
             </span>
@@ -65,7 +66,12 @@ export default function Sidebar({
             {mainItems.map((item) => {
               const Icon = item.icon;
               return (
-                <NavLink key={item.to} to={item.to} end={item.exact} className={linkClass}>
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.exact}
+                  className={linkClass}
+                >
                   {({ isActive }) => (
                     <>
                       <Icon className={iconClass(isActive)} />
@@ -100,7 +106,6 @@ export default function Sidebar({
           </nav>
         </div>
       </div>
-
     </aside>
   );
 }

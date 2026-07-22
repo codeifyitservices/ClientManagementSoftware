@@ -1,19 +1,56 @@
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, FileText, Download, Send, Phone, Mail, Globe } from "lucide-react";
+import {
+  ChevronLeft,
+  FileText,
+  Download,
+  Send,
+  Phone,
+  Mail,
+  Globe,
+} from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // Helper function to convert numeric value into Indian English word format
 const numberToWords = (num) => {
   if (num === 0) return "Zero Only";
-  
+
   const a = [
-    "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
-    "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"
+    "",
+    "One",
+    "Two",
+    "Three",
+    "Four",
+    "Five",
+    "Six",
+    "Seven",
+    "Eight",
+    "Nine",
+    "Ten",
+    "Eleven",
+    "Twelve",
+    "Thirteen",
+    "Fourteen",
+    "Fifteen",
+    "Sixteen",
+    "Seventeen",
+    "Eighteen",
+    "Nineteen",
   ];
-  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-  
+  const b = [
+    "",
+    "",
+    "Twenty",
+    "Thirty",
+    "Forty",
+    "Fifty",
+    "Sixty",
+    "Seventy",
+    "Eighty",
+    "Ninety",
+  ];
+
   const g = ["", "Thousand", "Lakh", "Crore"];
-  
+
   const makeGroup = (n) => {
     let s = "";
     if (n >= 100) {
@@ -93,16 +130,23 @@ export default function InvoicePreviewPage({
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/clients/config", {
-          headers: { Authorization: `Bearer ${token || localStorage.getItem("token")}` },
-        });
+        const res = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/clients/config`,
+          {
+            headers: {
+              Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+            },
+          },
+        );
         if (res.ok) {
           const data = await res.json();
           setConfig({
             companyName: data.companyName || "Codenap IT Services",
             companyEmail: data.companyEmail || "info@codenap.in",
             companyPhone: data.companyPhone || "+91 97175 70933",
-            companyAddress: data.companyAddress || "SCO 123, Sector 15, Faridabad, Haryana - 121007",
+            companyAddress:
+              data.companyAddress ||
+              "SCO 123, Sector 15, Faridabad, Haryana - 121007",
             companyGst: data.companyGst || "06AABCT1234Q1Z5",
             invoiceTerms: data.invoiceTerms || "Thank you for your business!",
             companyLogo: data.companyLogo || "",
@@ -116,13 +160,20 @@ export default function InvoicePreviewPage({
   }, [token]);
 
   // Selected client details
-  const activeClient = stateClients.find((c) => c._id === invoiceData.client) || clients.find((c) => c._id === invoiceData.client) || {};
+  const activeClient =
+    stateClients.find((c) => c._id === invoiceData.client) ||
+    clients.find((c) => c._id === invoiceData.client) ||
+    {};
 
   // Auto detect Interstate vs Intrastate tax structure
-  const companyStateCode = config.companyGst ? config.companyGst.slice(0, 2) : "06";
-  const clientStateCode = activeClient.gstNumber ? activeClient.gstNumber.slice(0, 2) : "";
+  const companyStateCode = config.companyGst
+    ? config.companyGst.slice(0, 2)
+    : "06";
+  const clientStateCode = activeClient.gstNumber
+    ? activeClient.gstNumber.slice(0, 2)
+    : "";
   const isInterstate = clientStateCode && companyStateCode !== clientStateCode;
-  
+
   // Tax calculations
   const items = invoiceData.items || [];
   let subTotal = 0;
@@ -157,7 +208,6 @@ export default function InvoicePreviewPage({
 
   return (
     <div className="space-y-6 font-sans animate-fade-in max-w-4xl mx-auto select-none">
-      
       {/* Header Block matching mockup */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
         <div>
@@ -183,38 +233,47 @@ export default function InvoicePreviewPage({
 
       {/* Standalone A4 Invoice Paper Sheet */}
       <div className="invoice-a4-sheet bg-white rounded-2xl border border-slate-150 custom-shadow p-12 space-y-8 select-none text-slate-800 text-xs leading-relaxed max-w-full mx-auto box-border">
-        
         {/* 1. Header (Seller & Logo layout) */}
         <div className="flex items-start justify-between">
           {config.companyLogo ? (
             <div className="flex items-start gap-4">
               <img
-                src={`http://localhost:5000/uploads/${config.companyLogo}`}
+                src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${config.companyLogo}`}
                 alt="Logo"
                 className="h-12 w-auto max-w-[120px] object-contain rounded border border-slate-100 p-1 bg-white shrink-0"
               />
               <div>
-                <h2 className="text-base font-extrabold text-slate-950 leading-tight">{config.companyName}</h2>
+                <h2 className="text-base font-extrabold text-slate-950 leading-tight">
+                  {config.companyName}
+                </h2>
                 <p className="text-[10px] text-slate-450 mt-1 max-w-[280px]">
                   {config.companyAddress}
                 </p>
                 <p className="text-[10px] text-slate-450 mt-0.5">
-                  GSTIN: <span className="font-semibold text-slate-700">{config.companyGst}</span>
+                  GSTIN:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {config.companyGst}
+                  </span>
                 </p>
               </div>
             </div>
           ) : (
             <div>
-              <h2 className="text-base font-extrabold text-slate-950 leading-tight">{config.companyName}</h2>
+              <h2 className="text-base font-extrabold text-slate-950 leading-tight">
+                {config.companyName}
+              </h2>
               <p className="text-[10px] text-slate-455 mt-1 max-w-[280px]">
                 {config.companyAddress}
               </p>
               <p className="text-[10px] text-slate-455 mt-0.5">
-                GSTIN: <span className="font-semibold text-slate-700">{config.companyGst}</span>
+                GSTIN:{" "}
+                <span className="font-semibold text-slate-700">
+                  {config.companyGst}
+                </span>
               </p>
             </div>
           )}
-          
+
           {!config.companyLogo && (
             <div className="flex items-center gap-2">
               <div className="text-right">
@@ -249,35 +308,54 @@ export default function InvoicePreviewPage({
               {activeClient.companyName || "Client Company Name"}
             </h4>
             <p className="text-[10px] text-slate-500 mt-1 max-w-[240px]">
-              {activeClient.address || "Client Address"}, {activeClient.city || ""}{" "}
+              {activeClient.address || "Client Address"},{" "}
+              {activeClient.city || ""}{" "}
               {activeClient.pincode ? `- ${activeClient.pincode}` : ""}
             </p>
             {activeClient.gstNumber && (
               <p className="text-[10px] text-slate-500 mt-0.5">
-                GSTIN: <span className="font-semibold text-slate-700">{activeClient.gstNumber}</span>
+                GSTIN:{" "}
+                <span className="font-semibold text-slate-700">
+                  {activeClient.gstNumber}
+                </span>
               </p>
             )}
           </div>
-          
+
           <div className="text-right">
             <table className="ml-auto text-[10px]">
               <tbody>
                 <tr>
-                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">Invoice No</td>
-                  <td className="text-slate-900 font-bold py-0.5">: {invoiceData.invoiceNumber || "INV-2024-XXXX"}</td>
+                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">
+                    Invoice No
+                  </td>
+                  <td className="text-slate-900 font-bold py-0.5">
+                    : {invoiceData.invoiceNumber || "INV-2024-XXXX"}
+                  </td>
                 </tr>
                 <tr>
-                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">Invoice Date</td>
-                  <td className="text-slate-900 py-0.5">: {new Date(invoiceData.invoiceDate || Date.now()).toLocaleDateString("en-IN")}</td>
+                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">
+                    Invoice Date
+                  </td>
+                  <td className="text-slate-900 py-0.5">
+                    :{" "}
+                    {new Date(
+                      invoiceData.invoiceDate || Date.now(),
+                    ).toLocaleDateString("en-IN")}
+                  </td>
                 </tr>
                 <tr>
-                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">Status</td>
+                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">
+                    Status
+                  </td>
                   <td className="py-0.5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                      invoiceData.paymentStatus === "Paid"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                        invoiceData.paymentStatus === "Paid"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
                       {invoiceData.paymentStatus || "Pending"}
                     </span>
                   </td>
@@ -305,9 +383,15 @@ export default function InvoicePreviewPage({
               return (
                 <tr key={idx}>
                   <td className="py-3 px-3 text-slate-400">{idx + 1}</td>
-                  <td className="py-3 px-3 text-slate-900">{item.description || "Website Development"}</td>
-                  <td className="py-3 px-3 text-center text-slate-550">{item.sacCode || "998314"}</td>
-                  <td className="py-3 px-3 text-center text-slate-500">{item.qty}</td>
+                  <td className="py-3 px-3 text-slate-900">
+                    {item.description || "Website Development"}
+                  </td>
+                  <td className="py-3 px-3 text-center text-slate-550">
+                    {item.sacCode || "998314"}
+                  </td>
+                  <td className="py-3 px-3 text-center text-slate-500">
+                    {item.qty}
+                  </td>
                   <td className="py-3 px-3 text-right text-slate-500">
                     {item.rate.toLocaleString("en-IN")}
                   </td>
@@ -324,21 +408,34 @@ export default function InvoicePreviewPage({
         <div className="border-t border-slate-100 pt-3 flex flex-col items-end gap-1.5">
           <div className="w-64 grid grid-cols-2 text-right text-[10px] font-semibold text-slate-500">
             <span>Sub Total</span>
-            <span className="text-slate-800">₹{subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-            
+            <span className="text-slate-800">
+              ₹{subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            </span>
+
             <span>{taxTypeText}</span>
-            <span className="text-slate-800">₹{totalGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span className="text-slate-800">
+              ₹
+              {totalGstAmount.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+              })}
+            </span>
           </div>
           <div className="w-64 border-t border-slate-150 pt-2 grid grid-cols-2 text-right text-xs">
             <span className="font-extrabold text-slate-900">Grand Total</span>
-            <span className="font-black text-slate-950">₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span className="font-black text-slate-950">
+              ₹
+              {grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            </span>
           </div>
         </div>
 
         {/* 6. Amount in words & footer footnotes */}
         <div className="pt-2 border-t border-slate-100/60">
           <p className="text-[10px] font-semibold text-slate-500">
-            Amount in Words: <span className="text-slate-900 font-extrabold">{numberToWords(grandTotal)}</span>
+            Amount in Words:{" "}
+            <span className="text-slate-900 font-extrabold">
+              {numberToWords(grandTotal)}
+            </span>
           </p>
           <p className="text-[10px] font-semibold text-slate-400 mt-2 italic">
             {config.invoiceTerms}
@@ -360,7 +457,6 @@ export default function InvoicePreviewPage({
             <span>www.codenap.in</span>
           </span>
         </div>
-
       </div>
 
       {/* Actions Footer */}
@@ -375,7 +471,11 @@ export default function InvoicePreviewPage({
         <button
           type="button"
           onClick={() => {
-            alert(isDummyPreview ? "Dummy preview is not saved, so a PDF cannot be downloaded." : "Please save and send the invoice first to download PDF.");
+            alert(
+              isDummyPreview
+                ? "Dummy preview is not saved, so a PDF cannot be downloaded."
+                : "Please save and send the invoice first to download PDF.",
+            );
           }}
           className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
         >
@@ -398,7 +498,6 @@ export default function InvoicePreviewPage({
           </button>
         )}
       </div>
-
     </div>
   );
 }
