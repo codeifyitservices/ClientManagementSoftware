@@ -78,7 +78,7 @@ router.get("/", async (req, res) => {
 // 2. POST /api/invoices - Create a GST invoice
 router.post("/", async (req, res) => {
   try {
-    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus, shouldSendEmail } = req.body;
+    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus } = req.body;
 
     if (!client || !dueDate || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Please provide Client Profile, Due Date, and at least one Invoice Item." });
@@ -101,38 +101,7 @@ router.post("/", async (req, res) => {
     const savedInvoice = await newInvoice.save();
     const populated = await savedInvoice.populate("client");
 
-    let emailError = false;
-    let previewUrl = "";
-
-    if (shouldSendEmail) {
-      try {
-        const config = await getActiveConfig();
-        const pdfBuffer = await generateInvoicePDF(populated, config);
-
-        const emailMeta = {
-          invoiceNumber: populated.invoiceNumber,
-          clientName: populated.client.clientName,
-          email: populated.client.email,
-          serviceDescription: populated.serviceDescription,
-          amount: populated.totalAmount,
-        };
-
-        const emailResult = await sendInvoiceEmail(emailMeta, pdfBuffer, config);
-        if (emailResult.isFallback) {
-          previewUrl = emailResult.previewUrl;
-        }
-      } catch (mailErr) {
-        console.error("Email delivery failed:", mailErr.message);
-        emailError = true;
-      }
-    }
-
-    res.status(201).json({
-      ...populated.toObject(),
-      emailSent: !!shouldSendEmail,
-      emailError,
-      previewUrl,
-    });
+    res.status(201).json(populated);
   } catch (error) {
     res.status(500).json({ message: "Error creating invoice", error: error.message });
   }
@@ -141,7 +110,7 @@ router.post("/", async (req, res) => {
 // 3. PUT /api/invoices/:id - Edit an invoice
 router.put("/:id", async (req, res) => {
   try {
-    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus, shouldSendEmail } = req.body;
+    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus } = req.body;
 
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) {
@@ -160,38 +129,7 @@ router.put("/:id", async (req, res) => {
     const updatedInvoice = await invoice.save();
     const populated = await updatedInvoice.populate("client");
 
-    let emailError = false;
-    let previewUrl = "";
-
-    if (shouldSendEmail) {
-      try {
-        const config = await getActiveConfig();
-        const pdfBuffer = await generateInvoicePDF(populated, config);
-
-        const emailMeta = {
-          invoiceNumber: populated.invoiceNumber,
-          clientName: populated.client.clientName,
-          email: populated.client.email,
-          serviceDescription: populated.serviceDescription,
-          amount: populated.totalAmount,
-        };
-
-        const emailResult = await sendInvoiceEmail(emailMeta, pdfBuffer, config);
-        if (emailResult.isFallback) {
-          previewUrl = emailResult.previewUrl;
-        }
-      } catch (mailErr) {
-        console.error("Email delivery failed:", mailErr.message);
-        emailError = true;
-      }
-    }
-
-    res.json({
-      ...populated.toObject(),
-      emailSent: !!shouldSendEmail,
-      emailError,
-      previewUrl,
-    });
+    res.json(populated);
   } catch (error) {
     res.status(500).json({ message: "Error updating invoice", error: error.message });
   }
@@ -210,7 +148,7 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// 5. POST /api/invoices/:id/mark-paid - Mark as Paid & Email invoice PDF
+// 5. POST /api/invoices/:id/mark-paid - Mark as Paid
 router.post("/:id/mark-paid", async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id).populate("client");
@@ -219,38 +157,10 @@ router.post("/:id/mark-paid", async (req, res) => {
     }
 
     invoice.paymentStatus = "Paid";
-    invoice.invoiceSentAt = new Date();
     await invoice.save();
 
-    const config = await getActiveConfig();
-    const pdfBuffer = await generateInvoicePDF(invoice, config);
-
-    // Shape metadata expected by nodemailer template
-    const emailMeta = {
-      invoiceNumber: invoice.invoiceNumber,
-      clientName: invoice.client.clientName,
-      email: invoice.client.email,
-      serviceDescription: invoice.serviceDescription,
-      amount: invoice.totalAmount, // use calculated grand total value
-    };
-
-    let emailError = false;
-    let previewUrl = "";
-
-    try {
-      const emailResult = await sendInvoiceEmail(emailMeta, pdfBuffer, config);
-      if (emailResult.isFallback) {
-        previewUrl = emailResult.previewUrl;
-      }
-    } catch (mailErr) {
-      console.error("Email delivery failed:", mailErr.message);
-      emailError = true;
-    }
-
     res.json({
-      success: !emailError,
-      emailError,
-      previewUrl,
+      success: true,
       invoice,
     });
   } catch (error) {
@@ -258,12 +168,16 @@ router.post("/:id/mark-paid", async (req, res) => {
   }
 });
 
-// 6. POST /api/invoices/:id/resend-email - Resend invoice PDF email manually
+// 6. POST /api/invoices/:id/resend-email - Send invoice PDF email manually
 router.post("/:id/resend-email", async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id).populate("client");
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found." });
+    }
+
+    if (!invoice.client || !invoice.client.email) {
+      return res.status(400).json({ message: "Client email is missing for this invoice." });
     }
 
     const config = await getActiveConfig();
@@ -273,14 +187,19 @@ router.post("/:id/resend-email", async (req, res) => {
       invoiceNumber: invoice.invoiceNumber,
       clientName: invoice.client.clientName,
       email: invoice.client.email,
-      serviceDescription: invoice.serviceDescription,
-      amount: invoice.totalAmount,
+      serviceDescription: invoice.serviceDescription || "Services",
+      amount: invoice.totalAmount || invoice.amount || 0,
     };
 
-    await sendInvoiceEmail(emailMeta, pdfBuffer, config);
-    res.json({ message: "Invoice email resent successfully." });
+    const emailResult = await sendInvoiceEmail(emailMeta, pdfBuffer, config);
+    res.json({
+      message: `Invoice email sent to ${invoice.client.email}`,
+      isFallback: !!emailResult?.isFallback,
+      previewUrl: emailResult?.previewUrl || "",
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error sending email", error: error.message });
+    console.error("Manual email send error:", error);
+    res.status(500).json({ message: error.message || "Error sending email." });
   }
 });
 

@@ -33,9 +33,12 @@ export const sendInvoiceEmail = async (client, pdfBuffer, config = {}) => {
     isFallback = true;
   } else {
     // Zoho or custom SMTP
-    const host = process.env.SMTP_HOST || "smtp.zoho.com";
+    let host = (process.env.SMTP_HOST || "smtp.zoho.in").trim();
+    if (host === "smtp.zoho.com") host = "smtp.zoho.in";
     const port = parseInt(process.env.SMTP_PORT || "465", 10);
     const secure = port === 465;
+
+    console.log(`[SMTP] Attempting email send via ${host}:${port} to ${client.email}...`);
 
     transporter = nodemailer.createTransport({
       host,
@@ -46,7 +49,8 @@ export const sendInvoiceEmail = async (client, pdfBuffer, config = {}) => {
         pass: process.env.SMTP_PASS.trim(),
       },
     });
-    fromEmail = `"${companyName}" <${fromEmail.trim()}>`;
+    const userEmail = (process.env.SMTP_USER || "info@codenap.co.in").trim();
+    fromEmail = `"${companyName}" <${userEmail}>`;
   }
 
   const subject = `Payment Received – Invoice ${client.invoiceNumber}`;
@@ -90,7 +94,7 @@ ${companyName}`;
           </tr>
           <tr>
             <td style="padding: 4px 0; color: #6b7280; font-size: 14px;">Amount (INR):</td>
-            <td style="padding: 4px 0; font-weight: bold; text-align: right; font-size: 16px; color: #10B981;">Rs. ${client.amount.toFixed(2)}</td>
+            <td style="padding: 4px 0; font-weight: bold; text-align: right; font-size: 16px; color: #10B981;">Rs. ${Number(client.amount ?? client.totalAmount ?? 0).toFixed(2)}</td>
           </tr>
         </table>
       </div>

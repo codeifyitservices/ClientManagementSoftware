@@ -7,7 +7,7 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import { Plus, Search, X, ChevronDown, Eye } from "lucide-react";
+import { Plus, X, ChevronDown, Eye, Search } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import DashboardStats from "./components/DashboardStats";
 import DashboardView from "./components/DashboardView";
@@ -194,22 +194,6 @@ function AppShell({
                 </span>
               </>
             )}
-          </div>
-
-          {/* Disabled search bar */}
-          <div className="relative hidden md:block select-none">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <Search className="h-4 w-4" />
-            </span>
-            <input
-              type="text"
-              disabled
-              placeholder="Search here..."
-              className="pl-9 pr-12 py-1.5 w-52 border border-slate-200 rounded-xl bg-slate-50/50 text-[11px] font-medium text-slate-400 cursor-not-allowed focus:outline-none"
-            />
-            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[9px] font-bold text-slate-400/70">
-              Ctrl K
-            </span>
           </div>
 
           {/* Actions + Brand Badge */}
@@ -524,31 +508,10 @@ export default function App() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Failed to save invoice.");
 
-      if (data.shouldSendEmail) {
-        if (result.emailError) {
-          showToast(
-            invoiceId
-              ? "Invoice updated, email failed."
-              : "Invoice created, email failed.",
-            "warning",
-          );
-        } else {
-          if (result.previewUrl) {
-            console.log("Test Mail Preview URL:", result.previewUrl);
-          }
-          showToast(
-            invoiceId
-              ? "Invoice updated and sent!"
-              : "Invoice created and sent!",
-            "success",
-          );
-        }
-      } else {
-        showToast(
-          invoiceId ? "Invoice updated." : "Invoice created.",
-          "success",
-        );
-      }
+      showToast(
+        invoiceId ? "Invoice updated successfully." : "Invoice created successfully.",
+        "success",
+      );
 
       navigate("/invoices");
       fetchInvoices();
@@ -578,14 +541,47 @@ export default function App() {
     }
   };
 
-  const handleMarkAsPaid = async (invoice) => {
+  const handleClientBulkDelete = async (ids) => {
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          authenticatedFetch(`${API_CLIENTS}/${id}`, { method: "DELETE" }),
+        ),
+      );
+      showToast(`${ids.length} client(s) deleted.`, "success");
+      fetchClients(searchQuery);
+      fetchInvoices();
+    } catch (err) {
+      if (err.message !== "Unauthorized") showToast(err.message, "error");
+    }
+  };
+
+  const handleInvoiceBulkDelete = async (ids) => {
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          authenticatedFetch(`${API_INVOICES}/${id}`, { method: "DELETE" }),
+        ),
+      );
+      showToast(`${ids.length} invoice(s) deleted.`, "success");
+      fetchInvoices(searchQuery);
+    } catch (err) {
+      if (err.message !== "Unauthorized") showToast(err.message, "error");
+    }
+  };
+
+  const handleMarkAsPaid = async (invoiceArg) => {
+    const invoiceId = typeof invoiceArg === "string" ? invoiceArg : invoiceArg?._id;
+    const invoiceNumber = typeof invoiceArg === "object" ? invoiceArg?.invoiceNumber : invoiceArg;
+    if (!invoiceId) return;
+
     setProcessingInvoiceIds((p) => ({
       ...p,
-      [invoice._id]: { ...p[invoice._id], paid: true },
+      [invoiceId]: { ...p[invoiceId], paid: true },
     }));
     try {
       const res = await authenticatedFetch(
-        `${API_INVOICES}/${invoice._id}/mark-paid`,
+        `${API_INVOICES}/${invoiceId}/mark-paid`,
         { method: "POST" },
       );
       const result = await res.json();
@@ -593,40 +589,46 @@ export default function App() {
       showToast(
         result.emailError
           ? "Marked Paid, email failed."
-          : `Invoice ${invoice.invoiceNumber} marked Paid!`,
+          : `Invoice ${invoiceNumber || ""} marked Paid!`,
         result.emailError ? "warning" : "success",
       );
       fetchInvoices(searchQuery);
     } catch (err) {
       if (err.message !== "Unauthorized") showToast(err.message, "error");
     } finally {
-      setProcessingInvoiceIds((p) => ({
-        ...p,
-        [invoice._id]: { ...p[invoice._id], paid: false },
-      }));
+      setProcessingInvoiceIds((p) => {
+        const next = { ...p };
+        delete next[invoiceId];
+        return next;
+      });
     }
   };
 
-  const handleResendEmail = async (invoice) => {
+  const handleResendEmail = async (invoiceArg) => {
+    const invoiceId = typeof invoiceArg === "string" ? invoiceArg : invoiceArg?._id;
+    const invoiceNumber = typeof invoiceArg === "object" ? invoiceArg?.invoiceNumber : invoiceArg;
+    if (!invoiceId) return;
+
     setProcessingInvoiceIds((p) => ({
       ...p,
-      [invoice._id]: { ...p[invoice._id], resend: true },
+      [invoiceId]: { ...p[invoiceId], resend: true },
     }));
     try {
       const res = await authenticatedFetch(
-        `${API_INVOICES}/${invoice._id}/resend-email`,
+        `${API_INVOICES}/${invoiceId}/resend-email`,
         { method: "POST" },
       );
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Error.");
-      showToast(`Invoice ${invoice.invoiceNumber} resent!`, "success");
+      showToast(`Email for invoice ${invoiceNumber || ""} sent successfully!`, "success");
     } catch (err) {
       if (err.message !== "Unauthorized") showToast(err.message, "error");
     } finally {
-      setProcessingInvoiceIds((p) => ({
-        ...p,
-        [invoice._id]: { ...p[invoice._id], resend: false },
-      }));
+      setProcessingInvoiceIds((p) => {
+        const next = { ...p };
+        delete next[invoiceId];
+        return next;
+      });
     }
   };
 
@@ -749,6 +751,7 @@ export default function App() {
             setIsClientFormOpen(true);
           }}
           onDelete={(c) => setClientToDelete(c)}
+          onDeleteSelected={handleClientBulkDelete}
         />
       )}
     </div>
@@ -823,6 +826,7 @@ export default function App() {
           onResendEmail={handleResendEmail}
           onDownloadPdf={handleDownloadPdf}
           processingIds={processingInvoiceIds}
+          onDeleteSelected={handleInvoiceBulkDelete}
         />
       )}
     </div>

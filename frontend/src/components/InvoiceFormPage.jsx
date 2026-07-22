@@ -605,29 +605,22 @@ export default function InvoiceFormPage({
         </button>
         <button
           type="button"
-          onClick={() => handleFormSubmit(null, false)}
-          className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-650 hover:bg-slate-50 text-xs font-bold transition-all cursor-pointer"
-        >
-          Save as Draft
-        </button>
-        <button
-          type="button"
           onClick={handlePreviewTrigger}
-          className="px-5 py-2.5 rounded-xl border border-[#5D5FEF] text-[#5D5FEF] hover:bg-indigo-550 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+          className="px-5 py-2.5 rounded-xl border border-[#5D5FEF] text-[#5D5FEF] hover:bg-indigo-50 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
         >
           <Eye className="h-3.5 w-3.5" />
           <span>Preview Invoice</span>
         </button>
         <button
           type="button"
-          onClick={() => handleFormSubmit(null, true)}
+          onClick={() => handleFormSubmit(null, false)}
           disabled={isSaving}
           className="bg-[#5D5FEF] hover:bg-[#4d4fdf] active:bg-[#4345d2] text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
         >
           {isSaving && (
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
           )}
-          <span>Save & Send Invoice</span>
+          <span>Save Invoice</span>
         </button>
       </div>
     </div>

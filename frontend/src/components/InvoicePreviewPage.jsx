@@ -233,48 +233,32 @@ export default function InvoicePreviewPage({
 
       {/* Standalone A4 Invoice Paper Sheet */}
       <div className="invoice-a4-sheet bg-white rounded-2xl border border-slate-150 custom-shadow p-12 space-y-8 select-none text-slate-800 text-xs leading-relaxed max-w-full mx-auto box-border">
-        {/* 1. Header (Seller & Logo layout) */}
+        {/* 1. Header (Company details LEFT, Logo RIGHT) */}
         <div className="flex items-start justify-between">
-          {config.companyLogo ? (
-            <div className="flex items-start gap-4">
-              <img
-                src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${config.companyLogo}`}
-                alt="Logo"
-                className="h-12 w-auto max-w-[120px] object-contain rounded border border-slate-100 p-1 bg-white shrink-0"
-              />
-              <div>
-                <h2 className="text-base font-extrabold text-slate-950 leading-tight">
-                  {config.companyName}
-                </h2>
-                <p className="text-[10px] text-slate-450 mt-1 max-w-[280px]">
-                  {config.companyAddress}
-                </p>
-                <p className="text-[10px] text-slate-450 mt-0.5">
-                  GSTIN:{" "}
-                  <span className="font-semibold text-slate-700">
-                    {config.companyGst}
-                  </span>
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <h2 className="text-base font-extrabold text-slate-950 leading-tight">
-                {config.companyName}
-              </h2>
-              <p className="text-[10px] text-slate-455 mt-1 max-w-[280px]">
-                {config.companyAddress}
-              </p>
-              <p className="text-[10px] text-slate-455 mt-0.5">
-                GSTIN:{" "}
-                <span className="font-semibold text-slate-700">
-                  {config.companyGst}
-                </span>
-              </p>
-            </div>
-          )}
+          {/* Left: Company details always */}
+          <div>
+            <h2 className="text-base font-extrabold text-slate-950 leading-tight">
+              {config.companyName}
+            </h2>
+            <p className="text-[10px] text-slate-500 mt-1 max-w-[280px]">
+              {config.companyAddress}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              GSTIN:{" "}
+              <span className="font-semibold text-slate-700">
+                {config.companyGst}
+              </span>
+            </p>
+          </div>
 
-          {!config.companyLogo && (
+          {/* Right: Logo if available, else branded icon */}
+          {config.companyLogo ? (
+            <img
+              src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${config.companyLogo}`}
+              alt="Logo"
+              className="h-14 w-auto max-w-[140px] object-contain rounded border border-slate-100 p-1 bg-white shrink-0"
+            />
+          ) : (
             <div className="flex items-center gap-2">
               <div className="text-right">
                 <h3 className="text-sm font-black text-slate-900 leading-none">
@@ -485,16 +469,16 @@ export default function InvoicePreviewPage({
         {!isDummyPreview && (
           <button
             type="button"
-            onClick={() => onSend({ ...invoiceData, shouldSendEmail: true })}
+            onClick={() => onSend({ ...invoiceData, shouldSendEmail: false })}
             disabled={isSaving}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+            className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
           >
             {isSaving ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
-              <Send className="h-4 w-4" />
+              <FileText className="h-4 w-4" />
             )}
-            <span>Send Invoice</span>
+            <span>Save Invoice</span>
           </button>
         )}
       </div>
