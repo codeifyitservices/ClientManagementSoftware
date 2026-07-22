@@ -332,49 +332,43 @@ export default function InvoiceTable({
       </div>
 
       {/* ── Pagination ────────────────────────────────────────────────────── */}
-      {filteredInvoices.length > ROWS_PER_PAGE && (
-        <div className="flex items-center justify-between px-1">
-          <p className="text-sm text-gray-500">
-            Showing{" "}
-            <span className="font-medium text-gray-700">
-              {(currentPage - 1) * ROWS_PER_PAGE + 1}–
-              {Math.min(currentPage * ROWS_PER_PAGE, filteredInvoices.length)}
-            </span>{" "}
-            of{" "}
-            <span className="font-medium text-gray-700">
-              {filteredInvoices.length}
-            </span>{" "}
-            invoices
-          </p>
+      <div className="flex items-center justify-between px-1">
+        <p className="text-sm text-gray-500">
+          {filteredInvoices.length === 0
+            ? "No records"
+            : `Showing ${(currentPage - 1) * ROWS_PER_PAGE + 1}–${Math.min(
+                currentPage * ROWS_PER_PAGE,
+                filteredInvoices.length
+              )} of ${filteredInvoices.length} invoices`}
+        </p>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goToPrev}
-              disabled={currentPage === 1}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={15} />
-              Previous
-            </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={goToPrev}
+            disabled={currentPage === 1}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={15} />
+            Previous
+          </button>
 
-            <span className="text-sm text-gray-500 select-none">
-              Page{" "}
-              <span className="font-semibold text-gray-700">{currentPage}</span>{" "}
-              of{" "}
-              <span className="font-semibold text-gray-700">{totalPages}</span>
-            </span>
+          <span className="text-sm text-gray-500 select-none">
+            Page{" "}
+            <span className="font-semibold text-gray-700">{currentPage}</span>
+            {" "}of{" "}
+            <span className="font-semibold text-gray-700">{totalPages}</span>
+          </span>
 
-            <button
-              onClick={goToNext}
-              disabled={currentPage === totalPages}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-              <ChevronRight size={15} />
-            </button>
-          </div>
+          <button
+            onClick={goToNext}
+            disabled={currentPage === totalPages}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Next
+            <ChevronRight size={15} />
+          </button>
         </div>
-      )}
+      </div>
 
       {/* ── Sticky Delete Bar ─────────────────────────────────────────────── */}
       {selectedIds.size > 0 && (
