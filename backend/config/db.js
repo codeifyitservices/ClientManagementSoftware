@@ -4,17 +4,23 @@ import Service from "../models/serviceModel.js";
 
 const seedAdmin = async () => {
   try {
+    // Migrate existing admin from admin@clientflow.com to admin@codenap.co.in if exists
+    await Admin.updateOne(
+      { email: "admin@clientflow.com" },
+      { $set: { email: "admin@codenap.co.in" } }
+    );
+
     const adminCount = await Admin.countDocuments();
     if (adminCount === 0) {
       console.log("No administrative profiles found. Seeding default admin account...");
       const admin = new Admin({
-        email: "admin@clientflow.com",
+        email: "admin@codenap.co.in",
         password: "admin123",
       });
       await admin.save();
       console.log("\n==================================================");
       console.log("[SEED] Default admin seeded successfully!");
-      console.log("Credentials: admin@clientflow.com / admin123");
+      console.log("Credentials: admin@codenap.co.in / admin123");
       console.log("==================================================\n");
     }
   } catch (err) {
