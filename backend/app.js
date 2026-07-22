@@ -39,7 +39,6 @@ app.use("/health", (req, res) => {
 });
 
 app.listen(PORT, () => {
-// Force nodemon reload after fixing mongoose save hook
+  // Force nodemon reload after fixing mongoose save hook
   console.log("server is running on port:", PORT);
 });
-
