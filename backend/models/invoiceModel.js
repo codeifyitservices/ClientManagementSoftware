@@ -1,0 +1,151 @@
+import mongoose from "mongoose";
+
+const invoiceItemSchema = new mongoose.Schema({
+  description: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  sacCode: {
+    type: String,
+    required: true,
+    trim: true,
+    default: "9983",
+  },
+  qty: {
+    type: Number,
+    required: true,
+    default: 1,
+    min: 1,
+  },
+  rate: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  gstRate: {
+    type: Number,
+    required: true,
+    default: 18,
+  },
+});
+
+const invoiceSchema = new mongoose.Schema(
+  {
+    invoiceNumber: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+    client: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Client",
+      required: true,
+    },
+    invoiceDate: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+    dueDate: {
+      type: Date,
+      required: true,
+    },
+    invoiceType: {
+      type: String,
+      default: "Tax Invoice",
+    },
+    currency: {
+      type: String,
+      default: "INR (₹)",
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    items: {
+      type: [invoiceItemSchema],
+      required: true,
+      default: [],
+    },
+    serviceDescription: {
+      type: String,
+      default: "",
+    },
+    sacCode: {
+      type: String,
+      default: "9983",
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+    gstRate: {
+      type: Number,
+      required: true,
+      default: 18,
+    },
+    gstAmount: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    totalAmount: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["Pending", "Paid"],
+      default: "Pending",
+    },
+    invoiceSentAt: {
+      type: Date,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Pre-save hook to calculate taxes dynamically by summing all line items
+invoiceSchema.pre("save", function () {
+  if (this.items && this.items.length > 0) {
+    let baseSum = 0;
+    let gstSum = 0;
+    const descriptions = [];
+    const sacCodes = [];
+    let avgGstRate = 18;
+
+    this.items.forEach((item) => {
+      const itemBase = (item.qty || 1) * (item.rate || 0);
+      const itemGst = itemBase * ((item.gstRate || 0) / 100);
+      baseSum += itemBase;
+      gstSum += itemGst;
+      
+      descriptions.push(item.description);
+      if (item.sacCode) sacCodes.push(item.sacCode);
+    });
+
+    this.amount = Number(baseSum.toFixed(2));
+    this.gstAmount = Number(gstSum.toFixed(2));
+    this.totalAmount = Number((baseSum + gstSum).toFixed(2));
+    this.serviceDescription = descriptions.join(", ");
+    this.sacCode = sacCodes.length > 0 ? sacCodes[0] : "9983";
+    this.gstRate = this.items.length > 0 ? this.items[0].gstRate : 18; // Default rate reference
+  } else {
+    // Fallback if no items provided
+    const baseAmount = Number(this.amount) || 0;
+    const rate = Number(this.gstRate) || 0;
+    this.gstAmount = Number((baseAmount * (rate / 100)).toFixed(2));
+    this.totalAmount = Number((baseAmount + this.gstAmount).toFixed(2));
+  }
+});
+
+const Invoice = mongoose.models.Invoice || mongoose.model("Invoice", invoiceSchema);
+
+export default Invoice;

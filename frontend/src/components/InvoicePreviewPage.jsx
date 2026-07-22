@@ -1,0 +1,404 @@
+import React, { useState, useEffect } from "react";
+import { ChevronLeft, FileText, Download, Send, Phone, Mail, Globe } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+
+// Helper function to convert numeric value into Indian English word format
+const numberToWords = (num) => {
+  if (num === 0) return "Zero Only";
+  
+  const a = [
+    "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+    "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"
+  ];
+  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  
+  const g = ["", "Thousand", "Lakh", "Crore"];
+  
+  const makeGroup = (n) => {
+    let s = "";
+    if (n >= 100) {
+      s += a[Math.floor(n / 100)] + " Hundred ";
+      n %= 100;
+    }
+    if (n >= 20) {
+      s += b[Math.floor(n / 10)] + " ";
+      n %= 10;
+    }
+    if (n > 0) {
+      s += a[n] + " ";
+    }
+    return s.trim();
+  };
+
+  let cleanNum = Math.floor(num);
+  let words = "";
+
+  if (cleanNum === 0) return "Zero Rupees Only";
+
+  let initialGroup = cleanNum % 1000;
+  if (initialGroup > 0) {
+    words = makeGroup(initialGroup) + " " + words;
+  }
+  cleanNum = Math.floor(cleanNum / 1000);
+
+  if (cleanNum > 0) {
+    let group = cleanNum % 100;
+    if (group > 0) {
+      words = makeGroup(group) + " Thousand " + words;
+    }
+    cleanNum = Math.floor(cleanNum / 100);
+  }
+
+  if (cleanNum > 0) {
+    let group = cleanNum % 100;
+    if (group > 0) {
+      words = makeGroup(group) + " Lakh " + words;
+    }
+    cleanNum = Math.floor(cleanNum / 100);
+  }
+
+  if (cleanNum > 0) {
+    words = makeGroup(cleanNum) + " Crore " + words;
+  }
+
+  return (words.trim() + " Rupees Only").replace(/\s+/g, " ");
+};
+
+export default function InvoicePreviewPage({
+  clients = [],
+  onSend,
+  isSaving = false,
+  token,
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Data passed from InvoiceFormPage via navigate("/invoices/preview", { state })
+  const invoiceData = location.state?.invoiceData || {};
+  const isDummyPreview = !!location.state?.isDummyPreview;
+  const returnTo = location.state?.returnTo || "/invoices/create";
+  // clients list also available from App but we can fall back from state if needed
+  const stateClients = location.state?.clients || clients;
+  // Company configurations state (matching dynamic layout parameters)
+  const [config, setConfig] = useState({
+    companyName: "Codenap IT Services",
+    companyEmail: "info@codenap.in",
+    companyPhone: "+91 97175 70933",
+    companyAddress: "SCO 123, Sector 15, Faridabad, Haryana - 121007",
+    companyGst: "06AABCT1234Q1Z5",
+    invoiceTerms: "Thank you for your business!",
+    companyLogo: "",
+  });
+
+  // Load layout configurations
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/clients/config", {
+          headers: { Authorization: `Bearer ${token || localStorage.getItem("token")}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setConfig({
+            companyName: data.companyName || "Codenap IT Services",
+            companyEmail: data.companyEmail || "info@codenap.in",
+            companyPhone: data.companyPhone || "+91 97175 70933",
+            companyAddress: data.companyAddress || "SCO 123, Sector 15, Faridabad, Haryana - 121007",
+            companyGst: data.companyGst || "06AABCT1234Q1Z5",
+            invoiceTerms: data.invoiceTerms || "Thank you for your business!",
+            companyLogo: data.companyLogo || "",
+          });
+        }
+      } catch (err) {
+        // use fallback defaults
+      }
+    };
+    fetchConfig();
+  }, [token]);
+
+  // Selected client details
+  const activeClient = stateClients.find((c) => c._id === invoiceData.client) || clients.find((c) => c._id === invoiceData.client) || {};
+
+  // Auto detect Interstate vs Intrastate tax structure
+  const companyStateCode = config.companyGst ? config.companyGst.slice(0, 2) : "06";
+  const clientStateCode = activeClient.gstNumber ? activeClient.gstNumber.slice(0, 2) : "";
+  const isInterstate = clientStateCode && companyStateCode !== clientStateCode;
+  
+  // Tax calculations
+  const items = invoiceData.items || [];
+  let subTotal = 0;
+  let totalGstAmount = 0;
+  items.forEach((item) => {
+    const base = item.qty * item.rate;
+    subTotal += base;
+    totalGstAmount += base * (item.gstRate / 100);
+  });
+  const grandTotal = subTotal + totalGstAmount;
+
+  // Get active item GST rate for informational text
+  const primaryGstRate = items[0]?.gstRate || 18;
+  const taxTypeText = clientStateCode
+    ? isInterstate
+      ? `IGST (${primaryGstRate}%)`
+      : `CGST (${primaryGstRate / 2}%) + SGST (${primaryGstRate / 2}%)`
+    : `GST (${primaryGstRate}%)`;
+
+  const handleBack = () => {
+    if (isDummyPreview) {
+      navigate("/invoices");
+      return;
+    }
+    navigate(returnTo, {
+      state: {
+        draftInvoice: invoiceData,
+        clients: stateClients,
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-6 font-sans animate-fade-in max-w-4xl mx-auto select-none">
+      
+      {/* Header Block matching mockup */}
+      <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div>
+          <h2 className="text-base font-extrabold text-slate-950 flex items-center gap-1.5">
+            <button
+              onClick={handleBack}
+              className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span>Invoice Preview</span>
+          </h2>
+          <p className="text-[11px] text-slate-400 font-semibold mt-0.5 ml-7">
+            {isDummyPreview
+              ? "Preview the invoice layout with sample data. Nothing will be saved."
+              : "Preview your tax invoice before sending it to the client."}
+          </p>
+        </div>
+        <span className="text-[10px] font-bold text-slate-400 select-none">
+          Invoices &nbsp;&gt;&nbsp; Invoice Preview
+        </span>
+      </div>
+
+      {/* Standalone A4 Invoice Paper Sheet */}
+      <div className="invoice-a4-sheet bg-white rounded-2xl border border-slate-150 custom-shadow p-12 space-y-8 select-none text-slate-800 text-xs leading-relaxed max-w-full mx-auto box-border">
+        
+        {/* 1. Header (Seller & Logo layout) */}
+        <div className="flex items-start justify-between">
+          {config.companyLogo ? (
+            <div className="flex items-start gap-4">
+              <img
+                src={`http://localhost:5000/uploads/${config.companyLogo}`}
+                alt="Logo"
+                className="h-12 w-auto max-w-[120px] object-contain rounded border border-slate-100 p-1 bg-white shrink-0"
+              />
+              <div>
+                <h2 className="text-base font-extrabold text-slate-950 leading-tight">{config.companyName}</h2>
+                <p className="text-[10px] text-slate-450 mt-1 max-w-[280px]">
+                  {config.companyAddress}
+                </p>
+                <p className="text-[10px] text-slate-450 mt-0.5">
+                  GSTIN: <span className="font-semibold text-slate-700">{config.companyGst}</span>
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-base font-extrabold text-slate-950 leading-tight">{config.companyName}</h2>
+              <p className="text-[10px] text-slate-455 mt-1 max-w-[280px]">
+                {config.companyAddress}
+              </p>
+              <p className="text-[10px] text-slate-455 mt-0.5">
+                GSTIN: <span className="font-semibold text-slate-700">{config.companyGst}</span>
+              </p>
+            </div>
+          )}
+          
+          {!config.companyLogo && (
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <h3 className="text-sm font-black text-slate-900 leading-none">
+                  {config.companyName}
+                </h3>
+                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">
+                  Invoice Management
+                </span>
+              </div>
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
+                <FileText className="h-4.5 w-4.5" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Tax Invoice centered banner */}
+        <div className="text-center">
+          <span className="bg-slate-900 text-white font-extrabold text-[10px] tracking-widest px-6 py-1.5 rounded shadow-sm">
+            {(invoiceData.invoiceType || "Tax Invoice").toUpperCase()}
+          </span>
+        </div>
+
+        {/* 3. Metadata & Client Info Split */}
+        <div className="grid grid-cols-2 gap-4 pt-2">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Bill To
+            </span>
+            <h4 className="text-xs font-extrabold text-slate-950">
+              {activeClient.companyName || "Client Company Name"}
+            </h4>
+            <p className="text-[10px] text-slate-500 mt-1 max-w-[240px]">
+              {activeClient.address || "Client Address"}, {activeClient.city || ""}{" "}
+              {activeClient.pincode ? `- ${activeClient.pincode}` : ""}
+            </p>
+            {activeClient.gstNumber && (
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                GSTIN: <span className="font-semibold text-slate-700">{activeClient.gstNumber}</span>
+              </p>
+            )}
+          </div>
+          
+          <div className="text-right">
+            <table className="ml-auto text-[10px]">
+              <tbody>
+                <tr>
+                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">Invoice No</td>
+                  <td className="text-slate-900 font-bold py-0.5">: {invoiceData.invoiceNumber || "INV-2024-XXXX"}</td>
+                </tr>
+                <tr>
+                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">Invoice Date</td>
+                  <td className="text-slate-900 py-0.5">: {new Date(invoiceData.invoiceDate || Date.now()).toLocaleDateString("en-IN")}</td>
+                </tr>
+                <tr>
+                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">Status</td>
+                  <td className="py-0.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                      invoiceData.paymentStatus === "Paid"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}>
+                      {invoiceData.paymentStatus || "Pending"}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 4. Table of items */}
+        <table className="w-full text-left border-collapse text-[10px] mt-4">
+          <thead>
+            <tr className="bg-slate-100 text-slate-650 font-bold">
+              <th className="py-2 px-3 rounded-l w-8">#</th>
+              <th className="py-2 px-3">Description</th>
+              <th className="py-2 px-3 text-center">SAC Code</th>
+              <th className="py-2 px-3 text-center">Qty</th>
+              <th className="py-2 px-3 text-right">Rate (₹)</th>
+              <th className="py-2 px-3 text-right rounded-r">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-150 font-semibold text-slate-755">
+            {items.map((item, idx) => {
+              const lineTaxable = item.qty * item.rate;
+              return (
+                <tr key={idx}>
+                  <td className="py-3 px-3 text-slate-400">{idx + 1}</td>
+                  <td className="py-3 px-3 text-slate-900">{item.description || "Website Development"}</td>
+                  <td className="py-3 px-3 text-center text-slate-550">{item.sacCode || "998314"}</td>
+                  <td className="py-3 px-3 text-center text-slate-500">{item.qty}</td>
+                  <td className="py-3 px-3 text-right text-slate-500">
+                    {item.rate.toLocaleString("en-IN")}
+                  </td>
+                  <td className="py-3 px-3 text-right text-slate-900">
+                    {lineTaxable.toLocaleString("en-IN")}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* 5. Totals Breakdown */}
+        <div className="border-t border-slate-100 pt-3 flex flex-col items-end gap-1.5">
+          <div className="w-64 grid grid-cols-2 text-right text-[10px] font-semibold text-slate-500">
+            <span>Sub Total</span>
+            <span className="text-slate-800">₹{subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            
+            <span>{taxTypeText}</span>
+            <span className="text-slate-800">₹{totalGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="w-64 border-t border-slate-150 pt-2 grid grid-cols-2 text-right text-xs">
+            <span className="font-extrabold text-slate-900">Grand Total</span>
+            <span className="font-black text-slate-950">₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+
+        {/* 6. Amount in words & footer footnotes */}
+        <div className="pt-2 border-t border-slate-100/60">
+          <p className="text-[10px] font-semibold text-slate-500">
+            Amount in Words: <span className="text-slate-900 font-extrabold">{numberToWords(grandTotal)}</span>
+          </p>
+          <p className="text-[10px] font-semibold text-slate-400 mt-2 italic">
+            {config.invoiceTerms}
+          </p>
+        </div>
+
+        {/* 7. Footer Contact details */}
+        <div className="pt-4 border-t border-slate-150 flex items-center justify-between text-[9px] font-bold text-slate-400">
+          <span className="flex items-center gap-1">
+            <Phone className="h-3 w-3 text-slate-400" />
+            <span>{config.companyPhone}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <Mail className="h-3 w-3 text-slate-400" />
+            <span>{config.companyEmail}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <Globe className="h-3 w-3 text-slate-400" />
+            <span>www.codenap.in</span>
+          </span>
+        </div>
+
+      </div>
+
+      {/* Actions Footer */}
+      <div className="flex items-center justify-center gap-3 pt-6">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="px-6 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-650 hover:bg-slate-50 text-xs font-bold transition-all cursor-pointer shadow-sm"
+        >
+          {isDummyPreview ? "Back to Invoices" : "Back to Edit"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            alert(isDummyPreview ? "Dummy preview is not saved, so a PDF cannot be downloaded." : "Please save and send the invoice first to download PDF.");
+          }}
+          className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+        >
+          <Download className="h-4 w-4" />
+          <span>Download PDF</span>
+        </button>
+        {!isDummyPreview && (
+          <button
+            type="button"
+            onClick={() => onSend({ ...invoiceData, shouldSendEmail: true })}
+            disabled={isSaving}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+          >
+            {isSaving ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            <span>Send Invoice</span>
+          </button>
+        )}
+      </div>
+
+    </div>
+  );
+}
