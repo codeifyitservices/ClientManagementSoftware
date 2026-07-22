@@ -134,7 +134,7 @@ router.get("/", async (req, res) => {
 // 4. POST /api/clients - Create a client profile
 router.post("/", async (req, res) => {
   try {
-    const { companyName, clientName, email, phone, gstNumber, address, website, industry, notes } = req.body;
+    const { companyName, clientName, email, phone, gstRegistered, gstNumber, address, city, pincode, website, industry, notes } = req.body;
 
     if (!companyName || !clientName || !email) {
       return res.status(400).json({ message: "Please provide Company Name, Client Name, and Email." });
@@ -145,8 +145,11 @@ router.post("/", async (req, res) => {
       clientName,
       email,
       phone,
+      gstRegistered: gstRegistered !== false,
       gstNumber,
       address,
+      city,
+      pincode,
       website,
       industry,
       notes,
@@ -162,7 +165,7 @@ router.post("/", async (req, res) => {
 // 5. PUT /api/clients/:id - Edit client profile
 router.put("/:id", async (req, res) => {
   try {
-    const { companyName, clientName, email, phone, gstNumber, address, website, industry, notes } = req.body;
+    const { companyName, clientName, email, phone, gstRegistered, gstNumber, address, city, pincode, website, industry, notes } = req.body;
     
     const client = await Client.findById(req.params.id);
     if (!client) {
@@ -173,8 +176,11 @@ router.put("/:id", async (req, res) => {
     client.clientName = clientName ?? client.clientName;
     client.email = email ?? client.email;
     client.phone = phone ?? client.phone;
+    client.gstRegistered = gstRegistered !== undefined ? gstRegistered : client.gstRegistered;
     client.gstNumber = gstNumber ?? client.gstNumber;
     client.address = address ?? client.address;
+    client.city = city ?? client.city;
+    client.pincode = pincode ?? client.pincode;
     client.website = website ?? client.website;
     client.industry = industry ?? client.industry;
     client.notes = notes ?? client.notes;

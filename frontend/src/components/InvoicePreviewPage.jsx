@@ -160,19 +160,49 @@ export default function InvoicePreviewPage({
   }, [token]);
 
   // Selected client details
+  const clientId = typeof invoiceData.client === "object" ? invoiceData.client?._id : invoiceData.client;
   const activeClient =
-    stateClients.find((c) => c._id === invoiceData.client) ||
-    clients.find((c) => c._id === invoiceData.client) ||
-    {};
+    clients.find((c) => c._id === clientId) ||
+    stateClients.find((c) => c._id === clientId) ||
+    (typeof invoiceData.client === "object" ? invoiceData.client : {});
 
-  // Auto detect Interstate vs Intrastate tax structure
+  // Auto-detect Place of Supply (Intrastate vs. Interstate)
+  const detectStateCode = (c) => {
+    if (!c) return "";
+    if (c.gstNumber && typeof c.gstNumber === "string" && /^\d{2}/.test(c.gstNumber.trim())) {
+      return c.gstNumber.trim().slice(0, 2);
+    }
+    const text = `${c.address || ""} ${c.city || ""}`.toLowerCase();
+    if (text.includes("west bengal") || text.includes("kolkata") || text.includes("calcutta") || text.includes("wb")) return "19";
+    if (text.includes("maharashtra") || text.includes("mumbai") || text.includes("pune") || text.includes("nagpur") || text.includes("mh")) return "27";
+    if (text.includes("delhi") || text.includes("new delhi") || text.includes("ncr")) return "07";
+    if (text.includes("karnataka") || text.includes("bengaluru") || text.includes("bangalore") || text.includes("ka")) return "29";
+    if (text.includes("tamil nadu") || text.includes("chennai") || text.includes("tn")) return "33";
+    if (text.includes("telangana") || text.includes("hyderabad") || text.includes("ts")) return "36";
+    if (text.includes("gujarat") || text.includes("ahmedabad") || text.includes("surat") || text.includes("gj")) return "24";
+    if (text.includes("uttar pradesh") || text.includes("noida") || text.includes("lucknow") || text.includes("kanpur") || text.includes("up")) return "09";
+    if (text.includes("punjab") || text.includes("chandigarh") || text.includes("ludhiana") || text.includes("pb")) return "03";
+    if (text.includes("rajasthan") || text.includes("jaipur") || text.includes("rj")) return "08";
+    if (text.includes("haryana") || text.includes("gurgaon") || text.includes("gurugram") || text.includes("faridabad") || text.includes("hr")) return "06";
+    if (text.includes("uttarakhand") || text.includes("dehradun") || text.includes("uk")) return "05";
+    if (text.includes("kerala") || text.includes("kochi") || text.includes("cochin") || text.includes("trivandrum") || text.includes("kl")) return "32";
+    if (text.includes("madhya pradesh") || text.includes("bhopal") || text.includes("indore") || text.includes("mp")) return "23";
+    if (text.includes("bihar") || text.includes("patna") || text.includes("br")) return "10";
+    if (text.includes("jharkhand") || text.includes("ranchi") || text.includes("jh")) return "20";
+    if (text.includes("odisha") || text.includes("orissa") || text.includes("bhubaneswar") || text.includes("or")) return "21";
+    if (text.includes("chhattisgarh") || text.includes("raipur") || text.includes("cg")) return "22";
+    if (text.includes("assam") || text.includes("guwahati") || text.includes("as")) return "18";
+    if (text.includes("goa") || text.includes("panaji")) return "30";
+    if (text.includes("jammu") || text.includes("srinagar") || text.includes("j&k")) return "01";
+    if (text.includes("himachal") || text.includes("shimla")) return "02";
+    return "";
+  };
+
   const companyStateCode = config.companyGst
     ? config.companyGst.slice(0, 2)
     : "06";
-  const clientStateCode = activeClient.gstNumber
-    ? activeClient.gstNumber.slice(0, 2)
-    : "";
-  const isInterstate = clientStateCode && companyStateCode !== clientStateCode;
+  const clientStateCode = detectStateCode(activeClient);
+  const isInterstate = !!(clientStateCode && companyStateCode !== clientStateCode);
 
   // Tax calculations
   const items = invoiceData.items || [];
@@ -187,11 +217,6 @@ export default function InvoicePreviewPage({
 
   // Get active item GST rate for informational text
   const primaryGstRate = items[0]?.gstRate || 18;
-  const taxTypeText = clientStateCode
-    ? isInterstate
-      ? `IGST (${primaryGstRate}%)`
-      : `CGST (${primaryGstRate / 2}%) + SGST (${primaryGstRate / 2}%)`
-    : `GST (${primaryGstRate}%)`;
 
   const handleBack = () => {
     if (isDummyPreview) {
@@ -396,13 +421,25 @@ export default function InvoicePreviewPage({
               ₹{subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
             </span>
 
-            <span>{taxTypeText}</span>
-            <span className="text-slate-800">
-              ₹
-              {totalGstAmount.toLocaleString("en-IN", {
-                minimumFractionDigits: 2,
-              })}
-            </span>
+            {isInterstate ? (
+              <>
+                <span>IGST ({primaryGstRate}%)</span>
+                <span className="text-slate-800">
+                  ₹{totalGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>CGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}%)</span>
+                <span className="text-slate-800">
+                  ₹{(totalGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </span>
+                <span>SGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}%)</span>
+                <span className="text-slate-800">
+                  ₹{(totalGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </span>
+              </>
+            )}
           </div>
           <div className="w-64 border-t border-slate-150 pt-2 grid grid-cols-2 text-right text-xs">
             <span className="font-extrabold text-slate-900">Grand Total</span>

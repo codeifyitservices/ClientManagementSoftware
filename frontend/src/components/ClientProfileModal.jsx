@@ -91,7 +91,14 @@ export default function ClientProfileModal({ isOpen, onClose, client, invoices =
                 </div>
                 <div className="flex items-start gap-2.5">
                   <span className="text-slate-400 font-semibold text-xs w-24 mt-0.5">Address:</span>
-                  <span className="text-slate-600 leading-relaxed flex-1">{client.address || "N/A"}</span>
+                  <span className="text-slate-600 leading-relaxed flex-1">
+                    {client.address || "N/A"}
+                    {(client.city || client.pincode) && (
+                      <span className="block text-slate-500 font-medium text-xs mt-0.5">
+                        {client.city}{client.pincode ? ` - ${client.pincode}` : ""}
+                      </span>
+                    )}
+                  </span>
                 </div>
               </div>
             </div>
