@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { AlertTriangle, X } from "lucide-react";
 
 export default function ConfirmDialog({
@@ -10,6 +10,16 @@ export default function ConfirmDialog({
   confirmText = "Delete",
   isDeleting = false,
 }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && isOpen && !isDeleting) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isDeleting, onClose]);
+
   if (!isOpen) return null;
 
   return (

@@ -12,15 +12,17 @@ import {
   FileText,
 } from "lucide-react";
 
-import DataBackupSection from "./DataBackupSection";
+import ConfirmDialog from "./ConfirmDialog";
 
-export default function ServiceSettingsPage({ token, showToast, onRestoreSuccess }) {
-
-
+export default function ServiceSettingsPage({ token }) {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Delete modal state
+  const [serviceToDelete, setServiceToDelete] = useState(null);
+  const [isDeletingService, setIsDeletingService] = useState(false);
 
   // Form states for creating/editing services
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -130,17 +132,12 @@ export default function ServiceSettingsPage({ token, showToast, onRestoreSuccess
     }
   };
 
-  const handleDeleteService = async (id) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this service? Invoices using this name won't be modified.",
-      )
-    ) {
-      return;
-    }
+  const confirmDeleteService = async () => {
+    if (!serviceToDelete) return;
 
     try {
-      const res = await fetch(`${API_SERVICES}/${id}`, {
+      setIsDeletingService(true);
+      const res = await fetch(`${API_SERVICES}/${serviceToDelete._id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token || localStorage.getItem("token")}`,
@@ -149,12 +146,16 @@ export default function ServiceSettingsPage({ token, showToast, onRestoreSuccess
 
       if (!res.ok) throw new Error("Failed to delete service profile.");
       setSuccess("Service deleted successfully.");
+      setServiceToDelete(null);
       fetchServices();
       setTimeout(() => setSuccess(""), 4500);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setIsDeletingService(false);
     }
   };
+
 
   return (
     <div className="w-full animate-fade-in font-sans space-y-6">
@@ -251,7 +252,7 @@ export default function ServiceSettingsPage({ token, showToast, onRestoreSuccess
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteService(service._id)}
+                            onClick={() => setServiceToDelete(service)}
                             className="p-1 rounded text-slate-400 hover:bg-red-50 hover:text-red-600 cursor-pointer"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -267,19 +268,20 @@ export default function ServiceSettingsPage({ token, showToast, onRestoreSuccess
         )}
       </div>
 
-      {/* Data Backup & Export Section */}
-      <DataBackupSection
-        token={token}
-        showToast={showToast}
-        onRestoreSuccess={() => {
-          fetchServices();
-          if (onRestoreSuccess) onRestoreSuccess();
-        }}
+      {/* Delete Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={!!serviceToDelete}
+        onClose={() => setServiceToDelete(null)}
+        onConfirm={confirmDeleteService}
+        title="Delete Service Profile"
+        message={`Are you sure you want to delete service "${serviceToDelete?.name}"? Invoices using this name won't be modified.`}
+        confirmText="Delete Service"
+        isDeleting={isDeletingService}
       />
 
 
-
       {/* Service Modal - Rendered via Portal to ensure full screen coverage */}
+
       {isModalOpen &&
         createPortal(
           <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">

@@ -961,18 +961,9 @@ export default function App() {
           <Route path="settings/profile" element={<InvoiceConfigPage />} />
           <Route
             path="settings/services"
-            element={
-              <ServiceSettingsPage
-                token={token}
-                showToast={showToast}
-                onRestoreSuccess={() => {
-                  fetchClients();
-                  fetchInvoices();
-                  fetchCompanyConfig();
-                }}
-              />
-            }
+            element={<ServiceSettingsPage token={token} />}
           />
+
           <Route
             path="settings/backup"
             element={

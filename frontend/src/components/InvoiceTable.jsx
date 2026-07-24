@@ -16,7 +16,10 @@ import {
   User,
 } from "lucide-react";
 
+import ConfirmDialog from "./ConfirmDialog";
+
 const ROWS_PER_PAGE = 10;
+
 
 const STATUS_TABS = [
   { label: "All", value: "all" },
@@ -47,6 +50,8 @@ export default function InvoiceTable({
 
   // ── Multi-select ─────────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteIds, setBulkDeleteIds] = useState(null);
+
 
   // Reset to page 1 and clear selection whenever any filter changes
   useEffect(() => {
@@ -530,10 +535,7 @@ export default function InvoiceTable({
               Download ZIP ({selectedIds.size})
             </button>
             <button
-              onClick={() => {
-                onDeleteSelected?.(Array.from(selectedIds));
-                setSelectedIds(new Set());
-              }}
+              onClick={() => setBulkDeleteIds(Array.from(selectedIds))}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-xs transition-colors shadow-sm cursor-pointer"
             >
               <Trash2 size={14} />
@@ -542,8 +544,25 @@ export default function InvoiceTable({
           </div>
         </div>
       )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={!!bulkDeleteIds}
+        onClose={() => setBulkDeleteIds(null)}
+        onConfirm={() => {
+          if (bulkDeleteIds) {
+            onDeleteSelected?.(bulkDeleteIds);
+            setSelectedIds(new Set());
+            setBulkDeleteIds(null);
+          }
+        }}
+        title="Delete Selected Invoices"
+        message={`Are you sure you want to delete ${bulkDeleteIds?.length || 0} selected invoice(s)? This action is permanent and cannot be undone.`}
+        confirmText="Delete Invoices"
+      />
     </div>
   );
 }
+
 
 

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Trash,
 } from "lucide-react";
+import ConfirmDialog from "./ConfirmDialog";
 
 const PAGE_SIZE = 10;
 
@@ -24,6 +25,7 @@ export default function ClientTable({
   const [sortOrder, setSortOrder] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleteIds, setBulkDeleteIds] = useState(null);
 
   // ── Sorting ──────────────────────────────────────────────────────────────
   const sorted = useMemo(() => {
@@ -343,8 +345,8 @@ export default function ClientTable({
             Clear selection
           </button>
           <button
-            onClick={handleDeleteSelected}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-white text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors shadow-md"
+            onClick={() => setBulkDeleteIds(Array.from(selectedIds))}
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-white text-red-600 text-sm font-semibold hover:bg-red-50 transition-colors shadow-md cursor-pointer"
           >
             <Trash size={15} />
             Delete Selected ({selectedCount})
@@ -354,6 +356,22 @@ export default function ClientTable({
 
       {/* Bottom padding so content isn't hidden behind bar when open */}
       {selectedCount > 0 && <div className="h-20" />}
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={!!bulkDeleteIds}
+        onClose={() => setBulkDeleteIds(null)}
+        onConfirm={() => {
+          if (bulkDeleteIds) {
+            onDeleteSelected?.(bulkDeleteIds);
+            setSelectedIds(new Set());
+            setBulkDeleteIds(null);
+          }
+        }}
+        title="Delete Selected Clients"
+        message={`Are you sure you want to delete ${bulkDeleteIds?.length || 0} selected client profile(s)? This action will also cascade delete all associated invoices and cannot be undone.`}
+        confirmText="Delete Clients & Invoices"
+      />
     </div>
   );
 }
