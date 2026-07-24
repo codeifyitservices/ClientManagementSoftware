@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X, Check } from "lucide-react";
@@ -82,8 +82,50 @@ export default function ClientModal({
   const gstRegistered = useWatch({ control, name: "gstRegistered" });
   const gstNumber = useWatch({ control, name: "gstNumber" }) || "";
 
-  // Auto detect state name
+  // Auto detect state name & fetch GST details
   const [detectedState, setDetectedState] = useState("");
+  const [isFetchingGst, setIsFetchingGst] = useState(false);
+  const [gstFetchMessage, setGstFetchMessage] = useState("");
+  const lastFetchedGstRef = useRef("");
+
+  const handleFetchGstDetails = async (gstinVal) => {
+    const cleanGstin = (gstinVal || gstNumber).trim().toUpperCase();
+    if (cleanGstin.length !== 15) return;
+    setIsFetchingGst(true);
+    setGstFetchMessage("");
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${backendUrl}/api/clients/gstin-lookup/${cleanGstin}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.companyName) {
+          setValue("companyName", data.companyName, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+          if (data.address) setValue("address", data.address, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+          if (data.city) setValue("city", data.city, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+          if (data.pincode) setValue("pincode", data.pincode, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+          setGstFetchMessage(`✓ Auto-filled: ${data.companyName}`);
+        } else if (data.note) {
+          setGstFetchMessage(`GSTIN lookup: ${data.note}`);
+        } else if (data.stateName) {
+          setGstFetchMessage(`Valid GSTIN format (${data.stateName}). Please enter Company Name.`);
+        } else {
+          setGstFetchMessage("Valid GSTIN structure. Please enter Company Name.");
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setGstFetchMessage(errData.message || "Error fetching GST details.");
+      }
+    } catch (err) {
+      setGstFetchMessage("GST lookup error: " + err.message);
+    } finally {
+      setIsFetchingGst(false);
+    }
+  };
+
   useEffect(() => {
     if (gstRegistered && gstNumber.length >= 2) {
       const code = gstNumber.trim().slice(0, 2);
@@ -93,14 +135,22 @@ export default function ClientModal({
       } else {
         setDetectedState("Unknown Code");
       }
+      const currentGst = gstNumber.trim().toUpperCase();
+      if (currentGst.length === 15 && currentGst !== lastFetchedGstRef.current) {
+        lastFetchedGstRef.current = currentGst;
+        handleFetchGstDetails(currentGst);
+      }
     } else {
       setDetectedState("");
+      setGstFetchMessage("");
     }
   }, [gstNumber, gstRegistered]);
 
   // Load editing client profile
   useEffect(() => {
     if (client) {
+      const initialGst = (client.gstNumber || "").trim().toUpperCase();
+      lastFetchedGstRef.current = initialGst;
       reset({
         companyName: client.companyName || "",
         clientName: client.clientName || "",
@@ -117,6 +167,7 @@ export default function ClientModal({
         notes: client.notes || "",
       });
     } else {
+      lastFetchedGstRef.current = "";
       reset({
         companyName: "",
         clientName: "",
@@ -177,14 +228,14 @@ export default function ClientModal({
                 Basic Information
               </h4>
 
-              {/* Client Name (Company) */}
+              {/* Company Name */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Client Name <span className="text-red-500">*</span>
+                  Company Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter client name"
+                  placeholder="Enter company name"
                   className={`w-full px-3 py-2 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white ${
                     errors.companyName ? "border-red-500 bg-red-50/10" : "border-slate-200 bg-slate-50/30"
                   }`}
@@ -195,14 +246,14 @@ export default function ClientModal({
                 )}
               </div>
 
-              {/* Contact Person */}
+              {/* Client Name */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Contact Person <span className="text-red-500">*</span>
+                  Client Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter contact person"
+                  placeholder="Enter client name"
                   className={`w-full px-3 py-2 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white ${
                     errors.clientName ? "border-red-500 bg-red-50/10" : "border-slate-200 bg-slate-50/30"
                   }`}
@@ -216,7 +267,7 @@ export default function ClientModal({
               {/* Email Address */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Email Address <span className="text-red-500">*</span>
+                  Email Address <span className="text-slate-400 font-normal lowercase">(optional)</span>
                 </label>
                 <input
                   type="email"
@@ -301,15 +352,35 @@ export default function ClientModal({
                     </span>
                   )}
                 </div>
-                <input
-                  type="text"
-                  placeholder="06AABCT1234Q1Z5"
-                  disabled={!gstRegistered}
-                  className={`w-full px-3 py-2 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white uppercase font-mono tracking-wider ${
-                    errors.gstNumber ? "border-red-500 bg-red-50/10" : "border-slate-200 bg-slate-50/30"
-                  }`}
-                  {...register("gstNumber")}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="06AABCT1234Q1Z5"
+                    disabled={!gstRegistered}
+                    className={`w-full px-3 py-2 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white uppercase font-mono tracking-wider ${
+                      errors.gstNumber ? "border-red-500 bg-red-50/10" : "border-slate-200 bg-slate-50/30"
+                    }`}
+                    {...register("gstNumber")}
+                  />
+                  {gstRegistered && isGstValid && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        lastFetchedGstRef.current = gstNumber.trim().toUpperCase();
+                        handleFetchGstDetails(gstNumber);
+                      }}
+                      disabled={isFetchingGst}
+                      className="absolute right-2 top-1.5 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-[9px] rounded-lg transition-colors cursor-pointer"
+                    >
+                      {isFetchingGst ? "Fetching..." : "Fetch Details"}
+                    </button>
+                  )}
+                </div>
+                {gstFetchMessage && (
+                  <span className="text-[10px] text-emerald-600 mt-1 block font-semibold">
+                    {gstFetchMessage}
+                  </span>
+                )}
                 {errors.gstNumber && (
                   <span className="text-[10px] text-red-500 mt-1 block font-semibold">{errors.gstNumber.message}</span>
                 )}

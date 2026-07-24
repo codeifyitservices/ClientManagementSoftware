@@ -40,6 +40,94 @@ const getActiveConfig = async () => {
   return config;
 };
 
+// State Lookup Table
+const stateLookup = {
+  "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
+  "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan",
+  "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
+  "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura",
+  "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand",
+  "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+  "26": "Dadra & Nagar Haveli and Daman & Diu", "27": "Maharashtra", "29": "Karnataka",
+  "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu",
+  "34": "Puducherry", "35": "Andaman & Nicobar Islands", "36": "Telangana",
+  "37": "Andhra Pradesh", "38": "Ladakh"
+};
+
+// 0. GET /api/clients/gstin-lookup/:gstin - Fetch company name & details from GSTIN
+router.get("/gstin-lookup/:gstin", async (req, res) => {
+  try {
+    const rawGstin = (req.params.gstin || "").trim().toUpperCase();
+    if (!rawGstin || rawGstin.length !== 15) {
+      return res.status(400).json({ message: "Invalid GSTIN length. Must be 15 characters." });
+    }
+
+    const stateCode = rawGstin.slice(0, 2);
+    const stateName = stateLookup[stateCode] || "";
+
+    let companyName = "";
+    let tradeName = "";
+    let legalName = "";
+    let address = "";
+    let city = "";
+    let pincode = "";
+    let fetched = false;
+    let note = "";
+
+    const apiKey = process.env.GSTIN_API_KEY || process.env.GST_API_KEY || "";
+    const primaryUrl = apiKey
+      ? `https://sheet.gstincheck.co.in/check/${apiKey}/${rawGstin}`
+      : `https://sheet.gstincheck.co.in/check/free/${rawGstin}`;
+
+    try {
+      const apiRes = await fetch(primaryUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+        signal: AbortSignal.timeout(4000),
+      });
+
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data && data.flag) {
+          const d = data.data || {};
+          tradeName = d.tradeNam || "";
+          legalName = d.lgnm || "";
+          companyName = tradeName || legalName || "";
+
+          const pradr = d.pradr || {};
+          const addrObj = pradr.addr || {};
+          address = pradr.adr || [addrObj.bnm, addrObj.st, addrObj.loc, addrObj.dst]
+            .filter(Boolean)
+            .join(", ");
+          city = addrObj.dst || addrObj.city || "";
+          pincode = addrObj.pncd || "";
+          fetched = true;
+        } else if (data && data.message) {
+          note = data.message;
+        }
+      }
+    } catch (err) {
+      note = err.message || "Network timeout";
+    }
+
+    return res.json({
+      success: true,
+      gstin: rawGstin,
+      companyName,
+      tradeName,
+      legalName,
+      stateCode,
+      stateName,
+      address,
+      city,
+      pincode,
+      fetched,
+      note,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error performing GST lookup", error: error.message });
+  }
+});
+
 // 1. GET /api/clients/config - Fetch company settings
 router.get("/config", async (req, res) => {
   try {
@@ -53,7 +141,7 @@ router.get("/config", async (req, res) => {
 // 2. POST /api/clients/config - Save or update company settings
 router.post("/config", async (req, res) => {
   try {
-    const { companyName, companyEmail, companyPhone, companyAddress, companyGst, invoiceTerms } = req.body;
+    const { companyName, companyEmail, companyPhone, companyAddress, companyGst, companyWebsite, invoiceTerms } = req.body;
     
     let config = await Config.findOne();
     if (!config) {
@@ -65,6 +153,7 @@ router.post("/config", async (req, res) => {
     config.companyPhone = companyPhone ?? config.companyPhone;
     config.companyAddress = companyAddress ?? config.companyAddress;
     config.companyGst = companyGst ?? config.companyGst;
+    config.companyWebsite = companyWebsite ?? config.companyWebsite;
     config.invoiceTerms = invoiceTerms ?? config.invoiceTerms;
 
     const savedConfig = await config.save();
@@ -136,14 +225,14 @@ router.post("/", async (req, res) => {
   try {
     const { companyName, clientName, email, phone, gstRegistered, gstNumber, address, city, pincode, website, industry, notes } = req.body;
 
-    if (!companyName || !clientName || !email) {
-      return res.status(400).json({ message: "Please provide Company Name, Client Name, and Email." });
+    if (!companyName || !clientName) {
+      return res.status(400).json({ message: "Please provide Company Name and Client Name." });
     }
 
     const newClient = new Client({
       companyName,
       clientName,
-      email,
+      email: email || "",
       phone,
       gstRegistered: gstRegistered !== false,
       gstNumber,

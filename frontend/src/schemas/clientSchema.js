@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 export const clientSchema = z.object({
-  companyName: z.string().min(2, "Client name is required."),
-  clientName: z.string().min(2, "Contact person is required."),
-  email: z.string().email("Please enter a valid email address."),
+  companyName: z.string().min(2, "Company name is required."),
+  clientName: z.string().min(2, "Client name is required."),
+  email: z.string().trim().optional().or(z.literal("")).refine((val) => !val || z.string().email().safeParse(val).success, "Please enter a valid email address."),
   phone: z.string().min(8, "Phone number is required."),
   gstRegistered: z.boolean().default(true),
   gstNumber: z.string().trim().optional().or(z.literal("")),

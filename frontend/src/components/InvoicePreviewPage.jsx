@@ -148,6 +148,7 @@ export default function InvoicePreviewPage({
               data.companyAddress ||
               "SCO 123, Sector 15, Faridabad, Haryana - 121007",
             companyGst: data.companyGst || "06AABCT1234Q1Z5",
+            companyWebsite: data.companyWebsite || "www.codenap.co.in",
             invoiceTerms: data.invoiceTerms || "Thank you for your business!",
             companyLogo: data.companyLogo || "",
           });
@@ -159,8 +160,47 @@ export default function InvoicePreviewPage({
     fetchConfig();
   }, [token]);
 
+  // Dynamic invoice number resolution
+  const [fetchedInvNumber, setFetchedInvNumber] = useState("");
+
+  useEffect(() => {
+    if (
+      !invoiceData.invoiceNumber ||
+      invoiceData.invoiceNumber === "INV-NEW" ||
+      invoiceData.invoiceNumber === "INV-2024-XXXX"
+    ) {
+      const fetchNextNum = async () => {
+        try {
+          const res = await fetch(
+            `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/invoices/next-number`,
+            {
+              headers: {
+                Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+              },
+            },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.invoiceNumber) setFetchedInvNumber(data.invoiceNumber);
+          }
+        } catch (err) {}
+      };
+      fetchNextNum();
+    }
+  }, [invoiceData.invoiceNumber, token]);
+
+  const displayInvoiceNum =
+    invoiceData.invoiceNumber &&
+    invoiceData.invoiceNumber !== "INV-NEW" &&
+    invoiceData.invoiceNumber !== "INV-2024-XXXX"
+      ? invoiceData.invoiceNumber
+      : fetchedInvNumber || "CN26070010";
+
   // Selected client details
-  const clientId = typeof invoiceData.client === "object" ? invoiceData.client?._id : invoiceData.client;
+  const clientId =
+    typeof invoiceData.client === "object"
+      ? invoiceData.client?._id
+      : invoiceData.client;
   const activeClient =
     clients.find((c) => c._id === clientId) ||
     stateClients.find((c) => c._id === clientId) ||
@@ -169,31 +209,145 @@ export default function InvoicePreviewPage({
   // Auto-detect Place of Supply (Intrastate vs. Interstate)
   const detectStateCode = (c) => {
     if (!c) return "";
-    if (c.gstNumber && typeof c.gstNumber === "string" && /^\d{2}/.test(c.gstNumber.trim())) {
+    if (
+      c.gstNumber &&
+      typeof c.gstNumber === "string" &&
+      /^\d{2}/.test(c.gstNumber.trim())
+    ) {
       return c.gstNumber.trim().slice(0, 2);
     }
     const text = `${c.address || ""} ${c.city || ""}`.toLowerCase();
-    if (text.includes("west bengal") || text.includes("kolkata") || text.includes("calcutta") || text.includes("wb")) return "19";
-    if (text.includes("maharashtra") || text.includes("mumbai") || text.includes("pune") || text.includes("nagpur") || text.includes("mh")) return "27";
-    if (text.includes("delhi") || text.includes("new delhi") || text.includes("ncr")) return "07";
-    if (text.includes("karnataka") || text.includes("bengaluru") || text.includes("bangalore") || text.includes("ka")) return "29";
-    if (text.includes("tamil nadu") || text.includes("chennai") || text.includes("tn")) return "33";
-    if (text.includes("telangana") || text.includes("hyderabad") || text.includes("ts")) return "36";
-    if (text.includes("gujarat") || text.includes("ahmedabad") || text.includes("surat") || text.includes("gj")) return "24";
-    if (text.includes("uttar pradesh") || text.includes("noida") || text.includes("lucknow") || text.includes("kanpur") || text.includes("up")) return "09";
-    if (text.includes("punjab") || text.includes("chandigarh") || text.includes("ludhiana") || text.includes("pb")) return "03";
-    if (text.includes("rajasthan") || text.includes("jaipur") || text.includes("rj")) return "08";
-    if (text.includes("haryana") || text.includes("gurgaon") || text.includes("gurugram") || text.includes("faridabad") || text.includes("hr")) return "06";
-    if (text.includes("uttarakhand") || text.includes("dehradun") || text.includes("uk")) return "05";
-    if (text.includes("kerala") || text.includes("kochi") || text.includes("cochin") || text.includes("trivandrum") || text.includes("kl")) return "32";
-    if (text.includes("madhya pradesh") || text.includes("bhopal") || text.includes("indore") || text.includes("mp")) return "23";
-    if (text.includes("bihar") || text.includes("patna") || text.includes("br")) return "10";
-    if (text.includes("jharkhand") || text.includes("ranchi") || text.includes("jh")) return "20";
-    if (text.includes("odisha") || text.includes("orissa") || text.includes("bhubaneswar") || text.includes("or")) return "21";
-    if (text.includes("chhattisgarh") || text.includes("raipur") || text.includes("cg")) return "22";
-    if (text.includes("assam") || text.includes("guwahati") || text.includes("as")) return "18";
+    if (
+      text.includes("west bengal") ||
+      text.includes("kolkata") ||
+      text.includes("calcutta") ||
+      text.includes("wb")
+    )
+      return "19";
+    if (
+      text.includes("maharashtra") ||
+      text.includes("mumbai") ||
+      text.includes("pune") ||
+      text.includes("nagpur") ||
+      text.includes("mh")
+    )
+      return "27";
+    if (
+      text.includes("delhi") ||
+      text.includes("new delhi") ||
+      text.includes("ncr")
+    )
+      return "07";
+    if (
+      text.includes("karnataka") ||
+      text.includes("bengaluru") ||
+      text.includes("bangalore") ||
+      text.includes("ka")
+    )
+      return "29";
+    if (
+      text.includes("tamil nadu") ||
+      text.includes("chennai") ||
+      text.includes("tn")
+    )
+      return "33";
+    if (
+      text.includes("telangana") ||
+      text.includes("hyderabad") ||
+      text.includes("ts")
+    )
+      return "36";
+    if (
+      text.includes("gujarat") ||
+      text.includes("ahmedabad") ||
+      text.includes("surat") ||
+      text.includes("gj")
+    )
+      return "24";
+    if (
+      text.includes("uttar pradesh") ||
+      text.includes("noida") ||
+      text.includes("lucknow") ||
+      text.includes("kanpur") ||
+      text.includes("up")
+    )
+      return "09";
+    if (
+      text.includes("punjab") ||
+      text.includes("chandigarh") ||
+      text.includes("ludhiana") ||
+      text.includes("pb")
+    )
+      return "03";
+    if (
+      text.includes("rajasthan") ||
+      text.includes("jaipur") ||
+      text.includes("rj")
+    )
+      return "08";
+    if (
+      text.includes("haryana") ||
+      text.includes("gurgaon") ||
+      text.includes("gurugram") ||
+      text.includes("faridabad") ||
+      text.includes("hr")
+    )
+      return "06";
+    if (
+      text.includes("uttarakhand") ||
+      text.includes("dehradun") ||
+      text.includes("uk")
+    )
+      return "05";
+    if (
+      text.includes("kerala") ||
+      text.includes("kochi") ||
+      text.includes("cochin") ||
+      text.includes("trivandrum") ||
+      text.includes("kl")
+    )
+      return "32";
+    if (
+      text.includes("madhya pradesh") ||
+      text.includes("bhopal") ||
+      text.includes("indore") ||
+      text.includes("mp")
+    )
+      return "23";
+    if (text.includes("bihar") || text.includes("patna") || text.includes("br"))
+      return "10";
+    if (
+      text.includes("jharkhand") ||
+      text.includes("ranchi") ||
+      text.includes("jh")
+    )
+      return "20";
+    if (
+      text.includes("odisha") ||
+      text.includes("orissa") ||
+      text.includes("bhubaneswar") ||
+      text.includes("or")
+    )
+      return "21";
+    if (
+      text.includes("chhattisgarh") ||
+      text.includes("raipur") ||
+      text.includes("cg")
+    )
+      return "22";
+    if (
+      text.includes("assam") ||
+      text.includes("guwahati") ||
+      text.includes("as")
+    )
+      return "18";
     if (text.includes("goa") || text.includes("panaji")) return "30";
-    if (text.includes("jammu") || text.includes("srinagar") || text.includes("j&k")) return "01";
+    if (
+      text.includes("jammu") ||
+      text.includes("srinagar") ||
+      text.includes("j&k")
+    )
+      return "01";
     if (text.includes("himachal") || text.includes("shimla")) return "02";
     return "";
   };
@@ -202,7 +356,9 @@ export default function InvoicePreviewPage({
     ? config.companyGst.slice(0, 2)
     : "06";
   const clientStateCode = detectStateCode(activeClient);
-  const isInterstate = !!(clientStateCode && companyStateCode !== clientStateCode);
+  const isInterstate = !!(
+    clientStateCode && companyStateCode !== clientStateCode
+  );
 
   // Tax calculations
   const items = invoiceData.items || [];
@@ -257,226 +413,248 @@ export default function InvoicePreviewPage({
       </div>
 
       {/* Standalone A4 Invoice Paper Sheet */}
-      <div className="invoice-a4-sheet bg-white rounded-2xl border border-slate-150 custom-shadow p-12 space-y-8 select-none text-slate-800 text-xs leading-relaxed max-w-full mx-auto box-border">
-        {/* 1. Header (Company details LEFT, Logo RIGHT) */}
-        <div className="flex items-start justify-between">
-          {/* Left: Company details always */}
-          <div>
-            <h2 className="text-base font-extrabold text-slate-950 leading-tight">
-              {config.companyName}
-            </h2>
-            <p className="text-[10px] text-slate-500 mt-1 max-w-[280px]">
-              {config.companyAddress}
-            </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              GSTIN:{" "}
-              <span className="font-semibold text-slate-700">
-                {config.companyGst}
+      <div className="invoice-a4-sheet bg-white rounded-2xl border border-slate-200 custom-shadow p-12 select-none text-black text-xs leading-relaxed max-w-full mx-auto box-border flex flex-col justify-between min-h-[1100px]">
+        <div className="space-y-6">
+          {/* 1. Header Row (From details LEFT, INVOICE title RIGHT) */}
+          <div className="flex items-start justify-between pb-6 border-b border-slate-200">
+            {/* Left: Company Logo & Details ("From") */}
+            <div className="space-y-1.5">
+              {config.companyLogo ? (
+                <img
+                  src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${config.companyLogo}`}
+                  alt="Logo"
+                  className="h-12 w-auto object-contain rounded mb-2"
+                />
+              ) : (
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-sm">
+                    {config.companyName.charAt(0)}
+                  </div>
+                </div>
+              )}
+              <span className="text-[10px] font-bold text-black uppercase tracking-wider block mb-1">
+                FROM
+              </span>
+              <h2 className="text-xs font-black uppercase text-black tracking-wide leading-snug">
+                {config.companyName}
+              </h2>
+              <p className="text-[10px] text-black font-semibold max-w-[280px] leading-relaxed">
+                {config.companyAddress}
+              </p>
+              {config.companyGst && (
+                <p className="text-[10px] text-black font-bold">
+                  GSTIN {config.companyGst}
+                </p>
+              )}
+            </div>
+
+            {/* Right: INVOICE Title */}
+            <div className="text-right">
+              <h1 className="text-xl font-black tracking-tight text-black uppercase">
+                TAX INVOICE
+              </h1>
+            </div>
+          </div>
+
+          {/* 2. Bill To (Client) & Invoice Metadata Split */}
+          <div className="grid grid-cols-2 gap-6 pt-2">
+            {/* Left: Bill To */}
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-black uppercase tracking-wider block mb-1">
+                BILL TO
+              </span>
+              <h3 className="text-xs font-black text-black uppercase tracking-wide">
+                {activeClient.companyName ||
+                  activeClient.clientName ||
+                  "Client Company Name"}
+              </h3>
+              {activeClient.clientName && activeClient.companyName && (
+                <p className="text-[10px] text-black font-bold">
+                  {activeClient.clientName}
+                </p>
+              )}
+              <p className="text-[10px] text-black font-semibold max-w-[260px] leading-relaxed">
+                {activeClient.address || "Client Address"}
+                {activeClient.city ? `, ${activeClient.city}` : ""}
+                {activeClient.pincode ? ` - ${activeClient.pincode}` : ""}
+              </p>
+              {activeClient.gstNumber && (
+                <p className="text-[10px] text-black font-bold">
+                  GSTIN: {activeClient.gstNumber}
+                </p>
+              )}
+            </div>
+
+            {/* Right: Invoice Metadata */}
+            <div className="text-right flex flex-col justify-end items-end">
+              <table className="text-[10px]">
+                <tbody>
+                  <tr>
+                    <td className="text-black font-bold pr-3 py-1 text-right">
+                      Invoice No :
+                    </td>
+                    <td className="text-black font-black py-1 font-mono">
+                      {displayInvoiceNum}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="text-black font-bold pr-3 py-1 text-right">
+                      Invoice Date :
+                    </td>
+                    <td className="text-black font-black py-1">
+                      {new Date(
+                        invoiceData.invoiceDate || Date.now(),
+                      ).toLocaleDateString("en-IN")}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="text-black font-bold pr-3 py-1 text-right">
+                      Status :
+                    </td>
+                    <td className="py-1">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black border ${
+                          (invoiceData.paymentStatus || "").toLowerCase() ===
+                          "paid"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                            : "bg-amber-50 text-amber-800 border-amber-300"
+                        }`}
+                      >
+                        {invoiceData.paymentStatus || "Pending"}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 4. Table of items */}
+          <table className="w-full text-left border-collapse text-[10px] mt-4">
+            <thead>
+              <tr className="bg-slate-100 text-black font-black">
+                <th className="py-2.5 px-3 rounded-l w-8">#</th>
+                <th className="py-2.5 px-3">Description</th>
+                <th className="py-2.5 px-3 text-center">SAC Code</th>
+                <th className="py-2.5 px-3 text-center">Qty</th>
+                <th className="py-2.5 px-3 text-right">Rate (₹)</th>
+                <th className="py-2.5 px-3 text-right rounded-r">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 font-bold text-black">
+              {items.map((item, idx) => {
+                const lineTaxable = item.qty * item.rate;
+                return (
+                  <tr key={idx}>
+                    <td className="py-3 px-3 text-black font-bold">
+                      {idx + 1}
+                    </td>
+                    <td className="py-3 px-3 text-black font-bold">
+                      {item.description || "Website Development"}
+                    </td>
+                    <td className="py-3 px-3 text-center text-black font-bold">
+                      {item.sacCode || "998314"}
+                    </td>
+                    <td className="py-3 px-3 text-center text-black font-bold">
+                      {item.qty}
+                    </td>
+                    <td className="py-3 px-3 text-right text-black font-bold">
+                      {item.rate.toLocaleString("en-IN")}
+                    </td>
+                    <td className="py-3 px-3 text-right text-black font-black">
+                      {lineTaxable.toLocaleString("en-IN")}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* 5. Totals Breakdown */}
+          <div className="border-t border-slate-200 pt-3 flex flex-col items-end gap-1.5">
+            <div className="w-64 grid grid-cols-2 text-right text-[10px] font-bold text-black">
+              <span>Sub Total</span>
+              <span className="text-black font-extrabold">
+                ₹
+                {subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </span>
+
+              {isInterstate ? (
+                <>
+                  <span>IGST ({primaryGstRate}%)</span>
+                  <span className="text-black font-extrabold">
+                    ₹
+                    {totalGstAmount.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    CGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}
+                    %)
+                  </span>
+                  <span className="text-black font-extrabold">
+                    ₹
+                    {(totalGstAmount / 2).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                  <span>
+                    SGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}
+                    %)
+                  </span>
+                  <span className="text-black font-extrabold">
+                    ₹
+                    {(totalGstAmount / 2).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="w-64 border-t border-slate-300 pt-2 grid grid-cols-2 text-right text-xs">
+              <span className="font-black text-black">Grand Total</span>
+              <span className="font-black text-black">
+                ₹
+                {grandTotal.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                })}
+              </span>
+            </div>
+          </div>
+
+          {/* 6. Amount in words & footer footnotes */}
+          <div className="pt-10 border-t border-slate-200">
+            <p className="text-[10px] font-black text-black">
+              Amount in Words:{" "}
+              <span className="text-black font-normal">
+                {numberToWords(grandTotal)}
               </span>
             </p>
-          </div>
-
-          {/* Right: Logo if available, else branded icon */}
-          {config.companyLogo ? (
-            <img
-              src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${config.companyLogo}`}
-              alt="Logo"
-              className="h-14 w-auto max-w-[140px] object-contain rounded border border-slate-100 p-1 bg-white shrink-0"
-            />
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <h3 className="text-sm font-black text-slate-900 leading-none">
-                  {config.companyName}
-                </h3>
-                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">
-                  Invoice Management
-                </span>
-              </div>
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
-                <FileText className="h-4.5 w-4.5" />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 2. Tax Invoice centered banner */}
-        <div className="text-center">
-          <span className="bg-slate-900 text-white font-extrabold text-[10px] tracking-widest px-6 py-1.5 rounded shadow-sm">
-            {(invoiceData.invoiceType || "Tax Invoice").toUpperCase()}
-          </span>
-        </div>
-
-        {/* 3. Metadata & Client Info Split */}
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Bill To
-            </span>
-            <h4 className="text-xs font-extrabold text-slate-950">
-              {activeClient.companyName || "Client Company Name"}
-            </h4>
-            <p className="text-[10px] text-slate-500 mt-1 max-w-[240px]">
-              {activeClient.address || "Client Address"},{" "}
-              {activeClient.city || ""}{" "}
-              {activeClient.pincode ? `- ${activeClient.pincode}` : ""}
+            <p className="text-[10px] font-semibold text-black mt-2 italic">
+              {config.invoiceTerms}
             </p>
-            {activeClient.gstNumber && (
-              <p className="text-[10px] text-slate-500 mt-0.5">
-                GSTIN:{" "}
-                <span className="font-semibold text-slate-700">
-                  {activeClient.gstNumber}
-                </span>
-              </p>
-            )}
-          </div>
-
-          <div className="text-right">
-            <table className="ml-auto text-[10px]">
-              <tbody>
-                <tr>
-                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">
-                    Invoice No
-                  </td>
-                  <td className="text-slate-900 font-bold py-0.5">
-                    : {invoiceData.invoiceNumber || "INV-2024-XXXX"}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">
-                    Invoice Date
-                  </td>
-                  <td className="text-slate-900 py-0.5">
-                    :{" "}
-                    {new Date(
-                      invoiceData.invoiceDate || Date.now(),
-                    ).toLocaleDateString("en-IN")}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="text-slate-400 font-semibold pr-2 py-0.5 text-right">
-                    Status
-                  </td>
-                  <td className="py-0.5">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                        invoiceData.paymentStatus === "Paid"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}
-                    >
-                      {invoiceData.paymentStatus || "Pending"}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
 
-        {/* 4. Table of items */}
-        <table className="w-full text-left border-collapse text-[10px] mt-4">
-          <thead>
-            <tr className="bg-slate-100 text-slate-650 font-bold">
-              <th className="py-2 px-3 rounded-l w-8">#</th>
-              <th className="py-2 px-3">Description</th>
-              <th className="py-2 px-3 text-center">SAC Code</th>
-              <th className="py-2 px-3 text-center">Qty</th>
-              <th className="py-2 px-3 text-right">Rate (₹)</th>
-              <th className="py-2 px-3 text-right rounded-r">Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-150 font-semibold text-slate-755">
-            {items.map((item, idx) => {
-              const lineTaxable = item.qty * item.rate;
-              return (
-                <tr key={idx}>
-                  <td className="py-3 px-3 text-slate-400">{idx + 1}</td>
-                  <td className="py-3 px-3 text-slate-900">
-                    {item.description || "Website Development"}
-                  </td>
-                  <td className="py-3 px-3 text-center text-slate-550">
-                    {item.sacCode || "998314"}
-                  </td>
-                  <td className="py-3 px-3 text-center text-slate-500">
-                    {item.qty}
-                  </td>
-                  <td className="py-3 px-3 text-right text-slate-500">
-                    {item.rate.toLocaleString("en-IN")}
-                  </td>
-                  <td className="py-3 px-3 text-right text-slate-900">
-                    {lineTaxable.toLocaleString("en-IN")}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        {/* 5. Totals Breakdown */}
-        <div className="border-t border-slate-100 pt-3 flex flex-col items-end gap-1.5">
-          <div className="w-64 grid grid-cols-2 text-right text-[10px] font-semibold text-slate-500">
-            <span>Sub Total</span>
-            <span className="text-slate-800">
-              ₹{subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-            </span>
-
-            {isInterstate ? (
-              <>
-                <span>IGST ({primaryGstRate}%)</span>
-                <span className="text-slate-800">
-                  ₹{totalGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </span>
-              </>
-            ) : (
-              <>
-                <span>CGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}%)</span>
-                <span className="text-slate-800">
-                  ₹{(totalGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </span>
-                <span>SGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}%)</span>
-                <span className="text-slate-800">
-                  ₹{(totalGstAmount / 2).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </span>
-              </>
-            )}
-          </div>
-          <div className="w-64 border-t border-slate-150 pt-2 grid grid-cols-2 text-right text-xs">
-            <span className="font-extrabold text-slate-900">Grand Total</span>
-            <span className="font-black text-slate-950">
-              ₹
-              {grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-
-        {/* 6. Amount in words & footer footnotes */}
-        <div className="pt-2 border-t border-slate-100/60">
-          <p className="text-[10px] font-semibold text-slate-500">
-            Amount in Words:{" "}
-            <span className="text-slate-900 font-extrabold">
-              {numberToWords(grandTotal)}
-            </span>
-          </p>
-          <p className="text-[10px] font-semibold text-slate-400 mt-2 italic">
-            {config.invoiceTerms}
-          </p>
-        </div>
-
-        {/* 7. Footer Contact details */}
-        <div className="pt-4 border-t border-slate-150 flex items-center justify-between text-[9px] font-bold text-slate-400">
+        {/* 7. Footer Contact details pinned to bottom of A4 sheet */}
+        <div className="mt-auto pt-6 border-t border-slate-200 flex items-center justify-between text-[9px] font-black text-black">
           <span className="flex items-center gap-1">
-            <Phone className="h-3 w-3 text-slate-400" />
+            <Phone className="h-3 w-3 text-black" />
             <span>{config.companyPhone}</span>
           </span>
           <span className="flex items-center gap-1">
-            <Mail className="h-3 w-3 text-slate-400" />
+            <Mail className="h-3 w-3 text-black" />
             <span>{config.companyEmail}</span>
           </span>
-          <span className="flex items-center gap-1">
-            <Globe className="h-3 w-3 text-slate-400" />
-            <span>www.codenap.in</span>
-          </span>
+          {config.companyWebsite && (
+            <span className="flex items-center gap-1">
+              <Globe className="h-3 w-3 text-black" />
+              <span>{config.companyWebsite}</span>
+            </span>
+          )}
         </div>
       </div>
 

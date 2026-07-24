@@ -54,6 +54,15 @@ const getNextInvoiceNumber = async () => {
   return `${prefix}${Date.now().toString().slice(-4)}`;
 };
 
+// 0. GET /api/invoices/next-number - Fetch next sequential invoice number
+router.get("/next-number", async (req, res) => {
+  try {
+    const nextInvoiceNumber = await getNextInvoiceNumber();
+    res.json({ invoiceNumber: nextInvoiceNumber });
+  } catch (error) {
+    res.status(500).json({ message: "Error generating next invoice number", error: error.message });
+  }
+});
 
 // 1. GET /api/invoices - Fetch invoices (populated with client references)
 router.get("/", async (req, res) => {

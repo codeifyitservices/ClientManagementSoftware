@@ -8,6 +8,7 @@ export default function InvoiceConfigPage() {
     companyPhone: "",
     companyAddress: "",
     companyGst: "",
+    companyWebsite: "",
     invoiceTerms: "",
     companyLogo: "",
   });
@@ -36,6 +37,7 @@ export default function InvoiceConfigPage() {
         companyPhone: data.companyPhone || "",
         companyAddress: data.companyAddress || "",
         companyGst: data.companyGst || "",
+        companyWebsite: data.companyWebsite || "",
         invoiceTerms: data.invoiceTerms || "",
         companyLogo: data.companyLogo || "",
       });
@@ -238,7 +240,7 @@ export default function InvoiceConfigPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Company Email */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
@@ -267,6 +269,21 @@ export default function InvoiceConfigPage() {
                     onChange={handleConfigChange}
                     required
                     placeholder="+91 98765 43210"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                {/* Company Website */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Company Website URL
+                  </label>
+                  <input
+                    type="text"
+                    name="companyWebsite"
+                    value={config.companyWebsite}
+                    onChange={handleConfigChange}
+                    placeholder="www.codenap.co.in"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white"
                   />
                 </div>

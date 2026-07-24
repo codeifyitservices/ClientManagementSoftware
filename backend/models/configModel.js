@@ -37,6 +37,11 @@ const configSchema = new mongoose.Schema(
       default: "Thank you for your business! Please pay within 15 days of invoice date.",
       trim: true,
     },
+    companyWebsite: {
+      type: String,
+      default: "www.codenap.co.in",
+      trim: true,
+    },
     companyLogo: {
       type: String,
       default: "",

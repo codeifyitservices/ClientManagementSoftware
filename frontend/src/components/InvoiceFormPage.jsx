@@ -107,6 +107,20 @@ export default function InvoiceFormPage({
       } catch (err) {
         // Fallback
       }
+
+      // Fetch next sequential invoice number
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/invoices/next-number`,
+          { headers },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.invoiceNumber) setNextInvoiceNumber(data.invoiceNumber);
+        }
+      } catch (err) {
+        // Fallback
+      }
     };
 
     fetchConfigAndServices();
@@ -114,6 +128,7 @@ export default function InvoiceFormPage({
 
   // Invoice form states
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -340,7 +355,7 @@ export default function InvoiceFormPage({
           notes,
           items,
           paymentStatus,
-          invoiceNumber: invoice?.invoiceNumber || "INV-NEW",
+          invoiceNumber: invoice?.invoiceNumber || draftInvoice?.invoiceNumber || nextInvoiceNumber || "",
           _id: invoice?._id || null,
         },
         returnTo: isEdit ? `/invoices/${invoice._id}/edit` : "/invoices/create",
