@@ -104,15 +104,16 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   }
 
   // Left Column: Company Details ("From")
-  doc.fillColor("#000000").fontSize(8).text("FROM", 40, headerTop, { bold: true });
+  doc.font("Helvetica").fontSize(8).fillColor("#64748B").text("FROM", 40, headerTop);
   headerTop += 12;
-  doc.fillColor("#000000").fontSize(11).text(companyName.toUpperCase(), 40, headerTop, { bold: true });
-  doc.fillColor("#000000").fontSize(8)
+  doc.font("Helvetica-Bold").fontSize(11).fillColor("#0F172A").text(companyName.toUpperCase(), 40, headerTop);
+  doc.font("Helvetica").fontSize(8).fillColor("#475569")
     .text(companyAddress, 40, headerTop + 14, { width: 220 })
     .text(`GSTIN ${companyGst}`, 40, headerTop + 36);
 
-  // Right Column: TAX INVOICE Title
-  doc.fillColor("#000000").fontSize(20).text("TAX INVOICE", 380, 40, { width: 175, align: "right", bold: true });
+  // Right Column: TAX INVOICE Title & Invoice Number
+  doc.font("Helvetica-Bold").fontSize(20).fillColor("#0F172A").text("TAX INVOICE", 380, 40, { width: 175, align: "right" });
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#475569").text(`# ${invoice.invoiceNumber || ""}`, 380, 64, { width: 175, align: "right" });
 
   // Horizontal Divider Line
   const dividerY = Math.max(125, headerTop + 54);
@@ -123,64 +124,55 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   const infoTop = dividerY + 12;
 
   // Bill To (Left Column: 40 to 280)
-  doc.fillColor("#000000").fontSize(8).text("BILL TO", 40, infoTop, { bold: true });
-  doc.fillColor("#000000").fontSize(10).text((client.companyName || client.clientName || "Client Name").toUpperCase(), 40, infoTop + 12, { bold: true });
+  doc.font("Helvetica").fontSize(8).fillColor("#64748B").text("BILL TO", 40, infoTop);
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("#0F172A").text((client.companyName || "Client Company Name").toUpperCase(), 40, infoTop + 12);
 
   let addrY = infoTop + 26;
-  if (client.clientName && client.companyName) {
-    doc.fillColor("#000000").fontSize(8).text(client.clientName, 40, addrY);
-    addrY += 12;
-  }
 
   const fullAddr = `${client.address || ""}${client.city ? `, ${client.city}` : ""}${client.pincode ? ` - ${client.pincode}` : ""}`;
   if (fullAddr.trim()) {
-    doc.fillColor("#000000").fontSize(8).text(fullAddr, 40, addrY, { width: 240 });
+    doc.font("Helvetica").fontSize(8).fillColor("#475569").text(fullAddr, 40, addrY, { width: 240 });
     addrY += doc.heightOfString(fullAddr, { width: 240 }) + 3;
   }
 
   if (client.gstNumber) {
-    doc.fillColor("#000000").fontSize(8).text(`GSTIN: ${client.gstNumber}`, 40, addrY);
+    doc.font("Helvetica").fontSize(8).fillColor("#475569").text(`GSTIN: ${client.gstNumber}`, 40, addrY);
     addrY += 12;
   }
 
   // Invoice Metadata (Right Column: 340 to 555)
   const isPaid = (invoice.paymentStatus || "").toLowerCase() === "paid";
 
-  doc.fillColor("#000000").fontSize(8)
-    .text("Invoice No :", 360, infoTop + 12, { width: 90, align: "right", bold: true })
-    .text(`${invoice.invoiceNumber || ""}`, 455, infoTop + 12, { width: 100, align: "left", bold: true })
+  doc.font("Helvetica").fontSize(8).fillColor("#475569")
+    .text("Invoice Date :", 360, infoTop + 12, { width: 90, align: "right" });
+  doc.font("Helvetica").fontSize(8).fillColor("#0F172A")
+    .text(`${new Date(invoice.invoiceDate || invoice.createdAt || Date.now()).toLocaleDateString("en-IN")}`, 455, infoTop + 12, { width: 100, align: "left" });
 
-    .text("Invoice Date :", 360, infoTop + 26, { width: 90, align: "right", bold: true })
-    .text(`${new Date(invoice.invoiceDate || invoice.createdAt || Date.now()).toLocaleDateString("en-IN")}`, 455, infoTop + 26, { width: 100, align: "left", bold: true })
-
-    .text("Status :", 360, infoTop + 40, { width: 90, align: "right", bold: true });
-
-  doc.fillColor(isPaid ? "#16A34A" : "#D97706").fontSize(8)
-    .text(isPaid ? "Paid" : "Pending", 455, infoTop + 40, { width: 100, align: "left", bold: true });
+  doc.font("Helvetica").fontSize(8).fillColor("#475569")
+    .text("Status :", 360, infoTop + 26, { width: 90, align: "right" });
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(isPaid ? "#16A34A" : "#D97706")
+    .text(isPaid ? "Paid" : "Pending", 455, infoTop + 26, { width: 100, align: "left" });
 
   // Determine Table Top
-  const tableTop = Math.max(235, addrY + 15);
+  const tableTop = Math.max(225, addrY + 15);
 
   // 4. Items Table Header
-  doc.rect(40, tableTop, 515, 22).fill("#F1F5F9");
-  doc.moveTo(40, tableTop).lineTo(555, tableTop).strokeColor("#94A3B8").lineWidth(1).stroke();
-  doc.moveTo(40, tableTop + 22).lineTo(555, tableTop + 22).strokeColor("#94A3B8").lineWidth(1).stroke();
+  doc.rect(40, tableTop, 515, 22).fill("#333333");
 
-  doc.fillColor("#000000").fontSize(8)
-    .text("#", 45, tableTop + 6, { width: 25, align: "center", bold: true })
-    .text("Description", 75, tableTop + 6, { width: 225, bold: true })
-    .text("SAC Code", 305, tableTop + 6, { width: 60, align: "center", bold: true })
-    .text("Qty", 370, tableTop + 6, { width: 35, align: "center", bold: true })
-    .text("Rate (Rs.)", 410, tableTop + 6, { width: 65, align: "right", bold: true })
-    .text("Amount (Rs.)", 480, tableTop + 6, { width: 70, align: "right", bold: true });
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#FFFFFF")
+    .text("#", 45, tableTop + 6, { width: 25, align: "center" })
+    .text("Description", 75, tableTop + 6, { width: 330 })
+    .text("SAC Code", 410, tableTop + 6, { width: 60, align: "center" })
+    .text("Amount (Rs.)", 475, tableTop + 6, { width: 75, align: "right" });
 
   // 5. Items Table Rows
   let currentY = tableTop + 28;
   const items = invoice.items && invoice.items.length > 0 ? invoice.items : [{
     description: invoice.serviceDescription || "Services",
     sacCode: invoice.sacCode || "998314",
-    qty: 1,
+    amount: invoice.amount || 0,
     rate: invoice.amount || 0,
+    qty: 1,
     gstRate: invoice.gstRate || 18,
   }];
 
@@ -188,24 +180,25 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   let totalGst = 0;
 
   items.forEach((item, idx) => {
-    const lineBase = (item.qty || 1) * (item.rate || 0);
+    const lineBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
     const lineGst = lineBase * ((item.gstRate || 18) / 100);
     subTotal += lineBase;
     totalGst += lineGst;
 
-    const descHeight = doc.heightOfString(item.description || "Item", { width: 225 });
+    const descHeight = doc.heightOfString(item.description || "Item", { width: 330 });
     const rowHeight = Math.max(20, descHeight + 6);
 
-    doc.fillColor("#000000").fontSize(9)
-      .text(`${idx + 1}`, 45, currentY, { width: 25, align: "center" })
-      .text(item.description || "Item", 75, currentY, { width: 225 })
-      .text(item.sacCode || "998314", 305, currentY, { width: 60, align: "center" })
-      .text(`${item.qty || 1}`, 370, currentY, { width: 35, align: "center" })
-      .text(lineBase.toLocaleString("en-IN", { minimumFractionDigits: 2 }), 410, currentY, { width: 65, align: "right" })
-      .text(lineBase.toLocaleString("en-IN", { minimumFractionDigits: 2 }), 480, currentY, { width: 70, align: "right" });
+    doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
+      .text(`${idx + 1}`, 45, currentY, { width: 25, align: "center" });
+    doc.font("Helvetica").fontSize(8.5).fillColor("#0F172A")
+      .text(item.description || "Item", 75, currentY, { width: 330 });
+    doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
+      .text(item.sacCode || "998314", 410, currentY, { width: 60, align: "center" });
+    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
+      .text(lineBase.toLocaleString("en-IN", { minimumFractionDigits: 2 }), 475, currentY, { width: 75, align: "right" });
 
     currentY += rowHeight;
-    doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor("#CBD5E1").lineWidth(0.5).stroke();
+    doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor("#E2E8F0").lineWidth(0.5).stroke();
     currentY += 4;
   });
 
@@ -252,55 +245,56 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   const isInterstate = !!(clientStateCode && companyStateCode !== clientStateCode);
   const primaryRate = items[0]?.gstRate || 18;
 
-  doc.fillColor("#000000").fontSize(9)
-    .text("Sub Total:", totalBlockX, currentY, { width: 110, align: "right", bold: true })
-    .text(`Rs. ${subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right", bold: true });
+  doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
+    .text("Sub Total:", totalBlockX, currentY, { width: 110, align: "right" });
+  doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
+    .text(`Rs. ${subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
 
   currentY += 16;
   if (isInterstate) {
-    doc.fillColor("#000000").fontSize(9)
-      .text(`IGST (${primaryRate}%):`, totalBlockX, currentY, { width: 110, align: "right", bold: true })
-      .text(`Rs. ${totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right", bold: true });
+    doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
+      .text(`IGST (${primaryRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });
+    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
+      .text(`Rs. ${totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
     currentY += 16;
   } else {
     const halfGst = totalGst / 2;
     const halfRate = primaryRate / 2;
-    doc.fillColor("#000000").fontSize(9)
-      .text(`CGST (${halfRate}%):`, totalBlockX, currentY, { width: 110, align: "right", bold: true })
-      .text(`Rs. ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right", bold: true });
+    doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
+      .text(`CGST (${halfRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });
+    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
+      .text(`Rs. ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
     currentY += 16;
 
-    doc.fillColor("#000000").fontSize(9)
-      .text(`SGST (${halfRate}%):`, totalBlockX, currentY, { width: 110, align: "right", bold: true })
-      .text(`Rs. ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right", bold: true });
+    doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
+      .text(`SGST (${halfRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });
+    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
+      .text(`Rs. ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
     currentY += 16;
   }
 
-  // Grand Total Line
-  doc.moveTo(totalBlockX, currentY).lineTo(555, currentY).strokeColor("#94A3B8").lineWidth(1).stroke();
-  currentY += 6;
+  // Grand Total Line Box
+  doc.rect(totalBlockX, currentY - 2, 225, 20).fill("#F3F4F6");
+  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0F172A")
+    .text("Total", totalBlockX + 5, currentY + 3, { width: 105, align: "left" })
+    .text(`Rs. ${grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY + 3, { width: 100, align: "right" });
 
-  doc.fillColor("#000000").fontSize(11)
-    .text("Grand Total (Rs.):", totalBlockX, currentY, { width: 110, align: "right", bold: true })
-    .text(`Rs. ${grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right", bold: true });
-
-  currentY += 25;
+  currentY += 28;
 
   // 7. Amount in Words & Terms
-  doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor("#CBD5E1").lineWidth(1).stroke();
+  doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor("#E2E8F0").lineWidth(1).stroke();
   currentY += 12;
 
-  doc.fillColor("#000000").fontSize(9)
-    .font("Helvetica-Bold").text("Amount in Words: ", 40, currentY, { continued: true })
-    .font("Helvetica").text(numberToWords(grandTotal));
+  doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A").text("Amount in Words: ", 40, currentY, { continued: true })
+    .font("Helvetica").fillColor("#475569").text(numberToWords(grandTotal));
 
   currentY += 20;
-  doc.fillColor("#000000").fontSize(8).text(invoiceTerms, 40, currentY, { width: 515, align: "left", italic: true });
+  doc.font("Helvetica").fontSize(8).fillColor("#64748B").text(invoiceTerms, 40, currentY, { width: 515, align: "left", italic: true });
 
   // 8. Footer Contact Details
   const companyWebsite = config.companyWebsite || "";
-  doc.moveTo(40, 780).lineTo(555, 780).strokeColor("#CBD5E1").lineWidth(0.5).stroke();
-  doc.fillColor("#000000").fontSize(8)
+  doc.moveTo(40, 780).lineTo(555, 780).strokeColor("#E2E8F0").lineWidth(0.5).stroke();
+  doc.font("Helvetica").fontSize(8).fillColor("#64748B")
     .text(`Phone: ${companyPhone}`, 40, 788, { width: 160, align: "left" })
     .text(`Email: ${companyEmail}`, 200, 788, { width: 160, align: "center" });
   

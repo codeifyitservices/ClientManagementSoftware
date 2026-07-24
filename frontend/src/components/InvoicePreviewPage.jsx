@@ -365,7 +365,7 @@ export default function InvoicePreviewPage({
   let subTotal = 0;
   let totalGstAmount = 0;
   items.forEach((item) => {
-    const base = item.qty * item.rate;
+    const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : ((item.qty || 1) * (item.rate || 0)));
     subTotal += base;
     totalGstAmount += base * (item.gstRate / 100);
   });
@@ -432,27 +432,30 @@ export default function InvoicePreviewPage({
                   </div>
                 </div>
               )}
-              <span className="text-[10px] font-bold text-black uppercase tracking-wider block mb-1">
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">
                 FROM
               </span>
-              <h2 className="text-xs font-black uppercase text-black tracking-wide leading-snug">
+              <h2 className="text-xs font-bold uppercase text-slate-900 tracking-wide leading-snug">
                 {config.companyName}
               </h2>
-              <p className="text-[10px] text-black font-semibold max-w-[280px] leading-relaxed">
+              <p className="text-[10px] text-slate-600 font-normal max-w-[280px] leading-relaxed">
                 {config.companyAddress}
               </p>
               {config.companyGst && (
-                <p className="text-[10px] text-black font-bold">
+                <p className="text-[10px] text-slate-600 font-normal">
                   GSTIN {config.companyGst}
                 </p>
               )}
             </div>
 
-            {/* Right: INVOICE Title */}
+            {/* Right: INVOICE Title & Invoice Number */}
             <div className="text-right">
-              <h1 className="text-xl font-black tracking-tight text-black uppercase">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 uppercase">
                 TAX INVOICE
               </h1>
+              <p className="text-xs font-bold text-slate-600 mt-1">
+                # {displayInvoiceNum}
+              </p>
             </div>
           </div>
 
@@ -460,26 +463,19 @@ export default function InvoicePreviewPage({
           <div className="grid grid-cols-2 gap-6 pt-2">
             {/* Left: Bill To */}
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-black uppercase tracking-wider block mb-1">
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1">
                 BILL TO
               </span>
-              <h3 className="text-xs font-black text-black uppercase tracking-wide">
-                {activeClient.companyName ||
-                  activeClient.clientName ||
-                  "Client Company Name"}
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                {activeClient.companyName || "Client Company Name"}
               </h3>
-              {activeClient.clientName && activeClient.companyName && (
-                <p className="text-[10px] text-black font-bold">
-                  {activeClient.clientName}
-                </p>
-              )}
-              <p className="text-[10px] text-black font-semibold max-w-[260px] leading-relaxed">
+              <p className="text-[10px] text-slate-600 font-normal max-w-[260px] leading-relaxed">
                 {activeClient.address || "Client Address"}
                 {activeClient.city ? `, ${activeClient.city}` : ""}
                 {activeClient.pincode ? ` - ${activeClient.pincode}` : ""}
               </p>
               {activeClient.gstNumber && (
-                <p className="text-[10px] text-black font-bold">
+                <p className="text-[10px] text-slate-600 font-normal">
                   GSTIN: {activeClient.gstNumber}
                 </p>
               )}
@@ -490,34 +486,26 @@ export default function InvoicePreviewPage({
               <table className="text-[10px]">
                 <tbody>
                   <tr>
-                    <td className="text-black font-bold pr-3 py-1 text-right">
-                      Invoice No :
-                    </td>
-                    <td className="text-black font-black py-1 font-mono">
-                      {displayInvoiceNum}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="text-black font-bold pr-3 py-1 text-right">
+                    <td className="text-slate-600 font-medium pr-3 py-1 text-right">
                       Invoice Date :
                     </td>
-                    <td className="text-black font-black py-1">
+                    <td className="text-slate-900 font-normal py-1">
                       {new Date(
                         invoiceData.invoiceDate || Date.now(),
                       ).toLocaleDateString("en-IN")}
                     </td>
                   </tr>
                   <tr>
-                    <td className="text-black font-bold pr-3 py-1 text-right">
+                    <td className="text-slate-600 font-medium pr-3 py-1 text-right">
                       Status :
                     </td>
                     <td className="py-1">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black border ${
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded text-[9px] font-bold border ${
                           (invoiceData.paymentStatus || "").toLowerCase() ===
                           "paid"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                            : "bg-amber-50 text-amber-800 border-amber-300"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-400"
+                            : "bg-amber-50 text-amber-800 border-amber-400"
                         }`}
                       >
                         {invoiceData.paymentStatus || "Pending"}
@@ -532,37 +520,29 @@ export default function InvoicePreviewPage({
           {/* 4. Table of items */}
           <table className="w-full text-left border-collapse text-[10px] mt-4">
             <thead>
-              <tr className="bg-slate-100 text-black font-black">
+              <tr className="bg-[#333333] text-white font-bold">
                 <th className="py-2.5 px-3 rounded-l w-8">#</th>
                 <th className="py-2.5 px-3">Description</th>
                 <th className="py-2.5 px-3 text-center">SAC Code</th>
-                <th className="py-2.5 px-3 text-center">Qty</th>
-                <th className="py-2.5 px-3 text-right">Rate (₹)</th>
                 <th className="py-2.5 px-3 text-right rounded-r">Amount (₹)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 font-bold text-black">
+            <tbody className="divide-y divide-slate-200 font-normal text-slate-800">
               {items.map((item, idx) => {
-                const lineTaxable = item.qty * item.rate;
+                const lineTaxable = Number(item.amount !== undefined && item.amount !== null ? item.amount : ((item.qty || 1) * (item.rate || 0)));
                 return (
                   <tr key={idx}>
-                    <td className="py-3 px-3 text-black font-bold">
+                    <td className="py-3 px-3 text-slate-500 font-normal">
                       {idx + 1}
                     </td>
-                    <td className="py-3 px-3 text-black font-bold">
+                    <td className="py-3 px-3 text-slate-900 font-normal">
                       {item.description || "Website Development"}
                     </td>
-                    <td className="py-3 px-3 text-center text-black font-bold">
+                    <td className="py-3 px-3 text-center text-slate-500 font-normal text-[9px]">
                       {item.sacCode || "998314"}
                     </td>
-                    <td className="py-3 px-3 text-center text-black font-bold">
-                      {item.qty}
-                    </td>
-                    <td className="py-3 px-3 text-right text-black font-bold">
-                      {item.rate.toLocaleString("en-IN")}
-                    </td>
-                    <td className="py-3 px-3 text-right text-black font-black">
-                      {lineTaxable.toLocaleString("en-IN")}
+                    <td className="py-3 px-3 text-right text-slate-900 font-bold">
+                      {lineTaxable.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );
@@ -572,17 +552,19 @@ export default function InvoicePreviewPage({
 
           {/* 5. Totals Breakdown */}
           <div className="border-t border-slate-200 pt-3 flex flex-col items-end gap-1.5">
-            <div className="w-64 grid grid-cols-2 text-right text-[10px] font-bold text-black">
-              <span>Sub Total</span>
-              <span className="text-black font-extrabold">
+            <div className="w-64 grid grid-cols-2 text-right text-[10px]">
+              <span className="text-slate-600 font-medium">Sub Total</span>
+              <span className="text-slate-900 font-bold">
                 ₹
                 {subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </span>
 
               {isInterstate ? (
                 <>
-                  <span>IGST ({primaryGstRate}%)</span>
-                  <span className="text-black font-extrabold">
+                  <span className="text-slate-600 font-medium">
+                    IGST ({primaryGstRate}%)
+                  </span>
+                  <span className="text-slate-900 font-bold">
                     ₹
                     {totalGstAmount.toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
@@ -591,21 +573,21 @@ export default function InvoicePreviewPage({
                 </>
               ) : (
                 <>
-                  <span>
+                  <span className="text-slate-600 font-medium">
                     CGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}
                     %)
                   </span>
-                  <span className="text-black font-extrabold">
+                  <span className="text-slate-900 font-bold">
                     ₹
                     {(totalGstAmount / 2).toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                     })}
                   </span>
-                  <span>
+                  <span className="text-slate-600 font-medium">
                     SGST ({(primaryGstRate / 2).toFixed(1).replace(/\.0$/, "")}
                     %)
                   </span>
-                  <span className="text-black font-extrabold">
+                  <span className="text-slate-900 font-bold">
                     ₹
                     {(totalGstAmount / 2).toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
@@ -614,9 +596,9 @@ export default function InvoicePreviewPage({
                 </>
               )}
             </div>
-            <div className="w-64 border-t border-slate-300 pt-2 grid grid-cols-2 text-right text-xs">
-              <span className="font-black text-black">Grand Total</span>
-              <span className="font-black text-black">
+            <div className="w-64 bg-slate-100 p-2.5 rounded-lg border border-slate-200 mt-2 grid grid-cols-2 text-right text-xs">
+              <span className="font-bold text-slate-900">Total</span>
+              <span className="font-bold text-slate-900">
                 ₹
                 {grandTotal.toLocaleString("en-IN", {
                   minimumFractionDigits: 2,
@@ -626,21 +608,21 @@ export default function InvoicePreviewPage({
           </div>
 
           {/* 6. Amount in words & footer footnotes */}
-          <div className="pt-10 border-t border-slate-200">
-            <p className="text-[10px] font-black text-black">
+          <div className="pt-8 border-t border-slate-200">
+            <p className="text-[10px] font-bold text-slate-900">
               Amount in Words:{" "}
-              <span className="text-black font-normal">
+              <span className="text-slate-700 font-normal">
                 {numberToWords(grandTotal)}
               </span>
             </p>
-            <p className="text-[10px] font-semibold text-black mt-2 italic">
+            <p className="text-[10px] font-normal text-slate-500 mt-2 italic">
               {config.invoiceTerms}
             </p>
           </div>
         </div>
 
         {/* 7. Footer Contact details pinned to bottom of A4 sheet */}
-        <div className="mt-auto pt-6 border-t border-slate-200 flex items-center justify-between text-[9px] font-black text-black">
+        <div className="mt-auto pt-6 border-t border-slate-200 flex items-center justify-between text-[9px] font-medium text-slate-500">
           <span className="flex items-center gap-1">
             <Phone className="h-3 w-3 text-black" />
             <span>{config.companyPhone}</span>

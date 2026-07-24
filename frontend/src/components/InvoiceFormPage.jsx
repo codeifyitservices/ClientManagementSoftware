@@ -140,7 +140,7 @@ export default function InvoiceFormPage({
 
   // Invoice items list state
   const [items, setItems] = useState([
-    { description: "", sacCode: "998314", qty: 1, rate: 0, gstRate: 18 },
+    { description: "", sacCode: "998314", amount: 0, rate: 0, qty: 1, gstRate: 18 },
   ]);
 
   // Populate edits if present
@@ -169,8 +169,9 @@ export default function InvoiceFormPage({
           sourceInvoice.items.map((i) => ({
             description: i.description || "",
             sacCode: i.sacCode || "998314",
-            qty: i.qty || 1,
-            rate: i.rate || 0,
+            amount: i.amount !== undefined && i.amount !== null ? i.amount : (i.rate || 0),
+            rate: i.amount !== undefined && i.amount !== null ? i.amount : (i.rate || 0),
+            qty: 1,
             gstRate: i.gstRate || 18,
           })),
         );
@@ -179,8 +180,9 @@ export default function InvoiceFormPage({
           {
             description: sourceInvoice.serviceDescription || "",
             sacCode: sourceInvoice.sacCode || "998314",
-            qty: 1,
+            amount: sourceInvoice.amount || 0,
             rate: sourceInvoice.amount || 0,
+            qty: 1,
             gstRate: sourceInvoice.gstRate || 18,
           },
         ]);
@@ -191,7 +193,7 @@ export default function InvoiceFormPage({
   const handleAddItem = () => {
     setItems((prev) => [
       ...prev,
-      { description: "", sacCode: "998314", qty: 1, rate: 0, gstRate: 18 },
+      { description: "", sacCode: "998314", amount: 0, rate: 0, qty: 1, gstRate: 18 },
     ]);
   };
 
@@ -205,8 +207,12 @@ export default function InvoiceFormPage({
       prev.map((item, i) => {
         if (i !== index) return item;
         const updated = { ...item };
-        if (field === "qty" || field === "rate" || field === "gstRate") {
-          updated[field] = Number(value) || 0;
+        if (field === "amount" || field === "rate" || field === "gstRate" || field === "qty") {
+          const num = Number(value) || 0;
+          updated[field] = num;
+          if (field === "amount") {
+            updated.rate = num;
+          }
         } else {
           updated[field] = value;
         }
@@ -286,7 +292,7 @@ export default function InvoiceFormPage({
   let subTotal = 0;
   let totalGstAmount = 0;
   items.forEach((item) => {
-    const base = item.qty * item.rate;
+    const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || 0));
     subTotal += base;
     totalGstAmount += base * (item.gstRate / 100);
   });
@@ -484,18 +490,17 @@ export default function InvoiceFormPage({
               <thead>
                 <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   <th className="pb-3 w-8">#</th>
-                  <th className="pb-3 w-80">Service / Line Item Description</th>
+                  <th className="pb-3 w-96">Service / Line Item Description</th>
                   <th className="pb-3 w-28">SAC Code</th>
-                  <th className="pb-3 w-16 text-center">Qty</th>
-                  <th className="pb-3 w-28 text-right">Rate (₹)</th>
-                  <th className="pb-3 w-16 text-center">GST (%)</th>
                   <th className="pb-3 w-32 text-right">Amount (₹)</th>
+                  <th className="pb-3 w-20 text-center">GST (%)</th>
+                  <th className="pb-3 w-32 text-right">Total (₹)</th>
                   <th className="pb-3 w-12 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {items.map((item, index) => {
-                  const lineTaxable = item.qty * item.rate;
+                  const lineTaxable = Number(item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || 0));
                   const lineTotal = lineTaxable * (1 + item.gstRate / 100);
 
                   return (
@@ -553,23 +558,13 @@ export default function InvoiceFormPage({
                       <td className="py-4 pr-2.5 align-bottom">
                         <input
                           type="number"
-                          min="1"
-                          value={item.qty}
-                          onChange={(e) =>
-                            handleItemChange(index, "qty", e.target.value)
-                          }
-                          className="w-full px-1.5 py-1.5 rounded-lg border border-slate-200 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="py-4 pr-2.5 align-bottom">
-                        <input
-                          type="number"
                           min="0"
-                          value={item.rate || ""}
+                          value={item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || "")}
                           onChange={(e) =>
-                            handleItemChange(index, "rate", e.target.value)
+                            handleItemChange(index, "amount", e.target.value)
                           }
-                          className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          placeholder="0"
+                          className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
                         />
                       </td>
                       <td className="py-4 pr-2.5 align-bottom">

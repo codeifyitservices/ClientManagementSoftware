@@ -14,14 +14,15 @@ const invoiceItemSchema = new mongoose.Schema({
   },
   qty: {
     type: Number,
-    required: true,
     default: 1,
-    min: 1,
   },
   rate: {
     type: Number,
-    required: true,
-    min: 0,
+    default: 0,
+  },
+  amount: {
+    type: Number,
+    default: 0,
   },
   gstRate: {
     type: Number,
@@ -127,7 +128,10 @@ invoiceSchema.pre("save", function () {
     let avgGstRate = 18;
 
     this.items.forEach((item) => {
-      const itemBase = (item.qty || 1) * (item.rate || 0);
+      const itemBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
+      item.amount = itemBase;
+      item.rate = itemBase;
+      item.qty = 1;
       const itemGst = itemBase * ((item.gstRate || 0) / 100);
       baseSum += itemBase;
       gstSum += itemGst;
