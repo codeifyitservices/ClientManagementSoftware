@@ -20,7 +20,9 @@ import ClientProfileModal from "./components/ClientProfileModal";
 import ConfirmDialog from "./components/ConfirmDialog";
 import InvoiceConfigPage from "./components/InvoiceConfigPage";
 import ServiceSettingsPage from "./components/ServiceSettingsPage";
+import DataBackupPage from "./components/DataBackupPage";
 import LoginPage from "./components/LoginPage";
+
 import PasswordModal from "./components/PasswordModal";
 
 const API_CLIENTS = `${import.meta.env.VITE_BACKEND_URL}/api/clients`;
@@ -166,7 +168,12 @@ function AppShell({
       title: "Service Settings",
       sub: "Configure billing services, SAC tax codes, and GST rates",
     },
+    "/settings/backup": {
+      title: "Data Backup & Export",
+      sub: "Backup entire dataset or individual collections in compressed JSON ZIP archives",
+    },
   };
+
 
   const isEditInvoice = /^\/invoices\/.+\/edit$/.test(path);
   const currentMeta = isEditInvoice
@@ -632,12 +639,62 @@ export default function App() {
     }
   };
 
-  const handleDownloadPdf = (invoice) => {
-    window.open(
-      `${API_INVOICES}/${invoice._id}/download-pdf?token=${token}`,
-      "_blank",
-    );
-    showToast(`Downloading PDF for ${invoice.invoiceNumber}...`, "success");
+  const handleDownloadPdf = async (invoice) => {
+    try {
+      showToast(`Generating PDF for ${invoice.invoiceNumber}...`, "success");
+      const res = await authenticatedFetch(
+        `${API_INVOICES}/${invoice._id}/download-pdf`,
+      );
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to download PDF.");
+      }
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute("download", `Invoice_${invoice.invoiceNumber}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      showToast(`Downloaded PDF for ${invoice.invoiceNumber}.`, "success");
+    } catch (err) {
+      if (err.message !== "Unauthorized") {
+        showToast(err.message || "Error downloading PDF.", "error");
+      }
+    }
+  };
+
+  const handleDownloadSelectedZip = async (ids = []) => {
+    if (!ids || ids.length === 0) return;
+    try {
+      showToast(`Generating ZIP archive for ${ids.length} invoice(s)...`, "success");
+      const res = await authenticatedFetch(
+        `${API_INVOICES}/download-zip?ids=${ids.join(",")}`,
+      );
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to download ZIP archive.");
+      }
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute(
+        "download",
+        `Invoices_Archive_${new Date().toISOString().slice(0, 10)}.zip`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      showToast(`Downloaded ZIP archive for ${ids.length} invoice(s).`, "success");
+    } catch (err) {
+      if (err.message !== "Unauthorized") {
+        showToast(err.message || "Error downloading ZIP file.", "error");
+      }
+    }
   };
 
   const handlePreviewDummyInvoice = () => {
@@ -818,6 +875,7 @@ export default function App() {
       ) : (
         <InvoiceTable
           invoices={invoices}
+          clients={clients}
           onEdit={(inv) =>
             navigate(`/invoices/${inv._id}/edit`, { state: { invoice: inv } })
           }
@@ -827,7 +885,9 @@ export default function App() {
           onDownloadPdf={handleDownloadPdf}
           processingIds={processingInvoiceIds}
           onDeleteSelected={handleInvoiceBulkDelete}
+          onDownloadSelectedZip={handleDownloadSelectedZip}
         />
+
       )}
     </div>
   );
@@ -901,9 +961,35 @@ export default function App() {
           <Route path="settings/profile" element={<InvoiceConfigPage />} />
           <Route
             path="settings/services"
-            element={<ServiceSettingsPage token={token} />}
+            element={
+              <ServiceSettingsPage
+                token={token}
+                showToast={showToast}
+                onRestoreSuccess={() => {
+                  fetchClients();
+                  fetchInvoices();
+                  fetchCompanyConfig();
+                }}
+              />
+            }
+          />
+          <Route
+            path="settings/backup"
+            element={
+              <DataBackupPage
+                token={token}
+                showToast={showToast}
+                onRestoreSuccess={() => {
+                  fetchClients();
+                  fetchInvoices();
+                  fetchCompanyConfig();
+                }}
+              />
+            }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
+
+
         </Route>
       </Routes>
 

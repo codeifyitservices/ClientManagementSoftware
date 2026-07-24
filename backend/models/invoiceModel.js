@@ -114,7 +114,12 @@ const invoiceSchema = new mongoose.Schema(
 
 // Pre-save hook to calculate taxes dynamically by summing all line items
 invoiceSchema.pre("save", function () {
+  if (this.isModified("paymentStatus") && this.paymentStatus === "Paid") {
+    this.invoiceDate = new Date();
+  }
+
   if (this.items && this.items.length > 0) {
+
     let baseSum = 0;
     let gstSum = 0;
     const descriptions = [];

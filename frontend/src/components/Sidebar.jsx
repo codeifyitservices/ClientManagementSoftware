@@ -6,6 +6,7 @@ import {
   Receipt,
   Settings,
   Sliders,
+  Database,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -21,7 +22,9 @@ export default function Sidebar({
   const settingItems = [
     { to: "/settings/profile", name: "Company Profile", icon: Settings },
     { to: "/settings/services", name: "Service Settings", icon: Sliders },
+    { to: "/settings/backup", name: "Data Backup", icon: Database },
   ];
+
 
   const linkClass = ({ isActive }) =>
     `w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${

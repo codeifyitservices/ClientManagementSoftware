@@ -9,6 +9,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  FileArchive,
+  X,
+  Calendar,
+  Filter,
+  User,
 } from "lucide-react";
 
 const ROWS_PER_PAGE = 10;
@@ -21,16 +26,21 @@ const STATUS_TABS = [
 
 export default function InvoiceTable({
   invoices = [],
+  clients = [],
   onEdit,
   onDelete,
   onMarkAsPaid,
   onResendEmail,
   onDownloadPdf,
   onDeleteSelected,
+  onDownloadSelectedZip,
   processingIds = {},
 }) {
-  // ── Filter ──────────────────────────────────────────────────────────────────
+  // ── Filters ─────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("all");
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   // ── Pagination ───────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
@@ -38,19 +48,64 @@ export default function InvoiceTable({
   // ── Multi-select ─────────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set());
 
-  // Reset to page 1 and clear selection whenever the filter changes
+  // Reset to page 1 and clear selection whenever any filter changes
   useEffect(() => {
     setCurrentPage(1);
     setSelectedIds(new Set());
-  }, [activeTab]);
+  }, [activeTab, selectedClientId, startDate, endDate]);
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  // Derive unique client options list (either from passed clients prop or from invoices)
+  const clientOptions = useMemo(() => {
+    if (clients && clients.length > 0) return clients;
+    const map = new Map();
+    invoices.forEach((inv) => {
+      if (inv.client && typeof inv.client === "object" && inv.client._id) {
+        map.set(inv.client._id, inv.client);
+      }
+    });
+    return Array.from(map.values());
+  }, [clients, invoices]);
+
+  // ── Derived filtered data ───────────────────────────────────────────────────
   const filteredInvoices = useMemo(() => {
-    if (activeTab === "all") return invoices;
-    return invoices.filter(
-      (inv) => inv.paymentStatus?.toLowerCase() === activeTab
-    );
-  }, [invoices, activeTab]);
+    return invoices.filter((inv) => {
+      // 1. Status filter
+      if (activeTab !== "all") {
+        const status = inv.paymentStatus?.toLowerCase() || "pending";
+        if (activeTab === "pending" && status !== "pending" && status !== "unpaid") return false;
+        if (activeTab === "paid" && status !== "paid") return false;
+      }
+
+      // 2. Client filter
+      if (selectedClientId) {
+        const invClientId = typeof inv.client === "object" ? inv.client?._id?.toString() : inv.client?.toString();
+        if (invClientId !== selectedClientId) return false;
+      }
+
+      // 3. Date range filter
+      if (startDate || endDate) {
+        const invDateRaw = inv.invoiceDate || inv.createdAt;
+        if (!invDateRaw) return false;
+
+        let invDateFormatted = "";
+        try {
+          const d = new Date(invDateRaw);
+          if (!isNaN(d.getTime())) {
+            invDateFormatted = d.toISOString().split("T")[0];
+          }
+        } catch {
+          return false;
+        }
+
+        if (!invDateFormatted) return false;
+        if (startDate && invDateFormatted < startDate) return false;
+        if (endDate && invDateFormatted > endDate) return false;
+      }
+
+      return true;
+    });
+  }, [invoices, activeTab, selectedClientId, startDate, endDate]);
+
 
   const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / ROWS_PER_PAGE));
 
@@ -117,27 +172,108 @@ export default function InvoiceTable({
     );
   };
 
-  // Total columns: checkbox + 7 data cols + actions = 9
-  const TOTAL_COLS = 9;
+  const isFilterActive = !!(selectedClientId || startDate || endDate);
+  const TOTAL_COLS = 8;
+
 
   return (
     <div className="font-sans flex flex-col gap-4 pb-24">
-      {/* ── Filter Tabs ───────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setActiveTab(tab.value)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 cursor-pointer ${
-              activeTab === tab.value
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* ── Filter Controls Toolbar ────────────────────────────────────────── */}
+      <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        {/* Status Tabs */}
+        <div className="flex items-center gap-1.5 bg-gray-100/80 p-1 rounded-xl w-fit">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                activeTab === tab.value
+                  ? "bg-white text-indigo-600 shadow-sm font-bold"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Date & Client Filters */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Client Select */}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs">
+            <User size={14} className="text-gray-400 shrink-0" />
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className="bg-transparent font-medium text-gray-700 focus:outline-none cursor-pointer pr-2 max-w-[180px] truncate"
+            >
+              <option value="">All Clients</option>
+              {clientOptions.map((client) => (
+                <option key={client._id} value={client._id}>
+                  {client.companyName ? `${client.companyName} (${client.clientName})` : client.clientName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* From Date */}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs">
+            <Calendar size={14} className="text-gray-400 shrink-0" />
+            <span className="text-gray-400 font-medium select-none">From:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-transparent font-medium text-gray-700 focus:outline-none cursor-pointer"
+            />
+          </div>
+
+          {/* To Date */}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs">
+            <Calendar size={14} className="text-gray-400 shrink-0" />
+            <span className="text-gray-400 font-medium select-none">To:</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-transparent font-medium text-gray-700 focus:outline-none cursor-pointer"
+            />
+          </div>
+
+          {/* Reset Filters */}
+          {isFilterActive && (
+            <button
+              onClick={() => {
+                setSelectedClientId("");
+                setStartDate("");
+                setEndDate("");
+              }}
+              className="inline-flex items-center gap-1 text-xs text-rose-600 font-semibold hover:bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl cursor-pointer transition-colors"
+            >
+              <X size={13} />
+              Reset Filters
+            </button>
+          )}
+
+          {/* Selection indicator & ZIP action */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2 ml-auto animate-fade-in">
+              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg">
+                {selectedIds.size} selected
+              </span>
+              <button
+                onClick={() => onDownloadSelectedZip?.(Array.from(selectedIds))}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm transition-colors cursor-pointer"
+                title="Download selected invoices as ZIP archive"
+              >
+                <FileArchive size={14} />
+                Download ZIP
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
 
       {/* ── Table ─────────────────────────────────────────────────────────── */}
       <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
@@ -370,27 +506,37 @@ export default function InvoiceTable({
         </div>
       </div>
 
-      {/* ── Sticky Delete Bar ─────────────────────────────────────────────── */}
+      {/* ── Sticky Multi-Select Action Bar ─────────────────────────────────────────────── */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-red-600 text-white shadow-2xl">
-          <span className="text-sm font-medium">
-            {selectedIds.size} invoice{selectedIds.size > 1 ? "s" : ""} selected
-          </span>
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-slate-900 text-white shadow-2xl border-t border-slate-800 animate-fade-in">
           <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold">
+              {selectedIds.size} invoice{selectedIds.size > 1 ? "s" : ""} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setSelectedIds(new Set())}
-              className="px-4 py-1.5 rounded-lg border border-red-400 text-sm hover:bg-red-500 transition-colors"
+              className="px-3.5 py-1.5 rounded-lg border border-slate-700 text-slate-300 text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
             >
               Cancel
+            </button>
+            <button
+              onClick={() => onDownloadSelectedZip?.(Array.from(selectedIds))}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-sm cursor-pointer"
+              title="Download selected invoices as ZIP archive"
+            >
+              <FileArchive size={14} />
+              Download ZIP ({selectedIds.size})
             </button>
             <button
               onClick={() => {
                 onDeleteSelected?.(Array.from(selectedIds));
                 setSelectedIds(new Set());
               }}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-white text-red-600 font-semibold text-sm hover:bg-red-50 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-xs transition-colors shadow-sm cursor-pointer"
             >
-              <Trash2 size={15} />
+              <Trash2 size={14} />
               Delete Selected ({selectedIds.size})
             </button>
           </div>
@@ -399,3 +545,5 @@ export default function InvoiceTable({
     </div>
   );
 }
+
+

@@ -12,7 +12,11 @@ import {
   FileText,
 } from "lucide-react";
 
-export default function ServiceSettingsPage({ token }) {
+import DataBackupSection from "./DataBackupSection";
+
+export default function ServiceSettingsPage({ token, showToast, onRestoreSuccess }) {
+
+
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -262,6 +266,18 @@ export default function ServiceSettingsPage({ token }) {
           </div>
         )}
       </div>
+
+      {/* Data Backup & Export Section */}
+      <DataBackupSection
+        token={token}
+        showToast={showToast}
+        onRestoreSuccess={() => {
+          fetchServices();
+          if (onRestoreSuccess) onRestoreSuccess();
+        }}
+      />
+
+
 
       {/* Service Modal - Rendered via Portal to ensure full screen coverage */}
       {isModalOpen &&

@@ -1,9 +1,12 @@
 import express from "express";
-import mongoose from "mongoose";
 import Invoice from "../models/invoiceModel.js";
 import Client from "../models/clientModel.js";
 import Config from "../models/configModel.js";
-import { generateInvoicePDF } from "../services/pdfService.js";
+import {
+  generateInvoicePDF,
+  generateCombinedInvoicesPDF,
+  generateInvoicesZIP,
+} from "../services/pdfService.js";
 import { sendInvoiceEmail } from "../services/emailService.js";
 
 const router = express.Router();
@@ -19,29 +22,43 @@ const getActiveConfig = async () => {
 };
 
 const getNextInvoiceNumber = async () => {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const latestNumericInvoice = await Invoice.findOne({
-      invoiceNumber: /^INV-\d+$/,
-    }).sort({ invoiceNumber: -1 });
+  const now = new Date();
+  const yy = now.getFullYear().toString().slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const prefix = `CN${yy}${mm}`;
 
-    let count = 0;
-    if (latestNumericInvoice?.invoiceNumber) {
-      const lastNum = parseInt(latestNumericInvoice.invoiceNumber.split("-")[1], 10);
-      if (!isNaN(lastNum)) count = lastNum;
+  const regex = new RegExp(`^${prefix}(\\d{4})$`);
+  const matchingInvoices = await Invoice.find({ invoiceNumber: regex })
+    .select("invoiceNumber")
+    .lean();
+
+  let maxSerial = 9; // Starting serial will be 10 ("0010")
+
+  matchingInvoices.forEach((inv) => {
+    const match = inv.invoiceNumber?.match(regex);
+    if (match && match[1]) {
+      const serialNum = parseInt(match[1], 10);
+      if (!isNaN(serialNum) && serialNum > maxSerial) {
+        maxSerial = serialNum;
+      }
     }
+  });
 
-    const candidate = `INV-${String(count + attempt + 1).padStart(4, "0")}`;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const nextSerial = maxSerial + 1 + attempt;
+    const candidate = `${prefix}${String(nextSerial).padStart(4, "0")}`;
     const existing = await Invoice.exists({ invoiceNumber: candidate });
     if (!existing) return candidate;
   }
 
-  return `INV-${Date.now()}`;
+  return `${prefix}${Date.now().toString().slice(-4)}`;
 };
+
 
 // 1. GET /api/invoices - Fetch invoices (populated with client references)
 router.get("/", async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, clientId, startDate, endDate } = req.query;
     let query = {};
 
     if (search) {
@@ -56,13 +73,25 @@ router.get("/", async (req, res) => {
 
       const clientIds = matchedClients.map((c) => c._id);
 
-      query = {
-        $or: [
-          { invoiceNumber: searchRegex },
-          { serviceDescription: searchRegex },
-          { client: { $in: clientIds } },
-        ],
-      };
+      query.$or = [
+        { invoiceNumber: searchRegex },
+        { serviceDescription: searchRegex },
+        { client: { $in: clientIds } },
+      ];
+    }
+
+    if (clientId) {
+      query.client = clientId;
+    }
+
+    if (startDate || endDate) {
+      query.invoiceDate = {};
+      if (startDate) query.invoiceDate.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.invoiceDate.$lte = end;
+      }
     }
 
     const invoices = await Invoice.find(query)
@@ -75,7 +104,68 @@ router.get("/", async (req, res) => {
   }
 });
 
-// 2. POST /api/invoices - Create a GST invoice
+
+// 2. GET /api/invoices/download-zip - Bulk download selected invoices as ZIP (MUST BE BEFORE /:id)
+router.get("/download-zip", async (req, res) => {
+  try {
+    const { ids } = req.query;
+    if (!ids) {
+      return res.status(400).json({ message: "No invoice IDs provided." });
+    }
+
+    const idArray = String(ids).split(",").map((id) => id.trim()).filter(Boolean);
+    if (idArray.length === 0) {
+      return res.status(400).json({ message: "Invalid invoice IDs provided." });
+    }
+
+    const invoices = await Invoice.find({ _id: { $in: idArray } }).populate("client");
+    if (!invoices || invoices.length === 0) {
+      return res.status(404).json({ message: "No matching invoices found." });
+    }
+
+    const config = await getActiveConfig();
+    const zipBuffer = await generateInvoicesZIP(invoices, config);
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename=Invoices_Archive_${Date.now()}.zip`);
+    res.send(zipBuffer);
+  } catch (error) {
+    console.error("ZIP generation error:", error);
+    res.status(500).json({ message: "Error generating ZIP download", error: error.message });
+  }
+});
+
+// 3. GET /api/invoices/download-combined-pdf - Bulk download selected invoices as single combined PDF (MUST BE BEFORE /:id)
+router.get("/download-combined-pdf", async (req, res) => {
+  try {
+    const { ids } = req.query;
+    if (!ids) {
+      return res.status(400).json({ message: "No invoice IDs provided." });
+    }
+
+    const idArray = String(ids).split(",").map((id) => id.trim()).filter(Boolean);
+    if (idArray.length === 0) {
+      return res.status(400).json({ message: "Invalid invoice IDs provided." });
+    }
+
+    const invoices = await Invoice.find({ _id: { $in: idArray } }).populate("client");
+    if (!invoices || invoices.length === 0) {
+      return res.status(404).json({ message: "No matching invoices found." });
+    }
+
+    const config = await getActiveConfig();
+    const pdfBuffer = await generateCombinedInvoicesPDF(invoices, config);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=Invoices_Combined_${Date.now()}.pdf`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Combined PDF generation error:", error);
+    res.status(500).json({ message: "Error generating combined PDF download", error: error.message });
+  }
+});
+
+// 4. POST /api/invoices - Create a GST invoice
 router.post("/", async (req, res) => {
   try {
     const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus } = req.body;
@@ -107,7 +197,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// 3. PUT /api/invoices/:id - Edit an invoice
+// 5. PUT /api/invoices/:id - Edit an invoice
 router.put("/:id", async (req, res) => {
   try {
     const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus } = req.body;
@@ -118,7 +208,11 @@ router.put("/:id", async (req, res) => {
     }
 
     invoice.client = client ?? invoice.client;
-    invoice.invoiceDate = invoiceDate ?? invoice.invoiceDate;
+    if (paymentStatus === "Paid" && invoice.paymentStatus !== "Paid") {
+      invoice.invoiceDate = new Date();
+    } else if (invoiceDate) {
+      invoice.invoiceDate = invoiceDate;
+    }
     invoice.dueDate = dueDate ?? invoice.dueDate;
     invoice.invoiceType = invoiceType ?? invoice.invoiceType;
     invoice.currency = currency ?? invoice.currency;
@@ -135,7 +229,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// 4. DELETE /api/invoices/:id - Delete an invoice
+// 6. DELETE /api/invoices/:id - Delete an invoice
 router.delete("/:id", async (req, res) => {
   try {
     const invoice = await Invoice.findByIdAndDelete(req.params.id);
@@ -148,7 +242,7 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// 5. POST /api/invoices/:id/mark-paid - Mark as Paid
+// 7. POST /api/invoices/:id/mark-paid - Mark as Paid
 router.post("/:id/mark-paid", async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id).populate("client");
@@ -157,18 +251,20 @@ router.post("/:id/mark-paid", async (req, res) => {
     }
 
     invoice.paymentStatus = "Paid";
+    invoice.invoiceDate = new Date();
     await invoice.save();
 
     res.json({
       success: true,
       invoice,
     });
+
   } catch (error) {
     res.status(500).json({ message: "Error marking invoice as paid", error: error.message });
   }
 });
 
-// 6. POST /api/invoices/:id/resend-email - Send invoice PDF email manually
+// 8. POST /api/invoices/:id/resend-email - Send invoice PDF email manually
 router.post("/:id/resend-email", async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id).populate("client");
@@ -203,7 +299,7 @@ router.post("/:id/resend-email", async (req, res) => {
   }
 });
 
-// 7. GET /api/invoices/:id/download-pdf - Stream PDF to browser
+// 9. GET /api/invoices/:id/download-pdf - Stream single PDF to browser
 router.get("/:id/download-pdf", async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id).populate("client");

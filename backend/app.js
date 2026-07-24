@@ -6,6 +6,7 @@ import clientRoutes from "./routes/clientRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
 import serviceRoutes from "./routes/serviceRoutes.js";
+import backupRoutes from "./routes/backupRoutes.js";
 import protect from "./middleware/authMiddleware.js";
 import Service from "./models/serviceModel.js";
 import fs from "fs";
@@ -30,6 +31,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/clients", protect, clientRoutes);
 app.use("/api/invoices", protect, invoiceRoutes);
 app.use("/api/services", protect, serviceRoutes);
+app.use("/api/backup", protect, backupRoutes);
+
 
 app.use("/health", (req, res) => {
   res.status(200).json({
