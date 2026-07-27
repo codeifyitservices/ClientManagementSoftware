@@ -7,7 +7,9 @@ import authRoutes from "./routes/authRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
 import serviceRoutes from "./routes/serviceRoutes.js";
 import backupRoutes from "./routes/backupRoutes.js";
+import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 import protect from "./middleware/authMiddleware.js";
+import { startSubscriptionScheduler } from "./services/subscriptionScheduler.js";
 import Service from "./models/serviceModel.js";
 import fs from "fs";
 import path from "path";
@@ -16,6 +18,7 @@ const app = express();
 const PORT = 5000;
 
 connectMongo();
+startSubscriptionScheduler();
 
 // Ensure uploads directory exists on boot
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -32,7 +35,7 @@ app.use("/api/clients", protect, clientRoutes);
 app.use("/api/invoices", protect, invoiceRoutes);
 app.use("/api/services", protect, serviceRoutes);
 app.use("/api/backup", protect, backupRoutes);
-
+app.use("/api/subscriptions", protect, subscriptionRoutes);
 
 app.use("/health", (req, res) => {
   res.status(200).json({

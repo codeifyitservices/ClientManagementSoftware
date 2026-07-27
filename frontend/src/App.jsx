@@ -7,7 +7,7 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import { Plus, X, ChevronDown, Eye, Search } from "lucide-react";
+import { Plus, X, ChevronDown, Eye, Search, Bell, Check } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import DashboardStats from "./components/DashboardStats";
 import DashboardView from "./components/DashboardView";
@@ -22,8 +22,8 @@ import InvoiceConfigPage from "./components/InvoiceConfigPage";
 import ServiceSettingsPage from "./components/ServiceSettingsPage";
 import DataBackupPage from "./components/DataBackupPage";
 import LoginPage from "./components/LoginPage";
-
 import PasswordModal from "./components/PasswordModal";
+import SubscriptionsPage from "./components/SubscriptionsPage";
 
 const API_CLIENTS = `${import.meta.env.VITE_BACKEND_URL}/api/clients`;
 const API_INVOICES = `${import.meta.env.VITE_BACKEND_URL}/api/invoices`;
@@ -124,18 +124,25 @@ function AppShell({
   onChangePassword,
   fetchClients,
   fetchInvoices,
+  activeAlerts = [],
+  onDismissAlert,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotificationMenu, setShowNotificationMenu] = useState(false);
   const userMenuRef = useRef(null);
+  const notificationMenuRef = useRef(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handler = (e) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
         setShowUserMenu(false);
+      }
+      if (notificationMenuRef.current && !notificationMenuRef.current.contains(e.target)) {
+        setShowNotificationMenu(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -159,6 +166,10 @@ function AppShell({
     "/invoices/preview": {
       title: "Invoice Preview",
       sub: "Inspect your tax document formatting, items, and tax rates",
+    },
+    "/subscriptions": {
+      title: "Subscriptions Ledger",
+      sub: "Configure and track client hosting and maintenance contracts",
     },
     "/settings/profile": {
       title: "Company Settings",
@@ -226,6 +237,65 @@ function AppShell({
                 <span>Create Invoice</span>
               </button>
             )}
+
+            {/* Notification Bell */}
+            <div className="relative" ref={notificationMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowNotificationMenu((v) => !v)}
+                className="relative p-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer select-none flex items-center justify-center"
+              >
+                <Bell className="h-4 w-4" />
+                {activeAlerts.length > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[8px] font-black flex items-center justify-center animate-bounce">
+                    {activeAlerts.length}
+                  </span>
+                )}
+              </button>
+
+              {showNotificationMenu && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-100 rounded-2xl shadow-xl py-2.5 z-50 animate-fade-in text-xs font-semibold text-slate-750">
+                  <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-slate-800">
+                      Subscription Alerts
+                    </p>
+                    {activeAlerts.length > 0 && (
+                      <span className="text-[9px] bg-rose-50 text-rose-600 font-bold px-1.5 py-0.5 rounded">
+                        {activeAlerts.length} Pending
+                      </span>
+                    )}
+                  </div>
+                  <div className="max-h-64 overflow-y-auto divide-y divide-slate-50 mt-1">
+                    {activeAlerts.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-[10px] text-slate-400 font-semibold">
+                        No pending expiration warnings 🎉
+                      </div>
+                    ) : (
+                      activeAlerts.map((alert) => (
+                        <div key={`${alert.subscriptionId}-${alert.alertType}`} className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-slate-50/50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-slate-900 leading-tight truncate">
+                              {alert.client?.companyName}
+                            </p>
+                            <p className="text-[9px] text-slate-450 mt-0.5 leading-relaxed">
+                              {alert.type.charAt(0).toUpperCase() + alert.type.slice(1)} subscription expires on {new Date(alert.endDate).toLocaleDateString("en-IN")} ({alert.alertType === "15days" ? "15 days left" : "1 month left"})
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onDismissAlert(alert)}
+                            className="p-1 rounded-md bg-slate-50 hover:bg-emerald-50 text-slate-450 hover:text-emerald-650 border border-slate-100 transition-colors cursor-pointer shrink-0"
+                            title="Dismiss Alert"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* User dropdown — company brand badge */}
             <div className="relative" ref={userMenuRef}>
@@ -334,6 +404,7 @@ export default function App() {
 
   const [clients, setClients] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [activeAlerts, setActiveAlerts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingClients, setLoadingClients] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
@@ -361,8 +432,22 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const showToast = (message, type = "success") => {
     const id = Date.now();
-    setToasts((p) => [...p, { id, message, type }]);
-    setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 4500);
+    let shouldScheduleTimeout = false;
+
+    setToasts((prevToasts) => {
+      const exists = prevToasts.some((t) => t.message === message);
+      if (exists) {
+        return prevToasts;
+      }
+      shouldScheduleTimeout = true;
+      return [...prevToasts, { id, message, type }];
+    });
+
+    if (shouldScheduleTimeout) {
+      setTimeout(() => {
+        setToasts((p) => p.filter((t) => t.id !== id));
+      }, 4500);
+    }
   };
   const removeToast = (id) => setToasts((p) => p.filter((t) => t.id !== id));
 
@@ -442,18 +527,57 @@ export default function App() {
     }
   };
 
+  const fetchActiveAlerts = async () => {
+    if (!token) return;
+    try {
+      const res = await authenticatedFetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/subscriptions/alerts`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setActiveAlerts(data || []);
+      }
+    } catch (err) {}
+  };
+
+  const handleDismissAlert = async (alert) => {
+    try {
+      const res = await authenticatedFetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/subscriptions/${alert.subscriptionId}/dismiss-alert`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ alertType: alert.alertType })
+        }
+      );
+      if (res.ok) {
+        showToast("Alert dismissed in app.", "success");
+        fetchActiveAlerts();
+      }
+    } catch (err) {
+      showToast("Failed to dismiss alert.", "error");
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchCompanyConfig();
       fetchClients();
       fetchInvoices();
+      fetchActiveAlerts();
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
     window.addEventListener("companyConfigUpdated", fetchCompanyConfig);
-    return () =>
+    const handleAlertsUpdate = () => {
+      fetchActiveAlerts();
+    };
+    window.addEventListener("subscriptionAlertsUpdated", handleAlertsUpdate);
+    return () => {
       window.removeEventListener("companyConfigUpdated", fetchCompanyConfig);
+      window.removeEventListener("subscriptionAlertsUpdated", handleAlertsUpdate);
+    };
   }, [token]);
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -720,6 +844,8 @@ export default function App() {
     onChangePassword: () => setIsPasswordModalOpen(true),
     fetchClients,
     fetchInvoices,
+    activeAlerts,
+    onDismissAlert: handleDismissAlert,
   };
 
   // ─── Views ────────────────────────────────────────────────────────────────
@@ -744,6 +870,8 @@ export default function App() {
           setIsClientFormOpen(true);
         }}
         processingInvoiceIds={processingInvoiceIds}
+        onNavigate={(path) => navigate(`/${path}`)}
+        activeAlerts={activeAlerts}
       />
     </div>
   );
@@ -975,6 +1103,17 @@ export default function App() {
                   fetchInvoices();
                   fetchCompanyConfig();
                 }}
+              />
+            }
+          />
+          <Route
+            path="subscriptions"
+            element={
+              <SubscriptionsPage
+                token={token}
+                clients={clients}
+                showToast={showToast}
+                authenticatedFetch={authenticatedFetch}
               />
             }
           />

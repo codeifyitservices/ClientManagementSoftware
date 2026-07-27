@@ -24,6 +24,7 @@ export default function DashboardView({
   onCreateInvoice,
   onAddClient,
   processingInvoiceIds = {},
+  activeAlerts = [],
 }) {
   // Sort and limit invoices to top 5 recent
   const recentInvoices = [...invoices]
@@ -135,6 +136,35 @@ export default function DashboardView({
       {/* LEFT SECTION (8 columns width) */}
       <div className="lg:col-span-8 space-y-6">
         
+        {/* Approaching Subscription Expirations Alert */}
+        {activeAlerts.length > 0 && (
+          <div className="bg-rose-50/70 border border-rose-100 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center gap-2 text-rose-800 font-bold text-xs select-none">
+              <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping shrink-0" />
+              <span>Approaching Subscription Renewals ({activeAlerts.length})</span>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {activeAlerts.map((alert) => (
+                <div 
+                  key={`${alert.subscriptionId}-${alert.alertType}`}
+                  className="bg-white border border-rose-100/60 rounded-xl p-3 flex items-center justify-between text-xs"
+                >
+                  <div className="min-w-0 flex-1 pr-4">
+                    <span className="font-extrabold text-slate-900 truncate block sm:inline">{alert.client?.companyName}</span>
+                    <span className="text-slate-450 font-medium"> &bull; {alert.type.charAt(0).toUpperCase() + alert.type.slice(1)} expires on {new Date(alert.endDate).toLocaleDateString("en-IN")}</span>
+                  </div>
+                  <button
+                    onClick={() => onNavigate("subscriptions")}
+                    className="text-[10px] font-bold text-[#5D5FEF] hover:underline cursor-pointer shrink-0"
+                  >
+                    Manage &rarr;
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Recent Invoices Card */}
         <div className="bg-white border border-slate-100 rounded-2xl p-6 custom-shadow h-[340px] flex flex-col justify-between">
           <div className="flex items-center justify-between pb-3 border-b border-slate-55">
