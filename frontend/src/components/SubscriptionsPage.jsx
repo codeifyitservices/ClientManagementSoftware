@@ -334,10 +334,11 @@ export default function SubscriptionsPage({
     });
   };
 
+  const activeClient = clients.find((c) => c._id === clientId) || {};
+
   const getCalculatedFinalAmount = () => {
     const amt = Number(amount);
     if (isNaN(amt) || amt <= 0) return 0;
-    const activeClient = clients.find((c) => c._id === clientId) || {};
     if (activeClient.isForeign) return amt;
     if (inclusiveGst) return amt;
     return Math.round(amt * 1.18 * 100) / 100;
