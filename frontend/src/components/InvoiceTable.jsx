@@ -178,7 +178,7 @@ export default function InvoiceTable({
   };
 
   const isFilterActive = !!(selectedClientId || startDate || endDate);
-  const TOTAL_COLS = 8;
+  const TOTAL_COLS = 9;
 
 
   return (
@@ -311,6 +311,9 @@ export default function InvoiceTable({
                 GST Rate
               </th>
               <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+                GST Amount
+              </th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
                 Grand Total
               </th>
               <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
@@ -384,6 +387,15 @@ export default function InvoiceTable({
                     {/* GST Rate */}
                     <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
                       {invoice.gstRate != null ? `${invoice.gstRate}%` : "—"}
+                    </td>
+
+                    {/* GST Amount */}
+                    <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap font-medium">
+                      {invoice.gstAmount != null
+                        ? `₹${Number(invoice.gstAmount).toLocaleString("en-IN", {
+                            minimumFractionDigits: 2,
+                          })}`
+                        : "—"}
                     </td>
 
                     {/* Grand Total */}
