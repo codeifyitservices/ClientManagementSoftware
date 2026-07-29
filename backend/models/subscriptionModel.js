@@ -66,7 +66,7 @@ const subscriptionSchema = new mongoose.Schema(
   }
 );
 
-subscriptionSchema.pre("validate", function () {
+subscriptionSchema.pre("validate", async function () {
   if (this.startDate && this.durationValue && this.durationUnit) {
     const end = new Date(this.startDate);
     const val = Number(this.durationValue);
@@ -90,7 +90,23 @@ subscriptionSchema.pre("validate", function () {
   }
 
   if (this.amount !== undefined) {
-    if (this.inclusiveGst) {
+    // Check if the client is foreign
+    let isForeign = false;
+    if (this.client) {
+      try {
+        const Client = mongoose.model("Client");
+        const clientObj = await Client.findById(this.client);
+        if (clientObj && clientObj.isForeign) {
+          isForeign = true;
+        }
+      } catch (err) {
+        console.error("Error looking up client in subscription pre-validate:", err);
+      }
+    }
+
+    if (isForeign) {
+      this.finalAmount = this.amount; // No GST for foreign clients
+    } else if (this.inclusiveGst) {
       this.finalAmount = this.amount;
     } else {
       this.finalAmount = Math.round(this.amount * 1.18 * 100) / 100;

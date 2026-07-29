@@ -223,7 +223,7 @@ router.get("/", async (req, res) => {
 // 4. POST /api/clients - Create a client profile
 router.post("/", async (req, res) => {
   try {
-    const { companyName, clientName, email, phone, gstRegistered, gstNumber, address, city, pincode, website, industry, notes } = req.body;
+    const { companyName, clientName, email, phone, gstRegistered, gstNumber, address, city, pincode, website, industry, notes, isForeign } = req.body;
 
     if (!companyName || !clientName) {
       return res.status(400).json({ message: "Please provide Company Name and Client Name." });
@@ -242,6 +242,7 @@ router.post("/", async (req, res) => {
       website,
       industry,
       notes,
+      isForeign: isForeign === true,
     });
 
     const savedClient = await newClient.save();
@@ -254,7 +255,7 @@ router.post("/", async (req, res) => {
 // 5. PUT /api/clients/:id - Edit client profile
 router.put("/:id", async (req, res) => {
   try {
-    const { companyName, clientName, email, phone, gstRegistered, gstNumber, address, city, pincode, website, industry, notes } = req.body;
+    const { companyName, clientName, email, phone, gstRegistered, gstNumber, address, city, pincode, website, industry, notes, isForeign } = req.body;
     
     const client = await Client.findById(req.params.id);
     if (!client) {
@@ -273,6 +274,7 @@ router.put("/:id", async (req, res) => {
     client.website = website ?? client.website;
     client.industry = industry ?? client.industry;
     client.notes = notes ?? client.notes;
+    client.isForeign = isForeign !== undefined ? isForeign : client.isForeign;
 
     const updatedClient = await client.save();
     res.json(updatedClient);

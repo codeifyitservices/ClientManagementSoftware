@@ -108,6 +108,7 @@ export default function SubscriptionsPage({
     }
 
     setIsSaving(true);
+    const activeClient = clients.find((c) => c._id === clientId) || {};
     const subData = {
       client: clientId,
       type,
@@ -115,7 +116,7 @@ export default function SubscriptionsPage({
       durationValue: Number(durationValue),
       durationUnit,
       amount: Number(amount),
-      inclusiveGst
+      inclusiveGst: activeClient.isForeign ? false : inclusiveGst
     };
 
     try {
@@ -336,6 +337,8 @@ export default function SubscriptionsPage({
   const getCalculatedFinalAmount = () => {
     const amt = Number(amount);
     if (isNaN(amt) || amt <= 0) return 0;
+    const activeClient = clients.find((c) => c._id === clientId) || {};
+    if (activeClient.isForeign) return amt;
     if (inclusiveGst) return amt;
     return Math.round(amt * 1.18 * 100) / 100;
   };
@@ -602,14 +605,15 @@ export default function SubscriptionsPage({
                 <input
                   type="checkbox"
                   id="inclusiveGst"
-                  checked={inclusiveGst}
+                  checked={activeClient.isForeign ? false : inclusiveGst}
+                  disabled={activeClient.isForeign}
                   onChange={(e) => setInclusiveGst(e.target.checked)}
-                  className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                  className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
                 />
-                <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                <label htmlFor="inclusiveGst" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
                   <span>Inclusive GST (18%)</span>
                   <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
-                    If unchecked, 18% tax will automatically be added to obtain the final billing amount.
+                    {activeClient.isForeign ? "Disabled - no GST applied for Foreign Client." : "If unchecked, 18% tax will automatically be added to obtain the final billing amount."}
                   </span>
                 </label>
               </div>

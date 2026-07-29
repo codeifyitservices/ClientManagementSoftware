@@ -181,7 +181,8 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
 
   items.forEach((item, idx) => {
     const lineBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
-    const lineGst = lineBase * ((item.gstRate || 18) / 100);
+    const effectiveGstRate = client.isForeign ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
+    const lineGst = lineBase * (effectiveGstRate / 100);
     subTotal += lineBase;
     totalGst += lineGst;
 
@@ -243,7 +244,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   const companyStateCode = companyGst ? companyGst.slice(0, 2) : "06";
   const clientStateCode = detectStateCode(client);
   const isInterstate = !!(clientStateCode && companyStateCode !== clientStateCode);
-  const primaryRate = items[0]?.gstRate || 18;
+  const primaryRate = client.isForeign ? 0 : (items[0]?.gstRate !== undefined && items[0]?.gstRate !== null ? items[0].gstRate : 18);
 
   doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
     .text("Sub Total:", totalBlockX, currentY, { width: 110, align: "right" });
@@ -251,7 +252,13 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
     .text(`Rs. ${subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
 
   currentY += 16;
-  if (isInterstate) {
+  if (client.isForeign) {
+    doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
+      .text("GST (0%):", totalBlockX, currentY, { width: 110, align: "right" });
+    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
+      .text("Rs. 0.00", 450, currentY, { width: 100, align: "right" });
+    currentY += 16;
+  } else if (isInterstate) {
     doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
       .text(`IGST (${primaryRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });
     doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")

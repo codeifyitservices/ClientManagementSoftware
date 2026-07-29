@@ -14,7 +14,11 @@ export const clientSchema = z.object({
   website: z.string().trim().optional().or(z.literal("")),
   industry: z.string().trim().optional().or(z.literal("")),
   notes: z.string().trim().optional().or(z.literal("")),
+  isForeign: z.boolean().default(false),
 }).refine((data) => {
+  if (data.isForeign) {
+    return true; // No GST needed for foreign clients
+  }
   if (data.gstRegistered) {
     return !!data.gstNumber && data.gstNumber.trim().length === 15;
   }

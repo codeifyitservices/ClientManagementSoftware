@@ -82,6 +82,10 @@ export default function ClientProfileModal({ isOpen, onClose, client, invoices =
               
               <div className="space-y-2.5 text-sm text-slate-700">
                 <div className="flex items-center gap-2.5">
+                  <span className="text-slate-400 font-semibold text-xs w-24">Client Type:</span>
+                  <span className="font-semibold text-slate-900">{client.isForeign ? "Foreign Client (No GST)" : "Domestic Client"}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
                   <span className="text-slate-400 font-semibold text-xs w-24">GSTIN (GST No):</span>
                   <span className="font-mono font-bold text-slate-900">{client.gstNumber || "N/A"}</span>
                 </div>

@@ -114,9 +114,23 @@ const invoiceSchema = new mongoose.Schema(
 );
 
 // Pre-save hook to calculate taxes dynamically by summing all line items
-invoiceSchema.pre("save", function () {
+invoiceSchema.pre("save", async function () {
   if (this.isModified("paymentStatus") && this.paymentStatus === "Paid") {
     this.invoiceDate = new Date();
+  }
+
+  // Check if client is a foreign client
+  let isForeign = false;
+  if (this.client) {
+    try {
+      const Client = mongoose.model("Client");
+      const clientObj = await Client.findById(this.client);
+      if (clientObj && clientObj.isForeign) {
+        isForeign = true;
+      }
+    } catch (err) {
+      console.error("Error looking up client in invoice pre-save hook:", err);
+    }
   }
 
   if (this.items && this.items.length > 0) {
@@ -125,14 +139,18 @@ invoiceSchema.pre("save", function () {
     let gstSum = 0;
     const descriptions = [];
     const sacCodes = [];
-    let avgGstRate = 18;
 
     this.items.forEach((item) => {
       const itemBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
       item.amount = itemBase;
       item.rate = itemBase;
       item.qty = 1;
-      const itemGst = itemBase * ((item.gstRate || 0) / 100);
+      
+      // If client is foreign, force GST rate to 0
+      const effectiveGstRate = isForeign ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
+      item.gstRate = effectiveGstRate;
+      
+      const itemGst = itemBase * (effectiveGstRate / 100);
       baseSum += itemBase;
       gstSum += itemGst;
       
@@ -145,11 +163,12 @@ invoiceSchema.pre("save", function () {
     this.totalAmount = Number((baseSum + gstSum).toFixed(2));
     this.serviceDescription = descriptions.join(", ");
     this.sacCode = sacCodes.length > 0 ? sacCodes[0] : "9983";
-    this.gstRate = this.items.length > 0 ? this.items[0].gstRate : 18; // Default rate reference
+    this.gstRate = this.items.length > 0 ? this.items[0].gstRate : (isForeign ? 0 : 18); // Default rate reference
   } else {
     // Fallback if no items provided
     const baseAmount = Number(this.amount) || 0;
-    const rate = Number(this.gstRate) || 0;
+    const rate = isForeign ? 0 : (Number(this.gstRate) || 0);
+    this.gstRate = rate;
     this.gstAmount = Number((baseAmount * (rate / 100)).toFixed(2));
     this.totalAmount = Number((baseAmount + this.gstAmount).toFixed(2));
   }

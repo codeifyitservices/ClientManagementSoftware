@@ -75,12 +75,14 @@ export default function ClientModal({
       website: "",
       industry: "",
       notes: "",
+      isForeign: false,
     },
   });
 
   // Watch field values for dynamic auto-detection
   const gstRegistered = useWatch({ control, name: "gstRegistered" });
   const gstNumber = useWatch({ control, name: "gstNumber" }) || "";
+  const isForeign = useWatch({ control, name: "isForeign" }) || false;
 
   // Auto detect state name & fetch GST details
   const [detectedState, setDetectedState] = useState("");
@@ -165,6 +167,7 @@ export default function ClientModal({
         website: client.website || "",
         industry: client.industry || "",
         notes: client.notes || "",
+        isForeign: client.isForeign || false,
       });
     } else {
       lastFetchedGstRef.current = "";
@@ -182,6 +185,7 @@ export default function ClientModal({
         website: "",
         industry: "",
         notes: "",
+        isForeign: false,
       });
     }
   }, [client, reset, isOpen]);
@@ -300,8 +304,28 @@ export default function ClientModal({
                 )}
               </div>
 
-              {/* GST Registered? */}
+              {/* Foreign Client Checkbox */}
               <div className="pt-1">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 text-[#5D5FEF] border-slate-350 rounded focus:ring-0 focus:ring-offset-0 accent-[#5D5FEF]"
+                    {...register("isForeign", {
+                      onChange: (e) => {
+                        const checked = e.target.checked;
+                        if (checked) {
+                          setValue("gstRegistered", false);
+                          setValue("gstNumber", "");
+                        }
+                      }
+                    })}
+                  />
+                  <span>Foreign Client (No GST)</span>
+                </label>
+              </div>
+
+              {/* GST Registered? */}
+              <div className={`pt-1 transition-opacity duration-350 ${isForeign ? "opacity-30 pointer-events-none" : ""}`}>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                   GST Registered?
                 </label>
@@ -310,7 +334,8 @@ export default function ClientModal({
                     <input
                       type="radio"
                       value="true"
-                      checked={gstRegistered === true}
+                      disabled={isForeign}
+                      checked={gstRegistered === true && !isForeign}
                       onChange={() => setValue("gstRegistered", true)}
                       className="h-4 w-4 text-[#5D5FEF] focus:ring-0 focus:ring-offset-0 accent-[#5D5FEF]"
                     />
@@ -320,7 +345,8 @@ export default function ClientModal({
                     <input
                       type="radio"
                       value="false"
-                      checked={gstRegistered === false}
+                      disabled={isForeign}
+                      checked={gstRegistered === false || isForeign}
                       onChange={() => {
                         setValue("gstRegistered", false);
                         setValue("gstNumber", "");

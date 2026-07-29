@@ -367,7 +367,8 @@ export default function InvoicePreviewPage({
   items.forEach((item) => {
     const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : ((item.qty || 1) * (item.rate || 0)));
     subTotal += base;
-    totalGstAmount += base * (item.gstRate / 100);
+    const effectiveGstRate = activeClient.isForeign ? 0 : (item.gstRate || 0);
+    totalGstAmount += base * (effectiveGstRate / 100);
   });
   const grandTotal = subTotal + totalGstAmount;
 
@@ -559,7 +560,12 @@ export default function InvoicePreviewPage({
                 {subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </span>
 
-              {isInterstate ? (
+              {activeClient.isForeign ? (
+                <>
+                  <span className="text-slate-600 font-medium">GST (0%)</span>
+                  <span className="text-slate-900 font-bold">₹0.00</span>
+                </>
+              ) : isInterstate ? (
                 <>
                   <span className="text-slate-600 font-medium">
                     IGST ({primaryGstRate}%)

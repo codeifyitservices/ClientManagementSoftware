@@ -294,15 +294,18 @@ export default function InvoiceFormPage({
   items.forEach((item) => {
     const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || 0));
     subTotal += base;
-    totalGstAmount += base * (item.gstRate / 100);
+    const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
+    totalGstAmount += base * (effectiveGstRate / 100);
   });
   const grandTotal = subTotal + totalGstAmount;
 
   // Get active item GST rate for informational text
-  const primaryGstRate = items[0]?.gstRate || 18;
-  const taxTypeText = isInterstate
-    ? `IGST (${primaryGstRate}%)`
-    : `CGST (${primaryGstRate / 2}%) + SGST (${primaryGstRate / 2}%)`;
+  const primaryGstRate = activeClient.isForeign ? 0 : (items[0]?.gstRate || 18);
+  const taxTypeText = activeClient.isForeign 
+    ? "No Tax (Foreign client)"
+    : (isInterstate
+      ? `IGST (${primaryGstRate}%)`
+      : `CGST (${primaryGstRate / 2}%) + SGST (${primaryGstRate / 2}%)`);
 
   const handleFormSubmit = (statusOverride = null, shouldSendEmail = false) => {
     if (!selectedClientId) {
@@ -319,6 +322,10 @@ export default function InvoiceFormPage({
       return;
     }
 
+    const payloadItems = activeClient.isForeign
+      ? items.map(item => ({ ...item, gstRate: 0 }))
+      : items;
+
     const payload = {
       ...(invoice?._id ? { _id: invoice._id } : {}),
       client: selectedClientId,
@@ -327,7 +334,7 @@ export default function InvoiceFormPage({
       invoiceType,
       currency,
       notes,
-      items,
+      items: payloadItems,
       paymentStatus: statusOverride || paymentStatus,
       shouldSendEmail,
     };
@@ -350,6 +357,10 @@ export default function InvoiceFormPage({
       return;
     }
 
+    const payloadItems = activeClient.isForeign
+      ? items.map(item => ({ ...item, gstRate: 0 }))
+      : items;
+
     navigate("/invoices/preview", {
       state: {
         invoiceData: {
@@ -359,7 +370,7 @@ export default function InvoiceFormPage({
           invoiceType,
           currency,
           notes,
-          items,
+          items: payloadItems,
           paymentStatus,
           invoiceNumber: invoice?.invoiceNumber || draftInvoice?.invoiceNumber || nextInvoiceNumber || "",
           _id: invoice?._id || null,
@@ -501,7 +512,8 @@ export default function InvoiceFormPage({
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {items.map((item, index) => {
                   const lineTaxable = Number(item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || 0));
-                  const lineTotal = lineTaxable * (1 + item.gstRate / 100);
+                  const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
+                  const lineTotal = lineTaxable * (1 + effectiveGstRate / 100);
 
                   return (
                     <tr key={index} className="hover:bg-slate-50/20">
@@ -571,11 +583,12 @@ export default function InvoiceFormPage({
                         <input
                           type="number"
                           min="0"
-                          value={item.gstRate}
+                          value={activeClient.isForeign ? 0 : item.gstRate}
+                          disabled={activeClient.isForeign}
                           onChange={(e) =>
                             handleItemChange(index, "gstRate", e.target.value)
                           }
-                          className="w-full px-1.5 py-1.5 rounded-lg border border-slate-200 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full px-1.5 py-1.5 rounded-lg border border-slate-200 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:bg-slate-50"
                         />
                       </td>
                       <td className="py-4 text-right font-black text-slate-900 pr-2 align-bottom pb-6">
@@ -615,18 +628,22 @@ export default function InvoiceFormPage({
           {/* GST Auto Calculations Info Box */}
           <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100/50 text-xs text-indigo-950/80 space-y-1 select-none">
             <h4 className="font-extrabold text-[#5D5FEF]">
-              GST is calculated automatically
+              {activeClient.isForeign ? "No GST applied for Foreign Client" : "GST is calculated automatically"}
             </h4>
-            <p className="font-semibold text-slate-500">
-              Place of Supply:{" "}
-              <span className="text-[#5D5FEF] font-bold">
-                {placeOfSupplyText}
-              </span>
-            </p>
-            <p className="font-semibold text-slate-500">
-              Tax Type:{" "}
-              <span className="text-[#5D5FEF] font-bold">{taxTypeText}</span>
-            </p>
+            {!activeClient.isForeign && (
+              <>
+                <p className="font-semibold text-slate-500">
+                  Place of Supply:{" "}
+                  <span className="text-[#5D5FEF] font-bold">
+                    {placeOfSupplyText}
+                  </span>
+                </p>
+                <p className="font-semibold text-slate-500">
+                  Tax Type:{" "}
+                  <span className="text-[#5D5FEF] font-bold">{taxTypeText}</span>
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>

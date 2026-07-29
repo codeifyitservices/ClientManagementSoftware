@@ -66,6 +66,10 @@ const clientSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    isForeign: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
