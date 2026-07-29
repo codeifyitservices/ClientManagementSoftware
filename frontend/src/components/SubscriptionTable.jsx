@@ -215,7 +215,7 @@ export default function SubscriptionTable({
                       ₹{Number(sub.finalAmount || sub.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </div>
                     <div className="text-[9px] text-gray-400 font-bold mt-0.5 uppercase tracking-wider">
-                      {sub.client?.isForeign ? "No GST" : (sub.inclusiveGst !== false ? "GST Inc" : "+18% GST")}
+                      {sub.client?.isForeign ? "No GST" : sub.isPersonalAccount ? "Personal" : (sub.inclusiveGst !== false ? "GST Inc" : "+18% GST")}
                     </div>
                   </td>
 

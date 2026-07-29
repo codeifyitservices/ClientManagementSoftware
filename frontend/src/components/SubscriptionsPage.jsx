@@ -35,6 +35,7 @@ export default function SubscriptionsPage({
   const [durationUnit, setDurationUnit] = useState("months");
   const [amount, setAmount] = useState("");
   const [inclusiveGst, setInclusiveGst] = useState(true);
+  const [isPersonalAccount, setIsPersonalAccount] = useState(false);
 
   const fetchSubscriptions = async () => {
     try {
@@ -81,6 +82,7 @@ export default function SubscriptionsPage({
     setDurationUnit("months");
     setAmount("");
     setInclusiveGst(true);
+    setIsPersonalAccount(false);
     setIsFormOpen(true);
   };
 
@@ -93,6 +95,7 @@ export default function SubscriptionsPage({
     setDurationUnit(sub.durationUnit);
     setAmount(sub.amount);
     setInclusiveGst(sub.inclusiveGst !== false);
+    setIsPersonalAccount(sub.isPersonalAccount === true);
     setIsFormOpen(true);
   };
 
@@ -116,7 +119,8 @@ export default function SubscriptionsPage({
       durationValue: Number(durationValue),
       durationUnit,
       amount: Number(amount),
-      inclusiveGst: activeClient.isForeign ? false : inclusiveGst
+      isPersonalAccount,
+      inclusiveGst: (activeClient.isForeign || isPersonalAccount) ? false : inclusiveGst
     };
 
     try {
@@ -339,7 +343,7 @@ export default function SubscriptionsPage({
   const getCalculatedFinalAmount = () => {
     const amt = Number(amount);
     if (isNaN(amt) || amt <= 0) return 0;
-    if (activeClient.isForeign) return amt;
+    if (activeClient.isForeign || isPersonalAccount) return amt;
     if (inclusiveGst) return amt;
     return Math.round(amt * 1.18 * 100) / 100;
   };
@@ -601,23 +605,42 @@ export default function SubscriptionsPage({
                 )}
               </div>
 
-              {/* GST Inclusive Checkbox */}
-              <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+              {/* Personal Account Checkbox */}
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 p-3 rounded-xl">
                 <input
                   type="checkbox"
-                  id="inclusiveGst"
-                  checked={activeClient.isForeign ? false : inclusiveGst}
+                  id="isPersonalAccount"
+                  checked={isPersonalAccount}
                   disabled={activeClient.isForeign}
-                  onChange={(e) => setInclusiveGst(e.target.checked)}
-                  className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
+                  onChange={(e) => setIsPersonalAccount(e.target.checked)}
+                  className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
                 />
-                <label htmlFor="inclusiveGst" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
-                  <span>Inclusive GST (18%)</span>
+                <label htmlFor="isPersonalAccount" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
+                  <span>Personal Account</span>
                   <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
-                    {activeClient.isForeign ? "Disabled - no GST applied for Foreign Client." : "If unchecked, 18% tax will automatically be added to obtain the final billing amount."}
+                    {activeClient.isForeign ? "Disabled - foreign client." : "If checked, no GST will be applied (personal/individual billing)."}
                   </span>
                 </label>
               </div>
+
+              {/* GST Inclusive Checkbox — hidden for personal account and foreign clients */}
+              {!isPersonalAccount && !activeClient.isForeign && (
+                <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="inclusiveGst"
+                    checked={inclusiveGst}
+                    onChange={(e) => setInclusiveGst(e.target.checked)}
+                    className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                  />
+                  <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                    <span>Inclusive GST (18%)</span>
+                    <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
+                      If unchecked, 18% tax will automatically be added to obtain the final billing amount.
+                    </span>
+                  </label>
+                </div>
+              )}
 
               {/* Amount */}
               <div>
@@ -649,8 +672,14 @@ export default function SubscriptionsPage({
                   </span>
                   <span className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                     ₹{getCalculatedFinalAmount().toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    {!inclusiveGst && amount && (
+                    {!isPersonalAccount && !activeClient.isForeign && !inclusiveGst && amount && (
                       <span className="text-[9px] text-[#5D5FEF] font-bold uppercase select-none">(+18% GST)</span>
+                    )}
+                    {isPersonalAccount && (
+                      <span className="text-[9px] text-amber-500 font-bold uppercase select-none">(Personal)</span>
+                    )}
+                    {activeClient.isForeign && (
+                      <span className="text-[9px] text-emerald-500 font-bold uppercase select-none">(Foreign)</span>
                     )}
                   </span>
                 </div>

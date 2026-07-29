@@ -35,6 +35,10 @@ const subscriptionSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    isPersonalAccount: {
+      type: Boolean,
+      default: false,
+    },
     finalAmount: {
       type: Number,
       required: true,
@@ -104,8 +108,8 @@ subscriptionSchema.pre("validate", async function () {
       }
     }
 
-    if (isForeign) {
-      this.finalAmount = this.amount; // No GST for foreign clients
+    if (isForeign || this.isPersonalAccount) {
+      this.finalAmount = this.amount; // No GST for foreign or personal account clients
     } else if (this.inclusiveGst) {
       this.finalAmount = this.amount;
     } else {

@@ -83,7 +83,7 @@ router.get("/alerts", async (req, res) => {
 // 3. POST /api/subscriptions - Create subscription
 router.post("/", async (req, res) => {
   try {
-    const { client, type, startDate, durationValue, durationUnit, amount, inclusiveGst } = req.body;
+    const { client, type, startDate, durationValue, durationUnit, amount, inclusiveGst, isPersonalAccount } = req.body;
     
     if (!client || !type || !startDate || !durationValue || !durationUnit || amount === undefined) {
       return res.status(400).json({ message: "Missing required subscription parameters" });
@@ -101,6 +101,7 @@ router.post("/", async (req, res) => {
       durationValue: Number(durationValue),
       durationUnit,
       amount: Number(amount),
+      isPersonalAccount: isPersonalAccount !== undefined ? Boolean(isPersonalAccount) : false,
       inclusiveGst: inclusiveGst !== undefined ? Boolean(inclusiveGst) : true,
     });
 
@@ -134,7 +135,7 @@ router.post("/bulk-delete", async (req, res) => {
 // 4. PUT /api/subscriptions/:id - Update subscription
 router.put("/:id", async (req, res) => {
   try {
-    const { client, type, startDate, durationValue, durationUnit, amount, inclusiveGst } = req.body;
+    const { client, type, startDate, durationValue, durationUnit, amount, inclusiveGst, isPersonalAccount } = req.body;
     
     const sub = await Subscription.findById(req.params.id);
     if (!sub) {
@@ -155,6 +156,7 @@ router.put("/:id", async (req, res) => {
     if (durationUnit) sub.durationUnit = durationUnit;
     if (amount !== undefined) sub.amount = Number(amount);
     if (inclusiveGst !== undefined) sub.inclusiveGst = Boolean(inclusiveGst);
+    if (isPersonalAccount !== undefined) sub.isPersonalAccount = Boolean(isPersonalAccount);
 
     await sub.save();
 
