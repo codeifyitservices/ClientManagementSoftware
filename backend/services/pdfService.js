@@ -253,11 +253,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
 
   currentY += 16;
   if (client.isForeign) {
-    doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
-      .text("GST (0%):", totalBlockX, currentY, { width: 110, align: "right" });
-    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
-      .text("Rs. 0.00", 450, currentY, { width: 100, align: "right" });
-    currentY += 16;
+    // Completely remove GST row from the totals breakdown - do nothing
   } else if (isInterstate) {
     doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
       .text(`IGST (${primaryRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });

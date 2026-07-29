@@ -560,12 +560,7 @@ export default function InvoicePreviewPage({
                 {subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </span>
 
-              {activeClient.isForeign ? (
-                <>
-                  <span className="text-slate-600 font-medium">GST (0%)</span>
-                  <span className="text-slate-900 font-bold">₹0.00</span>
-                </>
-              ) : isInterstate ? (
+              {activeClient.isForeign ? null : isInterstate ? (
                 <>
                   <span className="text-slate-600 font-medium">
                     IGST ({primaryGstRate}%)
