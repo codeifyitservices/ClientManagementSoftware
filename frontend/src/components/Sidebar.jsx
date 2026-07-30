@@ -8,6 +8,7 @@ import {
   Sliders,
   Database,
   CalendarDays,
+  Folder,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -17,6 +18,7 @@ export default function Sidebar({
   const mainItems = [
     { to: "/", name: "Dashboard", icon: LayoutDashboard, exact: true },
     { to: "/clients", name: "Clients", icon: Users },
+    { to: "/projects", name: "Projects", icon: Folder },
     { to: "/invoices", name: "Invoices", icon: Receipt },
     { to: "/subscriptions", name: "Subscriptions", icon: CalendarDays },
   ];

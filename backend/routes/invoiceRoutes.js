@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import Invoice from "../models/invoiceModel.js";
 import Client from "../models/clientModel.js";
 import Config from "../models/configModel.js";
@@ -8,6 +9,7 @@ import {
   generateInvoicesZIP,
 } from "../services/pdfService.js";
 import { sendInvoiceEmail } from "../services/emailService.js";
+import Project from "../models/projectModel.js";
 
 const router = express.Router();
 
@@ -177,7 +179,7 @@ router.get("/download-combined-pdf", async (req, res) => {
 // 4. POST /api/invoices - Create a GST invoice
 router.post("/", async (req, res) => {
   try {
-    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus } = req.body;
+    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus, projectId, milestoneId } = req.body;
 
     if (!client || !dueDate || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Please provide Client Profile, Due Date, and at least one Invoice Item." });
@@ -198,6 +200,28 @@ router.post("/", async (req, res) => {
     });
 
     const savedInvoice = await newInvoice.save();
+
+    if (projectId && milestoneId) {
+      try {
+        const projId = new mongoose.Types.ObjectId(projectId);
+        const mileId = new mongoose.Types.ObjectId(milestoneId);
+        
+        console.log(`[Invoice Link] Linking invoice ${savedInvoice._id} to project ${projId}, milestone ${mileId}`);
+        const updateResult = await Project.updateOne(
+          { _id: projId, "milestones._id": mileId },
+          { 
+            $set: { 
+              "milestones.$.invoice": savedInvoice._id, 
+              "milestones.$.status": paymentStatus === "Paid" ? "Paid" : "Invoiced" 
+            } 
+          }
+        );
+        console.log(`[Invoice Link] Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
+      } catch (castErr) {
+        console.error("[Invoice Link] Casting or update error linking milestone invoice:", castErr);
+      }
+    }
+
     const populated = await savedInvoice.populate("client");
 
     res.status(201).json(populated);
@@ -245,6 +269,18 @@ router.delete("/:id", async (req, res) => {
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found." });
     }
+
+    // Clear invoice link from project milestones
+    await Project.updateMany(
+      { "milestones.invoice": req.params.id },
+      { 
+        $set: { 
+          "milestones.$.invoice": null, 
+          "milestones.$.status": "Pending" 
+        } 
+      }
+    );
+
     res.json({ message: "Invoice deleted successfully." });
   } catch (error) {
     res.status(500).json({ message: "Error deleting invoice", error: error.message });

@@ -137,10 +137,12 @@ export default function InvoiceFormPage({
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [currency, setCurrency] = useState("INR (₹)");
   const [notes, setNotes] = useState("");
+  const [projectId, setProjectId] = useState(draftInvoice?.projectId || null);
+  const [milestoneId, setMilestoneId] = useState(draftInvoice?.milestoneId || null);
 
   // Invoice items list state
   const [items, setItems] = useState([
-    { description: "", sacCode: "998314", amount: 0, rate: 0, qty: 1, gstRate: 18 },
+    { serviceName: "", description: "", sacCode: "998314", amount: 0, rate: 0, qty: 1, gstRate: 18 },
   ]);
 
   // Populate edits if present
@@ -151,7 +153,7 @@ export default function InvoiceFormPage({
         sourceInvoice.client?._id || sourceInvoice.client || "",
       );
       setInvoiceDate(
-        new Date(sourceInvoice.invoiceDate || sourceInvoice.createdAt)
+        new Date(sourceInvoice.invoiceDate || sourceInvoice.createdAt || new Date())
           .toISOString()
           .split("T")[0],
       );
@@ -167,6 +169,7 @@ export default function InvoiceFormPage({
       if (sourceInvoice.items && sourceInvoice.items.length > 0) {
         setItems(
           sourceInvoice.items.map((i) => ({
+            serviceName: i.serviceName || "",
             description: i.description || "",
             sacCode: i.sacCode || "998314",
             amount: i.amount !== undefined && i.amount !== null ? i.amount : (i.rate || 0),
@@ -222,7 +225,19 @@ export default function InvoiceFormPage({
   };
 
   const handleServiceSelect = (index, value) => {
-    if (!value) return;
+    if (!value) {
+      setItems((prev) =>
+        prev.map((item, i) =>
+          i === index
+            ? {
+                ...item,
+                serviceName: "",
+              }
+            : item,
+        ),
+      );
+      return;
+    }
     const selected = backendServices.find((s) => s.name === value);
     if (selected) {
       setItems((prev) =>
@@ -230,7 +245,8 @@ export default function InvoiceFormPage({
           i === index
             ? {
                 ...item,
-                description: selected.name,
+                serviceName: selected.name,
+                description: item.description ? item.description : selected.name,
                 sacCode: selected.sacCode,
                 gstRate: selected.gstRate,
               }
@@ -337,6 +353,8 @@ export default function InvoiceFormPage({
       items: payloadItems,
       paymentStatus: statusOverride || paymentStatus,
       shouldSendEmail,
+      projectId,
+      milestoneId,
     };
 
     onSubmit(payload);
@@ -524,7 +542,7 @@ export default function InvoiceFormPage({
                         <div className="space-y-2">
                           {/* Service pre-fill selector */}
                           <select
-                            value=""
+                            value={item.serviceName || ""}
                             onChange={(e) =>
                               handleServiceSelect(index, e.target.value)
                             }

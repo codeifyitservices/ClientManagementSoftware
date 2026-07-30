@@ -8,6 +8,7 @@ import invoiceRoutes from "./routes/invoiceRoutes.js";
 import serviceRoutes from "./routes/serviceRoutes.js";
 import backupRoutes from "./routes/backupRoutes.js";
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
+import projectRoutes from "./routes/projectRoutes.js";
 import protect from "./middleware/authMiddleware.js";
 import { startSubscriptionScheduler } from "./services/subscriptionScheduler.js";
 import Service from "./models/serviceModel.js";
@@ -36,6 +37,7 @@ app.use("/api/invoices", protect, invoiceRoutes);
 app.use("/api/services", protect, serviceRoutes);
 app.use("/api/backup", protect, backupRoutes);
 app.use("/api/subscriptions", protect, subscriptionRoutes);
+app.use("/api/projects", protect, projectRoutes);
 
 app.use("/health", (req, res) => {
   res.status(200).json({

@@ -24,6 +24,9 @@ import DataBackupPage from "./components/DataBackupPage";
 import LoginPage from "./components/LoginPage";
 import PasswordModal from "./components/PasswordModal";
 import SubscriptionsPage from "./components/SubscriptionsPage";
+import ProjectsPage from "./components/ProjectsPage";
+import ProjectFormPage from "./components/ProjectFormPage";
+import ProjectDetailPage from "./components/ProjectDetailPage";
 
 const API_CLIENTS = `${import.meta.env.VITE_BACKEND_URL}/api/clients`;
 const API_INVOICES = `${import.meta.env.VITE_BACKEND_URL}/api/invoices`;
@@ -170,6 +173,22 @@ function AppShell({
     "/subscriptions": {
       title: "Subscriptions Ledger",
       sub: "Configure and track client hosting and maintenance contracts",
+    },
+    "/projects": {
+      title: "Projects Ledger",
+      sub: "Track project milestones, stage progress, and link invoices",
+    },
+    "/projects/create": {
+      title: "Create Project",
+      sub: "Configure project parameters and define milestone billing stages",
+    },
+    "/projects/:id/edit": {
+      title: "Edit Project",
+      sub: "Modify project metadata and milestone details",
+    },
+    "/projects/:id": {
+      title: "Project Coordinates",
+      sub: "Inspect project budget installments, payment milestones, and generated invoices",
     },
     "/settings/profile": {
       title: "Company Settings",
@@ -1117,6 +1136,47 @@ export default function App() {
               />
             }
           />
+          <Route path="projects">
+            <Route
+              index
+              element={
+                <ProjectsPage
+                  token={token}
+                  clients={clients}
+                  invoices={invoices}
+                  onFetchInvoices={fetchInvoices}
+                />
+              }
+            />
+            <Route
+              path="create"
+              element={
+                <ProjectFormPage
+                  token={token}
+                  clients={clients}
+                />
+              }
+            />
+            <Route
+              path=":id"
+              element={
+                <ProjectDetailPage
+                  token={token}
+                  invoices={invoices}
+                  onFetchInvoices={fetchInvoices}
+                />
+              }
+            />
+            <Route
+              path=":id/edit"
+              element={
+                <ProjectFormPage
+                  token={token}
+                  clients={clients}
+                />
+              }
+            />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
 
 

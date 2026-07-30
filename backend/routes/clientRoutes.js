@@ -2,6 +2,7 @@ import express from "express";
 import Client from "../models/clientModel.js";
 import Config from "../models/configModel.js";
 import Invoice from "../models/invoiceModel.js";
+import Project from "../models/projectModel.js";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -283,7 +284,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// 6. DELETE /api/clients/:id - Delete a client profile (cascade delete invoices)
+// 6. DELETE /api/clients/:id - Delete a client profile (cascade delete invoices & projects)
 router.delete("/:id", async (req, res) => {
   try {
     const client = await Client.findByIdAndDelete(req.params.id);
@@ -294,7 +295,10 @@ router.delete("/:id", async (req, res) => {
     // Cascade delete all invoices associated with this client
     await Invoice.deleteMany({ client: req.params.id });
 
-    res.json({ message: "Client profile and all associated invoices deleted successfully." });
+    // Cascade delete all projects associated with this client
+    await Project.deleteMany({ client: req.params.id });
+
+    res.json({ message: "Client profile and all associated invoices and projects deleted successfully." });
   } catch (error) {
     res.status(500).json({ message: "Error deleting client", error: error.message });
   }

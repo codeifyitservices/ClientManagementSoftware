@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 
 const invoiceItemSchema = new mongoose.Schema({
+  serviceName: {
+    type: String,
+    trim: true,
+  },
   description: {
     type: String,
     required: true,
@@ -171,6 +175,30 @@ invoiceSchema.pre("save", async function () {
     this.gstRate = rate;
     this.gstAmount = Number((baseAmount * (rate / 100)).toFixed(2));
     this.totalAmount = Number((baseAmount + this.gstAmount).toFixed(2));
+  }
+});
+
+invoiceSchema.post("save", async function (doc) {
+  try {
+    const Project = mongoose.model("Project");
+    const milestoneStatus = doc.paymentStatus === "Paid" ? "Paid" : "Invoiced";
+    
+    // Find all projects that reference this invoice in their milestones array
+    const projects = await Project.find({ "milestones.invoice": doc._id });
+    for (const project of projects) {
+      let modified = false;
+      project.milestones.forEach((m) => {
+        if (m.invoice && m.invoice.toString() === doc._id.toString()) {
+          m.status = milestoneStatus;
+          modified = true;
+        }
+      });
+      if (modified) {
+        await project.save();
+      }
+    }
+  } catch (err) {
+    console.error("Error updating project milestone status on invoice save:", err);
   }
 });
 
