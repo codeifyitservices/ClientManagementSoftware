@@ -6,6 +6,7 @@ import {
   Outlet,
   useNavigate,
   useLocation,
+  useParams,
 } from "react-router-dom";
 import { Plus, X, ChevronDown, Eye, Search, Bell, Check } from "lucide-react";
 import Sidebar from "./components/Sidebar";
@@ -27,6 +28,15 @@ import SubscriptionsPage from "./components/SubscriptionsPage";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectFormPage from "./components/ProjectFormPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
+import EmployeeList from "./components/EmployeeList";
+import EmployeeProfile from "./components/EmployeeProfile";
+import EmployeeModal from "./components/EmployeeModal";
+import EmployeeDashboard from "./components/EmployeeDashboard";
+import { useAppService } from "./services/appService";
+import TaskListPage from "./components/TaskListPage";
+import TaskDetailPage from "./components/TaskDetailPage";
+import TicketListPage from "./components/TicketListPage";
+import TicketDetailPage from "./components/TicketDetailPage";
 
 const API_CLIENTS = `${import.meta.env.VITE_BACKEND_URL}/api/clients`;
 const API_INVOICES = `${import.meta.env.VITE_BACKEND_URL}/api/invoices`;
@@ -129,6 +139,12 @@ function AppShell({
   fetchInvoices,
   activeAlerts = [],
   onDismissAlert,
+  currentUser = { role: "Admin", email: "admin@codenap.in", fullName: "System Admin" },
+  notifications = [],
+  unreadNotificationsCount = 0,
+  fetchNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -153,7 +169,10 @@ function AppShell({
   }, []);
 
   const headerMeta = {
-    "/": { title: "Dashboard", sub: "Welcome back, Admin!" },
+    "/": {
+      title: "Dashboard",
+      sub: currentUser?.role === "Employee" ? "Employee Workspace" : "Welcome back, Admin!",
+    },
     "/clients": {
       title: "Clients Profiles",
       sub: "Manage company coordinates, contact list, and GSTIN directories",
@@ -202,20 +221,55 @@ function AppShell({
       title: "Data Backup & Export",
       sub: "Backup entire dataset or individual collections in compressed JSON ZIP archives",
     },
+    "/employees": {
+      title: "Employee Directory",
+      sub: "Manage your company employees, core records, personal profiles, and document checklists",
+    },
+    "/my-profile": {
+      title: "My Profile",
+      sub: "View and update your personal details, address, and emergency contact",
+    },
+    "/tasks": {
+      title: "Tasks Management",
+      sub: "Organize workspace tasks, set deadlines, and track milestones",
+    },
+    "/tickets": {
+      title: "Bug Ticket Directory",
+      sub: "Log application defects, assign developers, and track resolutions",
+    },
   };
 
 
   const isEditInvoice = /^\/invoices\/.+\/edit$/.test(path);
+  const isEmployeeProfile = /^\/employees\/.+$/.test(path);
+  const isTaskDetail = /^\/tasks\/.+$/.test(path);
+  const isTicketDetail = /^\/tickets\/.+$/.test(path);
+  
   const currentMeta = isEditInvoice
     ? {
         title: "Edit Invoice",
         sub: "Modify fields and item calculations on existing invoice records",
       }
+    : isEmployeeProfile
+    ? {
+        title: "Employee Profile",
+        sub: "Detailed profile, personal records, identity proofs, notes, and activity timeline",
+      }
+    : isTaskDetail
+    ? {
+        title: "Task Details",
+        sub: "Review task details, track progress, and write comments",
+      }
+    : isTicketDetail
+    ? {
+        title: "Bug Ticket Details",
+        sub: "Review reproduction steps, assign developer, and resolve bug ticket",
+      }
     : headerMeta[path] || { title: "", sub: "" };
 
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-800 grid-bg flex">
-      <Sidebar companyName={companyName} companyLogo={companyLogo} />
+      <Sidebar companyName={companyName} companyLogo={companyLogo} currentUser={currentUser} />
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Page Header */}
@@ -261,13 +315,18 @@ function AppShell({
             <div className="relative" ref={notificationMenuRef}>
               <button
                 type="button"
-                onClick={() => setShowNotificationMenu((v) => !v)}
-                className="relative p-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer select-none flex items-center justify-center"
+                onClick={() => {
+                  setShowNotificationMenu((v) => !v);
+                  if (!showNotificationMenu) {
+                    fetchNotifications();
+                  }
+                }}
+                className="relative p-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer select-none flex items-center justify-center animate-none"
               >
                 <Bell className="h-4 w-4" />
-                {activeAlerts.length > 0 && (
+                {(activeAlerts.length + unreadNotificationsCount) > 0 && (
                   <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[8px] font-black flex items-center justify-center animate-bounce">
-                    {activeAlerts.length}
+                    {activeAlerts.length + unreadNotificationsCount}
                   </span>
                 )}
               </button>
@@ -276,40 +335,73 @@ function AppShell({
                 <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-100 rounded-2xl shadow-xl py-2.5 z-50 animate-fade-in text-xs font-semibold text-slate-750">
                   <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between">
                     <p className="text-[11px] font-bold text-slate-800">
-                      Subscription Alerts
+                      Notifications & Alerts
                     </p>
-                    {activeAlerts.length > 0 && (
-                      <span className="text-[9px] bg-rose-50 text-rose-600 font-bold px-1.5 py-0.5 rounded">
-                        {activeAlerts.length} Pending
-                      </span>
+                    {unreadNotificationsCount > 0 && (
+                      <button
+                        onClick={markAllNotificationsAsRead}
+                        className="text-[9px] text-[#5D5FEF] hover:text-[#4d4fdf] font-bold border-0 bg-transparent cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
                     )}
                   </div>
                   <div className="max-h-64 overflow-y-auto divide-y divide-slate-50 mt-1">
-                    {activeAlerts.length === 0 ? (
-                      <div className="px-4 py-6 text-center text-[10px] text-slate-400 font-semibold">
-                        No pending expiration warnings 🎉
-                      </div>
-                    ) : (
-                      activeAlerts.map((alert) => (
-                        <div key={`${alert.subscriptionId}-${alert.alertType}`} className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-slate-50/50">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-bold text-slate-900 leading-tight truncate">
-                              {alert.client?.companyName}
-                            </p>
-                            <p className="text-[9px] text-slate-450 mt-0.5 leading-relaxed">
-                              {alert.type.charAt(0).toUpperCase() + alert.type.slice(1)} subscription expires on {new Date(alert.endDate).toLocaleDateString("en-IN")} ({alert.alertType === "15days" ? "15 days left" : "1 month left"})
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => onDismissAlert(alert)}
-                            className="p-1 rounded-md bg-slate-50 hover:bg-emerald-50 text-slate-450 hover:text-emerald-650 border border-slate-100 transition-colors cursor-pointer shrink-0"
-                            title="Dismiss Alert"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
+                    {/* Subscription Alerts */}
+                    {activeAlerts.map((alert) => (
+                      <div key={`${alert.subscriptionId}-${alert.alertType}`} className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-slate-50/50">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-bold text-slate-900 leading-tight truncate">
+                            {alert.client?.companyName}
+                          </p>
+                          <p className="text-[9px] text-slate-450 mt-0.5 leading-relaxed">
+                            {alert.type.charAt(0).toUpperCase() + alert.type.slice(1)} subscription expires on {new Date(alert.endDate).toLocaleDateString("en-IN")}
+                          </p>
                         </div>
-                      ))
+                        <button
+                          type="button"
+                          onClick={() => onDismissAlert(alert)}
+                          className="p-1 rounded-md bg-slate-50 hover:bg-emerald-50 text-slate-450 hover:text-emerald-650 border border-slate-100 transition-colors cursor-pointer shrink-0"
+                          title="Dismiss Alert"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Task and Bug notifications */}
+                    {notifications.map((notif) => (
+                      <div
+                        key={notif._id}
+                        onClick={() => {
+                          markNotificationAsRead(notif._id);
+                          setShowNotificationMenu(false);
+                          if (notif.type === "Task") {
+                            navigate(`/tasks/${notif.relatedId}`);
+                          } else if (notif.type === "Bug") {
+                            navigate(`/tickets/${notif.relatedId}`);
+                          }
+                        }}
+                        className={`px-4 py-3 flex items-start justify-between gap-3 hover:bg-slate-50/50 cursor-pointer ${
+                          !notif.isRead ? "bg-indigo-50/20" : ""
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-bold text-slate-900 leading-tight flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${!notif.isRead ? "bg-indigo-500" : "bg-slate-300"}`} />
+                            {notif.title}
+                          </p>
+                          <p className="text-[9px] text-slate-450 mt-0.5 leading-normal">
+                            {notif.message}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+
+                    {activeAlerts.length === 0 && notifications.length === 0 && (
+                      <div className="px-4 py-6 text-center text-[10px] text-slate-400 font-semibold">
+                        No active alerts or notifications 🎉
+                      </div>
                     )}
                   </div>
                 </div>
@@ -349,10 +441,10 @@ function AppShell({
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl py-1.5 z-50 animate-fade-in">
                   <div className="px-4 py-2.5 border-b border-slate-50">
                     <p className="text-[11px] font-bold text-slate-800">
-                      Admin User
+                      {currentUser.fullName}
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      admin@codenap.in
+                    <p className="text-[10px] text-slate-400 mt-0.5 font-semibold">
+                      {currentUser.email} ({currentUser.role})
                     </p>
                   </div>
                   <button
@@ -417,438 +509,79 @@ function AppShell({
 // ─── Root App ────────────────────────────────────────────────────────────────
 export default function App() {
   const navigate = useNavigate();
+  const service = useAppService();
 
-  const [token, setToken] = useState(localStorage.getItem("token") || null);
-  const [isAuthenticated, setIsAuthenticated] = useState(!!token);
-
-  const [clients, setClients] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [activeAlerts, setActiveAlerts] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [loadingClients, setLoadingClients] = useState(true);
-  const [loadingInvoices, setLoadingInvoices] = useState(true);
-  const [companyName, setCompanyName] = useState(
-    localStorage.getItem("companyName") || "Codenap IT Services",
-  );
-  const [companyLogo, setCompanyLogo] = useState(
-    localStorage.getItem("companyLogo") || "",
-  );
-
-  const [isClientFormOpen, setIsClientFormOpen] = useState(false);
-  const [isClientProfileOpen, setIsClientProfileOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [selectedClientForEdit, setSelectedClientForEdit] = useState(null);
-  const [selectedClientForView, setSelectedClientForView] = useState(null);
-  const [clientToDelete, setClientToDelete] = useState(null);
-  const [invoiceToDelete, setInvoiceToDelete] = useState(null);
-
-  const [isSavingClient, setIsSavingClient] = useState(false);
-  const [isSavingInvoice, setIsSavingInvoice] = useState(false);
-  const [isDeletingClient, setIsDeletingClient] = useState(false);
-  const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
-  const [processingInvoiceIds, setProcessingInvoiceIds] = useState({});
-
-  const [toasts, setToasts] = useState([]);
-  const showToast = (message, type = "success") => {
-    const id = Date.now();
-    let shouldScheduleTimeout = false;
-
-    setToasts((prevToasts) => {
-      const exists = prevToasts.some((t) => t.message === message);
-      if (exists) {
-        return prevToasts;
-      }
-      shouldScheduleTimeout = true;
-      return [...prevToasts, { id, message, type }];
-    });
-
-    if (shouldScheduleTimeout) {
-      setTimeout(() => {
-        setToasts((p) => p.filter((t) => t.id !== id));
-      }, 4500);
-    }
-  };
-  const removeToast = (id) => setToasts((p) => p.filter((t) => t.id !== id));
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const handleLogin = (newToken) => {
-    localStorage.setItem("token", newToken);
-    setToken(newToken);
-    setIsAuthenticated(true);
-    showToast("Welcome to BillFlow!", "success");
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    setToken(null);
-    setIsAuthenticated(false);
-    setClients([]);
-    setInvoices([]);
-    navigate("/login");
-    showToast("Logged out.", "success");
-  };
-
-  const authenticatedFetch = async (url, options = {}) => {
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    const res = await fetch(url, { ...options, headers });
-    if (res.status === 401) {
-      localStorage.removeItem("token");
-      setToken(null);
-      setIsAuthenticated(false);
-      showToast("Session expired. Please log in again.", "warning");
-      throw new Error("Unauthorized");
-    }
-    return res;
-  };
-
-  // ── Data ──────────────────────────────────────────────────────────────────
-  const fetchCompanyConfig = async () => {
-    if (!token) return;
-    try {
-      const res = await authenticatedFetch(`${API_CLIENTS}/config`);
-      const data = await res.json();
-      if (data.companyName) {
-        setCompanyName(data.companyName);
-        localStorage.setItem("companyName", data.companyName);
-      }
-      setCompanyLogo(data.companyLogo || "");
-      localStorage.setItem("companyLogo", data.companyLogo || "");
-    } catch {}
-  };
-
-  const fetchClients = async (search = "") => {
-    if (!token) return;
-    try {
-      setLoadingClients(true);
-      const url = search
-        ? `${API_CLIENTS}?search=${encodeURIComponent(search)}`
-        : API_CLIENTS;
-      setClients(await (await authenticatedFetch(url)).json());
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setLoadingClients(false);
-    }
-  };
-
-  const fetchInvoices = async (search = "") => {
-    if (!token) return;
-    try {
-      setLoadingInvoices(true);
-      const url = search
-        ? `${API_INVOICES}?search=${encodeURIComponent(search)}`
-        : API_INVOICES;
-      setInvoices(await (await authenticatedFetch(url)).json());
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setLoadingInvoices(false);
-    }
-  };
-
-  const fetchActiveAlerts = async () => {
-    if (!token) return;
-    try {
-      const res = await authenticatedFetch(
-        `${import.meta.env.VITE_BACKEND_URL}/api/subscriptions/alerts`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setActiveAlerts(data || []);
-      }
-    } catch (err) {}
-  };
-
-  const handleDismissAlert = async (alert) => {
-    try {
-      const res = await authenticatedFetch(
-        `${import.meta.env.VITE_BACKEND_URL}/api/subscriptions/${alert.subscriptionId}/dismiss-alert`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ alertType: alert.alertType })
-        }
-      );
-      if (res.ok) {
-        showToast("Alert dismissed in app.", "success");
-        fetchActiveAlerts();
-      }
-    } catch (err) {
-      showToast("Failed to dismiss alert.", "error");
-    }
-  };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchCompanyConfig();
-      fetchClients();
-      fetchInvoices();
-      fetchActiveAlerts();
-    }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    window.addEventListener("companyConfigUpdated", fetchCompanyConfig);
-    const handleAlertsUpdate = () => {
-      fetchActiveAlerts();
-    };
-    window.addEventListener("subscriptionAlertsUpdated", handleAlertsUpdate);
-    return () => {
-      window.removeEventListener("companyConfigUpdated", fetchCompanyConfig);
-      window.removeEventListener("subscriptionAlertsUpdated", handleAlertsUpdate);
-    };
-  }, [token]);
-
-  // ── CRUD ──────────────────────────────────────────────────────────────────
-  const handleClientSubmit = async (data) => {
-    setIsSavingClient(true);
-    const isEdit = !!selectedClientForEdit;
-    const url = isEdit
-      ? `${API_CLIENTS}/${selectedClientForEdit._id}`
-      : API_CLIENTS;
-    try {
-      const res = await authenticatedFetch(url, {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok)
-        throw new Error((await res.json()).message || "Failed to save client.");
-      showToast(isEdit ? "Client updated." : "Client created.", "success");
-      setIsClientFormOpen(false);
-      setSelectedClientForEdit(null);
-      fetchClients(searchQuery);
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setIsSavingClient(false);
-    }
-  };
-
-  const handleClientDeleteConfirm = async () => {
-    if (!clientToDelete) return;
-    setIsDeletingClient(true);
-    try {
-      const res = await authenticatedFetch(
-        `${API_CLIENTS}/${clientToDelete._id}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) throw new Error("Failed to delete client.");
-      showToast("Client and all invoices deleted.", "success");
-      setClientToDelete(null);
-      fetchClients(searchQuery);
-      fetchInvoices();
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setIsDeletingClient(false);
-    }
-  };
-
-  const handleInvoiceSubmit = async (data) => {
-    setIsSavingInvoice(true);
-    const invoiceId = data._id;
-    const url = invoiceId ? `${API_INVOICES}/${invoiceId}` : API_INVOICES;
-    try {
-      const res = await authenticatedFetch(url, {
-        method: invoiceId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.message || "Failed to save invoice.");
-
-      showToast(
-        invoiceId ? "Invoice updated successfully." : "Invoice created successfully.",
-        "success",
-      );
-
-      navigate("/invoices");
-      fetchInvoices();
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setIsSavingInvoice(false);
-    }
-  };
-
-  const handleInvoiceDeleteConfirm = async () => {
-    if (!invoiceToDelete) return;
-    setIsDeletingInvoice(true);
-    try {
-      const res = await authenticatedFetch(
-        `${API_INVOICES}/${invoiceToDelete._id}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) throw new Error("Failed to delete invoice.");
-      showToast("Invoice deleted.", "success");
-      setInvoiceToDelete(null);
-      fetchInvoices(searchQuery);
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setIsDeletingInvoice(false);
-    }
-  };
-
-  const handleClientBulkDelete = async (ids) => {
-    try {
-      await Promise.all(
-        ids.map((id) =>
-          authenticatedFetch(`${API_CLIENTS}/${id}`, { method: "DELETE" }),
-        ),
-      );
-      showToast(`${ids.length} client(s) deleted.`, "success");
-      fetchClients(searchQuery);
-      fetchInvoices();
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    }
-  };
-
-  const handleInvoiceBulkDelete = async (ids) => {
-    try {
-      await Promise.all(
-        ids.map((id) =>
-          authenticatedFetch(`${API_INVOICES}/${id}`, { method: "DELETE" }),
-        ),
-      );
-      showToast(`${ids.length} invoice(s) deleted.`, "success");
-      fetchInvoices(searchQuery);
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    }
-  };
-
-  const handleMarkAsPaid = async (invoiceArg) => {
-    const invoiceId = typeof invoiceArg === "string" ? invoiceArg : invoiceArg?._id;
-    const invoiceNumber = typeof invoiceArg === "object" ? invoiceArg?.invoiceNumber : invoiceArg;
-    if (!invoiceId) return;
-
-    setProcessingInvoiceIds((p) => ({
-      ...p,
-      [invoiceId]: { ...p[invoiceId], paid: true },
-    }));
-    try {
-      const res = await authenticatedFetch(
-        `${API_INVOICES}/${invoiceId}/mark-paid`,
-        { method: "POST" },
-      );
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.message || "Error.");
-      showToast(
-        result.emailError
-          ? "Marked Paid, email failed."
-          : `Invoice ${invoiceNumber || ""} marked Paid!`,
-        result.emailError ? "warning" : "success",
-      );
-      fetchInvoices(searchQuery);
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setProcessingInvoiceIds((p) => {
-        const next = { ...p };
-        delete next[invoiceId];
-        return next;
-      });
-    }
-  };
-
-  const handleResendEmail = async (invoiceArg) => {
-    const invoiceId = typeof invoiceArg === "string" ? invoiceArg : invoiceArg?._id;
-    const invoiceNumber = typeof invoiceArg === "object" ? invoiceArg?.invoiceNumber : invoiceArg;
-    if (!invoiceId) return;
-
-    setProcessingInvoiceIds((p) => ({
-      ...p,
-      [invoiceId]: { ...p[invoiceId], resend: true },
-    }));
-    try {
-      const res = await authenticatedFetch(
-        `${API_INVOICES}/${invoiceId}/resend-email`,
-        { method: "POST" },
-      );
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.message || "Error.");
-      showToast(`Email for invoice ${invoiceNumber || ""} sent successfully!`, "success");
-    } catch (err) {
-      if (err.message !== "Unauthorized") showToast(err.message, "error");
-    } finally {
-      setProcessingInvoiceIds((p) => {
-        const next = { ...p };
-        delete next[invoiceId];
-        return next;
-      });
-    }
-  };
-
-  const handleDownloadPdf = async (invoice) => {
-    try {
-      showToast(`Generating PDF for ${invoice.invoiceNumber}...`, "success");
-      const res = await authenticatedFetch(
-        `${API_INVOICES}/${invoice._id}/download-pdf`,
-      );
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to download PDF.");
-      }
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.setAttribute("download", `Invoice_${invoice.invoiceNumber}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-      showToast(`Downloaded PDF for ${invoice.invoiceNumber}.`, "success");
-    } catch (err) {
-      if (err.message !== "Unauthorized") {
-        showToast(err.message || "Error downloading PDF.", "error");
-      }
-    }
-  };
-
-  const handleDownloadSelectedZip = async (ids = []) => {
-    if (!ids || ids.length === 0) return;
-    try {
-      showToast(`Generating ZIP archive for ${ids.length} invoice(s)...`, "success");
-      const res = await authenticatedFetch(
-        `${API_INVOICES}/download-zip?ids=${ids.join(",")}`,
-      );
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to download ZIP archive.");
-      }
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.setAttribute(
-        "download",
-        `Invoices_Archive_${new Date().toISOString().slice(0, 10)}.zip`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-      showToast(`Downloaded ZIP archive for ${ids.length} invoice(s).`, "success");
-    } catch (err) {
-      if (err.message !== "Unauthorized") {
-        showToast(err.message || "Error downloading ZIP file.", "error");
-      }
-    }
-  };
-
-  const handlePreviewDummyInvoice = () => {
-    navigate("/invoices/preview", {
-      state: {
-        invoiceData: DUMMY_PREVIEW_INVOICE,
-        clients: [DUMMY_PREVIEW_CLIENT, ...clients],
-        isDummyPreview: true,
-      },
-    });
-  };
+  const {
+    token,
+    setToken,
+    isAuthenticated,
+    setIsAuthenticated,
+    currentUser,
+    setCurrentUser,
+    isEmployeeFormOpen,
+    setIsEmployeeFormOpen,
+    selectedEmployeeForEdit,
+    setSelectedEmployeeForEdit,
+    employeesList,
+    isSavingEmployee,
+    clients,
+    invoices,
+    activeAlerts,
+    searchQuery,
+    setSearchQuery,
+    loadingClients,
+    loadingInvoices,
+    companyName,
+    companyLogo,
+    isClientFormOpen,
+    setIsClientFormOpen,
+    isClientProfileOpen,
+    setIsClientProfileOpen,
+    isPasswordModalOpen,
+    setIsPasswordModalOpen,
+    selectedClientForEdit,
+    setSelectedClientForEdit,
+    selectedClientForView,
+    setSelectedClientForView,
+    clientToDelete,
+    setClientToDelete,
+    invoiceToDelete,
+    setInvoiceToDelete,
+    isSavingClient,
+    isSavingInvoice,
+    isDeletingClient,
+    isDeletingInvoice,
+    processingInvoiceIds,
+    toasts,
+    showToast,
+    removeToast,
+    handleLogin,
+    handleLogout,
+    authenticatedFetch,
+    fetchCompanyConfig,
+    fetchClients,
+    fetchInvoices,
+    fetchActiveAlerts,
+    handleDismissAlert,
+    fetchEmployeesList,
+    handleEmployeeSubmit,
+    handleClientSubmit,
+    handleClientDeleteConfirm,
+    handleInvoiceSubmit,
+    handleInvoiceDeleteConfirm,
+    handleClientBulkDelete,
+    handleInvoiceBulkDelete,
+    handleMarkAsPaid,
+    handleResendEmail,
+    handleDownloadPdf,
+    handleDownloadSelectedZip,
+    handlePreviewDummyInvoice,
+    notifications,
+    unreadNotificationsCount,
+    fetchNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+  } = service;
 
   // ── Shell props ───────────────────────────────────────────────────────────
   const shellProps = {
@@ -865,6 +598,12 @@ export default function App() {
     fetchInvoices,
     activeAlerts,
     onDismissAlert: handleDismissAlert,
+    currentUser,
+    notifications,
+    unreadNotificationsCount,
+    fetchNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
   };
 
   // ─── Views ────────────────────────────────────────────────────────────────
@@ -1054,6 +793,22 @@ export default function App() {
                 onLogin={handleLogin}
                 companyName={companyName}
                 companyLogo={companyLogo}
+                isAdminPortal={false}
+              />
+            )
+          }
+        />
+        <Route
+          path="/admin/login"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/" replace />
+            ) : (
+              <LoginPage
+                onLogin={handleLogin}
+                companyName={companyName}
+                companyLogo={companyLogo}
+                isAdminPortal={true}
               />
             )
           }
@@ -1069,114 +824,267 @@ export default function App() {
             )
           }
         >
-          <Route index element={<DashboardPage />} />
-          <Route path="clients" element={<ClientsPage />} />
-          <Route path="invoices" element={<InvoicesPage />} />
+          <Route
+            index
+            element={
+              currentUser?.role === "Employee" ? (
+                <EmployeeDashboard
+                  token={token}
+                  currentUser={currentUser}
+                  onEditProfile={() => {
+                    const loggedInEmp = employeesList.find(
+                      (emp) => emp._id === currentUser._id || emp.companyEmail?.toLowerCase() === currentUser.email?.toLowerCase()
+                    ) || {
+                      _id: currentUser._id,
+                      fullName: currentUser.fullName,
+                      companyEmail: currentUser.email,
+                    };
+                    setSelectedEmployeeForEdit(loggedInEmp);
+                    setIsEmployeeFormOpen(true);
+                  }}
+                />
+              ) : (
+                <DashboardPage />
+              )
+            }
+          />
+          <Route
+            path="clients"
+            element={
+              <AdminRoute currentUser={currentUser}>
+                <ClientsPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="invoices"
+            element={
+              <AdminRoute currentUser={currentUser}>
+                <InvoicesPage />
+              </AdminRoute>
+            }
+          />
           <Route
             path="invoices/create"
             element={
-              <InvoiceFormPage
-                clients={clients}
-                isSaving={isSavingInvoice}
-                onSubmit={handleInvoiceSubmit}
-                token={token}
-              />
+              <AdminRoute currentUser={currentUser}>
+                <InvoiceFormPage
+                  clients={clients}
+                  isSaving={isSavingInvoice}
+                  onSubmit={handleInvoiceSubmit}
+                  token={token}
+                />
+              </AdminRoute>
             }
           />
           <Route
             path="invoices/:id/edit"
             element={
-              <InvoiceFormPage
-                clients={clients}
-                isSaving={isSavingInvoice}
-                onSubmit={handleInvoiceSubmit}
-                token={token}
-              />
+              <AdminRoute currentUser={currentUser}>
+                <InvoiceFormPage
+                  clients={clients}
+                  isSaving={isSavingInvoice}
+                  onSubmit={handleInvoiceSubmit}
+                  token={token}
+                />
+              </AdminRoute>
             }
           />
           <Route
             path="invoices/preview"
             element={
-              <InvoicePreviewPage
-                clients={clients}
-                isSaving={isSavingInvoice}
-                onSend={handleInvoiceSubmit}
-                token={token}
-              />
+              <AdminRoute currentUser={currentUser}>
+                <InvoicePreviewPage
+                  clients={clients}
+                  isSaving={isSavingInvoice}
+                  onSend={handleInvoiceSubmit}
+                  token={token}
+                />
+              </AdminRoute>
             }
           />
-          <Route path="settings/profile" element={<InvoiceConfigPage />} />
+          <Route
+            path="settings/profile"
+            element={
+              <AdminRoute currentUser={currentUser}>
+                <InvoiceConfigPage />
+              </AdminRoute>
+            }
+          />
           <Route
             path="settings/services"
-            element={<ServiceSettingsPage token={token} />}
+            element={
+              <AdminRoute currentUser={currentUser}>
+                <ServiceSettingsPage token={token} />
+              </AdminRoute>
+            }
           />
 
           <Route
             path="settings/backup"
             element={
-              <DataBackupPage
-                token={token}
-                showToast={showToast}
-                onRestoreSuccess={() => {
-                  fetchClients();
-                  fetchInvoices();
-                  fetchCompanyConfig();
-                }}
-              />
+              <AdminRoute currentUser={currentUser}>
+                <DataBackupPage
+                  token={token}
+                  showToast={showToast}
+                  onRestoreSuccess={() => {
+                    fetchClients();
+                    fetchInvoices();
+                    fetchCompanyConfig();
+                  }}
+                />
+              </AdminRoute>
             }
           />
           <Route
             path="subscriptions"
             element={
-              <SubscriptionsPage
-                token={token}
-                clients={clients}
-                showToast={showToast}
-                authenticatedFetch={authenticatedFetch}
-              />
+              <AdminRoute currentUser={currentUser}>
+                <SubscriptionsPage
+                  token={token}
+                  clients={clients}
+                  showToast={showToast}
+                  authenticatedFetch={authenticatedFetch}
+                />
+              </AdminRoute>
             }
           />
           <Route path="projects">
             <Route
               index
               element={
-                <ProjectsPage
-                  token={token}
-                  clients={clients}
-                  invoices={invoices}
-                  onFetchInvoices={fetchInvoices}
-                />
+                <AdminRoute currentUser={currentUser}>
+                  <ProjectsPage
+                    token={token}
+                    clients={clients}
+                    invoices={invoices}
+                    onFetchInvoices={fetchInvoices}
+                  />
+                </AdminRoute>
               }
             />
             <Route
               path="create"
               element={
-                <ProjectFormPage
-                  token={token}
-                  clients={clients}
-                />
+                <AdminRoute currentUser={currentUser}>
+                  <ProjectFormPage
+                    token={token}
+                    clients={clients}
+                  />
+                </AdminRoute>
               }
             />
             <Route
               path=":id"
               element={
-                <ProjectDetailPage
-                  token={token}
-                  invoices={invoices}
-                  onFetchInvoices={fetchInvoices}
-                />
+                <AdminRoute currentUser={currentUser}>
+                  <ProjectDetailPage
+                    token={token}
+                    invoices={invoices}
+                    onFetchInvoices={fetchInvoices}
+                    currentUser={currentUser}
+                  />
+                </AdminRoute>
               }
             />
             <Route
               path=":id/edit"
               element={
-                <ProjectFormPage
-                  token={token}
-                  clients={clients}
-                />
+                <AdminRoute currentUser={currentUser}>
+                  <ProjectFormPage
+                    token={token}
+                    clients={clients}
+                  />
+                </AdminRoute>
               }
             />
           </Route>
+          
+          <Route
+            path="employees"
+            element={
+              <AdminRoute currentUser={currentUser}>
+                <EmployeeList
+                  token={token}
+                  currentUser={currentUser}
+                  onViewEmployee={(id) => navigate(`/employees/${id}`)}
+                  onAddEmployee={() => {
+                    setSelectedEmployeeForEdit(null);
+                    setIsEmployeeFormOpen(true);
+                  }}
+                  onEditEmployee={(emp) => {
+                    setSelectedEmployeeForEdit(emp);
+                    setIsEmployeeFormOpen(true);
+                  }}
+                  onDeleteEmployee={fetchEmployeesList}
+                  showToast={showToast}
+                />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="employees/:id"
+            element={
+              <EmployeeProfilePageWrapper
+                token={token}
+                currentUser={currentUser}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="my-profile"
+            element={
+              <EmployeeProfile
+                employeeId={currentUser?._id}
+                token={token}
+                currentUser={currentUser}
+                onBack={() => navigate("/")}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="tasks"
+            element={
+              <TaskListPage
+                token={token}
+                currentUser={currentUser}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="tasks/:id"
+            element={
+              <TaskDetailPage
+                token={token}
+                currentUser={currentUser}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="tickets"
+            element={
+              <TicketListPage
+                token={token}
+                currentUser={currentUser}
+                showToast={showToast}
+              />
+            }
+          />
+          <Route
+            path="tickets/:id"
+            element={
+              <TicketDetailPage
+                token={token}
+                currentUser={currentUser}
+                showToast={showToast}
+              />
+            }
+          />
+
           <Route path="*" element={<Navigate to="/" replace />} />
 
 
@@ -1226,7 +1134,46 @@ export default function App() {
         onClose={() => setIsPasswordModalOpen(false)}
         showToast={showToast}
       />
+      <EmployeeModal
+        isOpen={isEmployeeFormOpen}
+        onClose={() => {
+          setIsEmployeeFormOpen(false);
+          setSelectedEmployeeForEdit(null);
+        }}
+        onSubmit={handleEmployeeSubmit}
+        employee={selectedEmployeeForEdit}
+        isSaving={isSavingEmployee}
+        employeesList={employeesList}
+      />
       <ToastPanel toasts={toasts} removeToast={removeToast} />
     </>
   );
+}
+
+function EmployeeProfilePageWrapper({ token, currentUser, showToast }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  // Only redirect if we have a valid _id and it differs from the requested id
+  // Avoids redirect loop when currentUser._id is not yet hydrated
+  if (currentUser?.role === "Employee" && currentUser._id && id && id !== currentUser._id) {
+    return <Navigate to={`/employees/${currentUser._id}`} replace />;
+  }
+
+  return (
+    <EmployeeProfile
+      employeeId={id}
+      token={token}
+      currentUser={currentUser}
+      onBack={currentUser?.role === "Employee" ? () => navigate("/") : () => navigate("/employees")}
+      showToast={showToast}
+    />
+  );
+}
+
+function AdminRoute({ currentUser, children }) {
+  if (currentUser?.role !== "Admin") {
+    return <Navigate to="/" replace />;
+  }
+  return children;
 }

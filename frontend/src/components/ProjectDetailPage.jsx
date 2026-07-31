@@ -14,13 +14,15 @@ import {
   Edit,
   Trash2,
   FileText,
-  CreditCard
+  CreditCard,
+  Users
 } from "lucide-react";
 
 export default function ProjectDetailPage({
   token,
   invoices = [],
   onFetchInvoices,
+  currentUser = null,
 }) {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -221,43 +223,45 @@ export default function ProjectDetailPage({
         </button>
 
         {/* Actions Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-            className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            <span>Actions</span>
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showActionsDropdown ? "rotate-180" : ""}`} />
-          </button>
+        {currentUser?.role !== "Employee" && (
+          <div className="relative">
+            <button
+              onClick={() => setShowActionsDropdown(!showActionsDropdown)}
+              className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 bg-white rounded-xl text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <span>Actions</span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showActionsDropdown ? "rotate-180" : ""}`} />
+            </button>
 
-          {showActionsDropdown && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowActionsDropdown(false)} />
-              <div className="absolute right-0 mt-1.5 w-36 bg-white border border-slate-150 rounded-xl shadow-lg py-1.5 z-50 text-left">
-                <button
-                  onClick={() => {
-                    setShowActionsDropdown(false);
-                    navigate(`/projects/${id}/edit`, { state: { project } });
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-[11px] font-bold text-slate-650 transition-colors cursor-pointer"
-                >
-                  <Edit className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Edit Project</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowActionsDropdown(false);
-                    handleDelete();
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-[11px] font-bold text-red-500 transition-colors cursor-pointer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span>Delete Project</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+            {showActionsDropdown && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowActionsDropdown(false)} />
+                <div className="absolute right-0 mt-1.5 w-36 bg-white border border-slate-150 rounded-xl shadow-lg py-1.5 z-50 text-left">
+                  <button
+                    onClick={() => {
+                      setShowActionsDropdown(false);
+                      navigate(`/projects/${id}/edit`, { state: { project } });
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-[11px] font-bold text-slate-650 transition-colors cursor-pointer"
+                  >
+                    <Edit className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Edit Project</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsDropdown(false);
+                      handleDelete();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-red-50 text-[11px] font-bold text-red-500 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete Project</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Container Card */}
@@ -407,39 +411,49 @@ export default function ProjectDetailPage({
                       <td className="py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                         {invoiceId ? (
                           <span
-                            onClick={() => navigate(`/invoices/${invoiceId}/edit`)}
+                            onClick={() => {
+                              if (currentUser?.role === "Employee") {
+                                handleViewInvoicePreview(invoiceId);
+                              } else {
+                                navigate(`/invoices/${invoiceId}/edit`);
+                              }
+                            }}
                             className="text-[#5D5FEF] font-black hover:underline cursor-pointer flex items-center justify-center gap-0.5"
                           >
                             <span>{m.invoice?.invoiceNumber || "INV LINK"}</span>
                             <ExternalLink className="h-2.5 w-2.5" />
                           </span>
                         ) : (
-                          <button
-                            onClick={() => {
-                              const draftInvoice = {
-                                client: project.client?._id || project.client,
-                                dueDate: m.dueDate ? new Date(m.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
-                                items: [
-                                  {
-                                    serviceName: m.service,
-                                    description: m.name,
-                                    sacCode: "998314",
-                                    qty: 1,
-                                    rate: m.amount,
-                                    amount: m.amount,
-                                    gstRate: 18,
-                                  },
-                                ],
-                                projectId: project._id,
-                                milestoneId: m._id,
-                              };
-                              navigate("/invoices/create", { state: { draftInvoice } });
-                            }}
-                            className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-2.5 py-1 rounded-lg text-[10px] transition-all cursor-pointer shadow-sm shadow-indigo-500/5 inline-flex items-center gap-1"
-                          >
-                            <FileText className="h-3 w-3" />
-                            <span>Generate</span>
-                          </button>
+                          currentUser?.role === "Employee" ? (
+                            <span className="text-slate-400 text-[10px] font-bold">-</span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                const draftInvoice = {
+                                  client: project.client?._id || project.client,
+                                  dueDate: m.dueDate ? new Date(m.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+                                  items: [
+                                    {
+                                      serviceName: m.service,
+                                      description: m.name,
+                                      sacCode: "998314",
+                                      qty: 1,
+                                      rate: m.amount,
+                                      amount: m.amount,
+                                      gstRate: 18,
+                                    },
+                                  ],
+                                  projectId: project._id,
+                                  milestoneId: m._id,
+                                };
+                                navigate("/invoices/create", { state: { draftInvoice } });
+                              }}
+                              className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-2.5 py-1 rounded-lg text-[10px] transition-all cursor-pointer shadow-sm shadow-indigo-500/5 inline-flex items-center gap-1"
+                            >
+                              <FileText className="h-3 w-3" />
+                              <span>Generate</span>
+                            </button>
+                          )
                         )}
                       </td>
                       <td className="py-3.5 text-center pr-4" onClick={(e) => e.stopPropagation()}>
@@ -488,7 +502,13 @@ export default function ProjectDetailPage({
                   {projectInvoices.map((inv) => (
                     <tr
                       key={inv._id}
-                      onClick={() => navigate(`/invoices/${inv._id}/edit`)}
+                      onClick={() => {
+                        if (currentUser?.role === "Employee") {
+                          handleViewInvoicePreview(inv._id);
+                        } else {
+                          navigate(`/invoices/${inv._id}/edit`);
+                        }
+                      }}
                       className="hover:bg-slate-50/50 cursor-pointer transition-colors"
                     >
                       <td className="py-3.5 pl-4 font-bold text-[#5D5FEF]">{inv.invoiceNumber}</td>
@@ -523,6 +543,38 @@ export default function ProjectDetailPage({
             </div>
           </div>
         )}
+
+        {/* Assigned Team Members Section */}
+        <div className="space-y-4 pt-4 border-t border-slate-50">
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+            <Users className="h-4 w-4 text-indigo-600" />
+            <span>Assigned Team Members ({project.assignedEmployees?.length || 0})</span>
+          </h3>
+          
+          {(!project.assignedEmployees || project.assignedEmployees.length === 0) ? (
+            <p className="text-[11px] text-slate-400 font-semibold py-2">No team members assigned to this project yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {project.assignedEmployees.map((emp) => (
+                <div key={emp._id} className="flex items-center gap-3 p-3 bg-slate-50/50 rounded-2xl border border-slate-100">
+                  <div className="h-8 w-8 rounded-xl bg-indigo-50 text-indigo-650 flex items-center justify-center font-black text-xs">
+                    {emp.fullName?.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-900 truncate leading-none">{emp.fullName}</p>
+                    <span className="text-[9px] text-slate-400 block mt-1 font-semibold truncate">
+                      {emp.designation} &bull; {emp.department}
+                    </span>
+                    <span className="text-[9px] text-slate-400 block font-semibold truncate">
+                      {emp.companyEmail}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

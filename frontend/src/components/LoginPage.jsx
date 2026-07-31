@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { Mail, Lock, AlertTriangle, KeyRound } from "lucide-react";
+import { Mail, Lock, AlertTriangle, KeyRound, Shield, Briefcase } from "lucide-react";
 
 export default function LoginPage({
   onLogin,
   companyName = localStorage.getItem("companyName") || "Codenap IT Services",
   companyLogo = localStorage.getItem("companyLogo") || "",
+  isAdminPortal = false,
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +32,7 @@ export default function LoginPage({
         throw new Error(data.message || "Failed to log in.");
       }
 
-      onLogin(data.token, data.email);
+      await onLogin(data.token, data.email, data, isAdminPortal);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,12 +41,29 @@ export default function LoginPage({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 w-screen flex items-center justify-center p-4 grid-bg font-sans">
-      <div className="w-full max-w-md bg-white border border-slate-100 rounded-2xl p-8 custom-shadow animate-fade-in">
+    <div
+      className={`min-h-screen w-screen flex items-center justify-center p-4 font-sans transition-all duration-500 ${
+        isAdminPortal
+          ? "bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100"
+          : "bg-gradient-to-br from-violet-50 via-slate-50 to-emerald-50 text-slate-900"
+      }`}
+    >
+      <div
+        className={`w-full max-w-md rounded-3xl p-8 animate-fade-in ${
+          isAdminPortal
+            ? "bg-slate-900/80 backdrop-blur-xl border border-slate-800 shadow-[0_0_50px_rgba(99,102,241,0.15)]"
+            : "bg-white/90 backdrop-blur-xl border border-slate-100/80 shadow-[0_20px_50px_rgba(93,95,239,0.08)]"
+        }`}
+      >
         {/* Branding header */}
         <div className="flex flex-col items-center mb-8 text-center select-none">
+          {/* Logo or Portal Icon Container */}
           {companyLogo ? (
-            <div className="h-16 w-28 bg-white border border-slate-100 rounded-2xl mb-4 shadow-sm flex items-center justify-center p-2 overflow-hidden">
+            <div
+              className={`h-16 w-28 rounded-2xl mb-4 shadow-sm flex items-center justify-center p-2 overflow-hidden ${
+                isAdminPortal ? "bg-slate-950 border border-slate-800" : "bg-white border border-slate-100"
+              }`}
+            >
               <img
                 src={`${import.meta.env.VITE_BACKEND_URL}/uploads/${companyLogo}`}
                 alt={companyName}
@@ -53,22 +71,54 @@ export default function LoginPage({
               />
             </div>
           ) : (
-            <h1 className="text-xl font-black text-slate-900 tracking-tight mb-3">
-              {companyName}
-            </h1>
+            <div
+              className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-4 shadow-inner ${
+                isAdminPortal
+                  ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-400"
+                  : "bg-violet-500/10 border border-violet-500/20 text-violet-500"
+              }`}
+            >
+              {isAdminPortal ? <Shield className="h-6 w-6" /> : <Briefcase className="h-6 w-6" />}
+            </div>
           )}
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            Welcome back
+
+          {/* Portal Badging */}
+          <div className="mb-3">
+            <span
+              className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest ${
+                isAdminPortal
+                  ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                  : "bg-violet-500/10 text-violet-600 border border-violet-500/20"
+              }`}
+            >
+              {isAdminPortal ? "Admin Console" : "Employee Workspace"}
+            </span>
+          </div>
+
+          <h2
+            className={`text-2xl font-black tracking-tight ${
+              isAdminPortal ? "text-white" : "text-slate-900"
+            }`}
+          >
+            {companyLogo ? companyName : "Welcome back"}
           </h2>
-          <p className="text-xs text-slate-400 font-bold mt-1.5 uppercase tracking-widest">
-            Invoice Management Admin Portal
+          <p
+            className={`text-xs font-semibold mt-1 uppercase tracking-widest ${
+              isAdminPortal ? "text-slate-400" : "text-slate-500"
+            }`}
+          >
+            {isAdminPortal ? "Invoice Management Portal" : "Employee Workspace Log In"}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email Address */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            <label
+              className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
+                isAdminPortal ? "text-slate-400" : "text-slate-500"
+              }`}
+            >
               Email Address
             </label>
             <div className="relative">
@@ -80,15 +130,23 @@ export default function LoginPage({
                 value={email}
                 required
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@clientflow.com"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
+                placeholder={isAdminPortal ? "admin@codenap.co.in" : "employee@codenap.co.in"}
+                className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 ${
+                  isAdminPortal
+                    ? "border-slate-800 bg-slate-950/60 text-white placeholder-slate-600 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-slate-950"
+                    : "border-slate-200 bg-slate-50/50 text-slate-900 placeholder-slate-400 focus:ring-violet-500/20 focus:border-violet-500 focus:bg-white"
+                }`}
               />
             </div>
           </div>
 
           {/* Password */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            <label
+              className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
+                isAdminPortal ? "text-slate-400" : "text-slate-500"
+              }`}
+            >
               Password
             </label>
             <div className="relative">
@@ -101,7 +159,11 @@ export default function LoginPage({
                 required
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
+                className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 ${
+                  isAdminPortal
+                    ? "border-slate-800 bg-slate-950/60 text-white placeholder-slate-600 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-slate-950"
+                    : "border-slate-200 bg-slate-50/50 text-slate-900 placeholder-slate-400 focus:ring-violet-500/20 focus:border-violet-500 focus:bg-white"
+                }`}
               />
             </div>
           </div>
@@ -118,7 +180,11 @@ export default function LoginPage({
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-500/10 cursor-pointer disabled:opacity-50"
+            className={`w-full font-semibold py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50 ${
+              isAdminPortal
+                ? "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-indigo-500/10"
+                : "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-violet-500/15 hover:from-violet-500 hover:to-indigo-500"
+            }`}
           >
             {loading ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

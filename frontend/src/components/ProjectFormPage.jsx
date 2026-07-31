@@ -34,8 +34,10 @@ export default function ProjectFormPage({
   const [loading, setLoading] = useState(isEdit);
   const [isSaving, setIsSaving] = useState(false);
   const [services, setServices] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [assignedEmployees, setAssignedEmployees] = useState([]);
 
-  // Fetch services list
+  // Fetch services & employees list
   useEffect(() => {
     const fetchServices = async () => {
       try {
@@ -52,7 +54,25 @@ export default function ProjectFormPage({
         console.error("Error fetching services:", err);
       }
     };
+
+    const fetchEmployees = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/employees?limit=1000`, {
+          headers: {
+            Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setEmployees(data.employees || []);
+        }
+      } catch (err) {
+        console.error("Error fetching employees:", err);
+      }
+    };
+
     fetchServices();
+    fetchEmployees();
   }, [token]);
 
   // Fetch project if editing and not passed via state
@@ -122,6 +142,11 @@ export default function ProjectFormPage({
               ? new Date(m.dueDate).toISOString().split("T")[0]
               : "",
           }))
+        : []
+    );
+    setAssignedEmployees(
+      projectData.assignedEmployees
+        ? projectData.assignedEmployees.map((e) => e._id || e)
         : []
     );
   };
@@ -194,6 +219,7 @@ export default function ProjectFormPage({
       expectedEndDate,
       status,
       milestones,
+      assignedEmployees,
     };
 
     setIsSaving(true);
@@ -380,6 +406,46 @@ export default function ProjectFormPage({
                 </div>
               </div>
             </div>
+
+            {/* Assign Employees */}
+            <div className="pt-4 border-t border-slate-100">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                Assign Employees
+              </label>
+              <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-150 p-2 space-y-1 bg-slate-50/20">
+                {employees.length === 0 ? (
+                  <p className="text-[10px] text-slate-450 font-semibold p-2">No active employees registered.</p>
+                ) : (
+                  employees.map((emp) => {
+                    const isChecked = assignedEmployees.includes(emp._id);
+                    return (
+                      <label
+                        key={emp._id}
+                        className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs font-bold text-slate-800 select-none animate-fade-in"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAssignedEmployees((prev) => [...prev, emp._id]);
+                            } else {
+                              setAssignedEmployees((prev) => prev.filter((id) => id !== emp._id));
+                            }
+                          }}
+                          className="h-4 w-4 rounded text-[#5D5FEF] accent-[#5D5FEF]"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate leading-tight text-slate-900">{emp.fullName}</p>
+                          <span className="text-[9px] text-slate-400 block mt-0.5">{emp.designation} &bull; {emp.department}</span>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
           </div>
 
           {/* Realtime calculations summary card (Premium UI feature) */}

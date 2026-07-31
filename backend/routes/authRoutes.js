@@ -1,6 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import Admin from "../models/adminModel.js";
+import Employee from "../models/employeeModel.js";
 import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -14,7 +15,7 @@ const generateToken = (id) => {
   );
 };
 
-// 1. POST /api/auth/login - Admin Authentication
+// 1. POST /api/auth/login - User Authentication (Admin & Employee)
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -23,12 +24,37 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Please enter email and password." });
     }
 
-    const admin = await Admin.findOne({ email });
+    // Try finding in Admin collection first
+    let user = await Admin.findOne({ email: email.toLowerCase() });
+    let isEmployee = false;
 
-    if (admin && (await admin.matchPassword(password))) {
+    if (!user) {
+      // Find in Employee collection
+      user = await Employee.findOne({ companyEmail: email.toLowerCase() });
+      isEmployee = true;
+    }
+
+    if (user && (await user.matchPassword(password))) {
+      if (isEmployee && user.status === "Inactive") {
+        return res.status(403).json({ message: "Your account is inactive. Please contact your manager." });
+      }
+
       res.json({
-        token: generateToken(admin._id),
-        email: admin.email,
+        _id: user._id,
+        token: generateToken(user._id),
+        email: isEmployee ? user.companyEmail : user.email,
+        role: isEmployee ? user.role : "Admin",
+        permissions: isEmployee ? user.permissions : [
+          "View Employees",
+          "Create Employees",
+          "Edit Employees",
+          "Delete Employees",
+          "View Documents",
+          "Upload Documents",
+          "Delete Documents",
+          "Manage Roles"
+        ],
+        fullName: isEmployee ? user.fullName : "System Admin",
       });
     } else {
       res.status(401).json({ message: "Invalid email or password." });
@@ -38,7 +64,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// 2. POST /api/auth/update-password - Change admin login password
+// 2. POST /api/auth/update-password - Change current user password
 router.post("/update-password", protect, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -47,22 +73,26 @@ router.post("/update-password", protect, async (req, res) => {
       return res.status(400).json({ message: "Please enter current and new passwords." });
     }
 
-    // Retrieve admin document including hashed password
-    const admin = await Admin.findById(req.admin._id);
-    if (!admin) {
-      return res.status(404).json({ message: "Administrator profile not found." });
+    let user;
+    if (req.user.role === "Admin") {
+      user = await Admin.findById(req.user._id);
+    } else {
+      user = await Employee.findById(req.user._id);
     }
 
-    const isMatch = await admin.matchPassword(currentPassword);
+    if (!user) {
+      return res.status(404).json({ message: "Account profile not found." });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
     if (!isMatch) {
       return res.status(400).json({ message: "Incorrect current password." });
     }
 
-    // Assigning raw text triggers the Mongoose 'pre-save' hook to bcrypt-hash it
-    admin.password = newPassword;
-    await admin.save();
+    user.password = newPassword;
+    await user.save();
 
-    res.json({ message: "Administrator password updated successfully." });
+    res.json({ message: "Password updated successfully." });
   } catch (error) {
     res.status(500).json({ message: "Error updating password.", error: error.message });
   }

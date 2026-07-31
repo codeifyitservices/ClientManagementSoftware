@@ -66,6 +66,13 @@ const projectSchema = new mongoose.Schema(
       enum: ["Ongoing", "Completed"],
       default: "Ongoing",
     },
+    assignedEmployees: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Employee",
+        default: [],
+      },
+    ],
   },
   {
     timestamps: true,

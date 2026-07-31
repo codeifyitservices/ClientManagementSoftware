@@ -9,6 +9,10 @@ import serviceRoutes from "./routes/serviceRoutes.js";
 import backupRoutes from "./routes/backupRoutes.js";
 import subscriptionRoutes from "./routes/subscriptionRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
+import employeeRoutes from "./routes/employeeRoutes.js";
+import taskRoutes from "./routes/taskRoutes.js";
+import ticketRoutes from "./routes/ticketRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 import protect from "./middleware/authMiddleware.js";
 import { startSubscriptionScheduler } from "./services/subscriptionScheduler.js";
 import Service from "./models/serviceModel.js";
@@ -38,6 +42,10 @@ app.use("/api/services", protect, serviceRoutes);
 app.use("/api/backup", protect, backupRoutes);
 app.use("/api/subscriptions", protect, subscriptionRoutes);
 app.use("/api/projects", protect, projectRoutes);
+app.use("/api/employees", protect, employeeRoutes);
+app.use("/api/tasks", protect, taskRoutes);
+app.use("/api/tickets", protect, ticketRoutes);
+app.use("/api/notifications", protect, notificationRoutes);
 
 app.use("/health", (req, res) => {
   res.status(200).json({

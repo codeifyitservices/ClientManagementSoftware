@@ -9,19 +9,33 @@ import {
   Database,
   CalendarDays,
   Folder,
+  Briefcase,
+  CheckSquare,
+  Bug,
 } from "lucide-react";
 
 export default function Sidebar({
   companyName = "Codenap IT Services",
   companyLogo = "",
+  currentUser = null,
 }) {
-  const mainItems = [
-    { to: "/", name: "Dashboard", icon: LayoutDashboard, exact: true },
-    { to: "/clients", name: "Clients", icon: Users },
-    { to: "/projects", name: "Projects", icon: Folder },
-    { to: "/invoices", name: "Invoices", icon: Receipt },
-    { to: "/subscriptions", name: "Subscriptions", icon: CalendarDays },
-  ];
+  const mainItems = currentUser?.role === "Employee"
+    ? [
+        { to: "/", name: "Dashboard", icon: LayoutDashboard, exact: true },
+        { to: "/tasks", name: "Tasks", icon: CheckSquare },
+        { to: "/tickets", name: "Bug Tickets", icon: Bug },
+        { to: "/my-profile", name: "My Profile", icon: Briefcase },
+      ]
+    : [
+        { to: "/", name: "Dashboard", icon: LayoutDashboard, exact: true },
+        { to: "/tasks", name: "Tasks", icon: CheckSquare },
+        { to: "/tickets", name: "Bug Tickets", icon: Bug },
+        { to: "/employees", name: "Employees", icon: Briefcase },
+        { to: "/clients", name: "Clients", icon: Users },
+        { to: "/projects", name: "Projects", icon: Folder },
+        { to: "/invoices", name: "Invoices", icon: Receipt },
+        { to: "/subscriptions", name: "Subscriptions", icon: CalendarDays },
+      ];
 
   const settingItems = [
     { to: "/settings/profile", name: "Company Profile", icon: Settings },
@@ -92,26 +106,28 @@ export default function Sidebar({
         </div>
 
         {/* SETTINGS Menu */}
-        <div className="mt-6">
-          <div className="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-5 mb-2">
-            SETTINGS
+        {currentUser?.role !== "Employee" && (
+          <div className="mt-6">
+            <div className="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-5 mb-2">
+              SETTINGS
+            </div>
+            <nav className="space-y-0.5 px-2.5">
+              {settingItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <NavLink key={item.to} to={item.to} className={linkClass}>
+                    {({ isActive }) => (
+                      <>
+                        <Icon className={iconClass(isActive)} />
+                        <span>{item.name}</span>
+                      </>
+                    )}
+                  </NavLink>
+                );
+              })}
+            </nav>
           </div>
-          <nav className="space-y-0.5 px-2.5">
-            {settingItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink key={item.to} to={item.to} className={linkClass}>
-                  {({ isActive }) => (
-                    <>
-                      <Icon className={iconClass(isActive)} />
-                      <span>{item.name}</span>
-                    </>
-                  )}
-                </NavLink>
-              );
-            })}
-          </nav>
-        </div>
+        )}
       </div>
     </aside>
   );

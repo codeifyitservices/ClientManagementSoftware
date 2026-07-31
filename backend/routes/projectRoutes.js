@@ -16,11 +16,16 @@ const getNextProjectNumber = async () => {
   return candidate;
 };
 
-// 1. GET /api/projects - Get all projects with client reference & linked invoice reference populated
+// 1. GET /api/projects - Get all projects (or assigned projects if employee)
 router.get("/", async (req, res) => {
   try {
     const { search } = req.query;
     let query = {};
+
+    // Restrict standard employees to only see projects they are assigned to
+    if (req.user.role === "Employee") {
+      query.assignedEmployees = req.user._id;
+    }
 
     if (search) {
       const searchRegex = new RegExp(search, "i");
@@ -43,6 +48,7 @@ router.get("/", async (req, res) => {
     const projects = await Project.find(query)
       .populate("client")
       .populate("milestones.invoice")
+      .populate("assignedEmployees", "fullName employeeId companyEmail department designation")
       .sort({ createdAt: -1 });
 
     res.json(projects);
@@ -56,10 +62,22 @@ router.get("/:id", async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
       .populate("client")
-      .populate("milestones.invoice");
+      .populate("milestones.invoice")
+      .populate("assignedEmployees", "fullName employeeId companyEmail department designation");
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
+
+    // Access control: Employees can only view projects they are assigned to
+    if (req.user.role === "Employee") {
+      const isAssigned = project.assignedEmployees.some(
+        (emp) => emp._id.toString() === req.user._id.toString()
+      );
+      if (!isAssigned) {
+        return res.status(403).json({ message: "Access denied. You are not assigned to this project." });
+      }
+    }
+
     res.json(project);
   } catch (error) {
     res.status(500).json({ message: "Error fetching project detail", error: error.message });
@@ -69,7 +87,7 @@ router.get("/:id", async (req, res) => {
 // 3. POST /api/projects - Create a project
 router.post("/", async (req, res) => {
   try {
-    const { projectName, client, startDate, expectedEndDate, milestones } = req.body;
+    const { projectName, client, startDate, expectedEndDate, milestones, assignedEmployees } = req.body;
 
     if (!projectName || !client || !startDate || !expectedEndDate) {
       return res.status(400).json({ message: "Project Name, Client, Start Date, and Expected End Date are required." });
@@ -84,11 +102,13 @@ router.post("/", async (req, res) => {
       startDate,
       expectedEndDate,
       milestones: milestones || [],
+      assignedEmployees: assignedEmployees || [],
       status: "Ongoing",
     });
 
     const savedProject = await newProject.save();
     const populated = await savedProject.populate("client");
+    await populated.populate("assignedEmployees", "fullName employeeId companyEmail department designation");
 
     res.status(201).json(populated);
   } catch (error) {
@@ -96,10 +116,10 @@ router.post("/", async (req, res) => {
   }
 });
 
-// 4. PUT /api/projects/:id - Update project (including milestones)
+// 4. PUT /api/projects/:id - Update project (including milestones & assigned employees)
 router.put("/:id", async (req, res) => {
   try {
-    const { projectName, client, startDate, expectedEndDate, milestones, status } = req.body;
+    const { projectName, client, startDate, expectedEndDate, milestones, status, assignedEmployees } = req.body;
 
     const project = await Project.findById(req.params.id);
     if (!project) {
@@ -111,6 +131,7 @@ router.put("/:id", async (req, res) => {
     project.startDate = startDate ?? project.startDate;
     project.expectedEndDate = expectedEndDate ?? project.expectedEndDate;
     project.status = status ?? project.status;
+    project.assignedEmployees = assignedEmployees ?? project.assignedEmployees;
 
     if (milestones) {
       // Map existing milestone invoice links back to updated milestones if IDs match
@@ -131,6 +152,7 @@ router.put("/:id", async (req, res) => {
     const updatedProject = await project.save();
     const populated = await updatedProject.populate("client");
     await populated.populate("milestones.invoice");
+    await populated.populate("assignedEmployees", "fullName employeeId companyEmail department designation");
 
     res.json(populated);
   } catch (error) {
