@@ -1,0 +1,35 @@
+appId: com.company.desktopagent
+productName: Company Desktop Agent
+copyright: Copyright © 2026 Company IT Services
+
+directories:
+  output: dist
+  buildResources: assets
+
+files:
+  - "src/**/*"
+  - "assets/**/*"
+  - ".env"
+  - "package.json"
+
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.png
+  publisherName: Company IT Services
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Company Desktop Agent
+
+# Certificate / Signing placeholders for production release builds
+# certificateFile: path/to/certificate.pfx
+# certificatePassword: YOUR_CERTIFICATE_PASSWORD

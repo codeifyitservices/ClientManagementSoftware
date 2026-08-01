@@ -1,0 +1,65 @@
+{
+  "name": "company-desktop-agent",
+  "version": "1.0.1",
+  "description": "Production-ready Windows Desktop Agent for Employee Presence, Idle Monitoring, and Sync",
+  "main": "src/main/main.js",
+  "author": "Company IT Engineering Team",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --env=development",
+    "build": "electron-builder --win",
+    "package": "electron-builder --dir",
+    "make:installer": "electron-builder --win nsis msi"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "electron-log": "^5.2.4",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.company.desktopagent",
+    "productName": "Company Desktop Agent",
+    "copyright": "Copyright © 2026 Company IT Services",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      ".env",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "publisherName": "Company IT Services"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Company Desktop Agent"
+    }
+  }
+}

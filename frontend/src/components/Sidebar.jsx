@@ -12,6 +12,7 @@ import {
   Briefcase,
   CheckSquare,
   Bug,
+  Clock,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -22,12 +23,14 @@ export default function Sidebar({
   const mainItems = currentUser?.role === "Employee"
     ? [
         { to: "/", name: "Dashboard", icon: LayoutDashboard, exact: true },
+        { to: "/attendance", name: "Attendance", icon: Clock },
         { to: "/tasks", name: "Tasks", icon: CheckSquare },
         { to: "/tickets", name: "Bug Tickets", icon: Bug },
         { to: "/my-profile", name: "My Profile", icon: Briefcase },
       ]
     : [
         { to: "/", name: "Dashboard", icon: LayoutDashboard, exact: true },
+        { to: "/attendance", name: "Attendance", icon: Clock },
         { to: "/tasks", name: "Tasks", icon: CheckSquare },
         { to: "/tickets", name: "Bug Tickets", icon: Bug },
         { to: "/employees", name: "Employees", icon: Briefcase },

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Company Desktop Agent - Settings & Status</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">Desktop Agent</h1>
+          <span class="brand-version" id="appVersion">v1.0.0</span>
+        </div>
+      </div>
+      <div class="window-controls">
+        <button class="btn-control btn-minimize" id="btnMinimize" title="Minimize to System Tray">&minus;</button>
+        <button class="btn-control btn-close" id="btnClose" title="Close & Exit Desktop Agent">&times;</button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-content">
+      <!-- Status Card -->
+      <section class="card status-card">
+        <div class="card-header">
+          <h2>Agent Status</h2>
+          <span class="badge badge-offline" id="statusBadge">Checking...</span>
+        </div>
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="label">Employee ID</span>
+            <span class="value" id="employeeId">Not Paired</span>
+          </div>
+          <div class="status-item">
+            <span class="label">Device ID</span>
+            <span class="value code" id="deviceId">Loading...</span>
+          </div>
+          <div class="status-item">
+            <span class="label">Current Activity State</span>
+            <span class="value" id="activityState">Active</span>
+          </div>
+          <div class="status-item">
+            <span class="label">Last Sync</span>
+            <span class="value" id="lastSyncTime">Never</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Device Pairing Card -->
+      <section class="card pairing-card" id="pairingCard">
+        <div class="card-header">
+          <h2>Device Pairing</h2>
+        </div>
+        <p class="card-description">
+          Enter the temporary pairing token generated from the employee web portal or click <strong>Pair Device</strong> on the website.
+        </p>
+        <div class="pairing-form">
+          <div class="input-group">
+            <input type="text" id="pairingTokenInput" placeholder="Enter Token (e.g. PAIR-A1B2C3D4)" autocomplete="off">
+            <button class="btn btn-primary" id="btnPair">Pair Device</button>
+          </div>
+          <div class="error-message" id="pairingError"></div>
+        </div>
+      </section>
+
+      <!-- Agent Actions -->
+      <section class="card actions-card" id="actionsCard">
+        <div class="card-header">
+          <h2>Quick Actions</h2>
+        </div>
+        <div class="action-buttons">
+          <button class="btn btn-secondary" id="btnToggleBreak">⏸️ Take Break</button>
+          <button class="btn btn-secondary" id="btnForceSync">🔄 Sync Now</button>
+          <button class="btn btn-secondary" id="btnCheckUpdates">🚀 Check Updates</button>
+          <button class="btn btn-danger" id="btnLogout">🚪 Unpair & Logout</button>
+        </div>
+      </section>
+
+      <!-- Configuration Card -->
+      <section class="card config-card">
+        <div class="card-header">
+          <h2>System Configuration</h2>
+        </div>
+        <div class="config-grid">
+          <div class="config-item">
+            <span class="label">Idle Threshold</span>
+            <span class="value" id="cfgIdle">15 minutes</span>
+          </div>
+          <div class="config-item">
+            <span class="label">Computer Name</span>
+            <span class="value" id="cfgComputer">Unknown</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Privacy Assurance Banner -->
+      <footer class="privacy-banner">
+        <div class="privacy-icon">🛡️</div>
+        <div class="privacy-text">
+          <strong>Privacy Guarantee:</strong> This desktop agent only measures system idle time and presence. It <em>never</em> logs keystrokes, takes screenshots, or reads personal files.
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

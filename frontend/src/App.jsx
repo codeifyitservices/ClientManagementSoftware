@@ -37,6 +37,7 @@ import TaskListPage from "./components/TaskListPage";
 import TaskDetailPage from "./components/TaskDetailPage";
 import TicketListPage from "./components/TicketListPage";
 import TicketDetailPage from "./components/TicketDetailPage";
+import AttendancePage from "./components/attendance/AttendancePage";
 
 const API_CLIENTS = `${import.meta.env.VITE_BACKEND_URL}/api/clients`;
 const API_INVOICES = `${import.meta.env.VITE_BACKEND_URL}/api/invoices`;
@@ -1043,6 +1044,10 @@ export default function App() {
                 showToast={showToast}
               />
             }
+          />
+          <Route
+            path="attendance"
+            element={<AttendancePage currentUser={currentUser} />}
           />
           <Route
             path="tasks"
