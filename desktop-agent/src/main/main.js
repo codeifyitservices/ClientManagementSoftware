@@ -13,7 +13,9 @@ const machineInfo = require("../utils/machineInfo");
 // Prevent multiple instances of the desktop agent
 const isSingleInstance = app.requestSingleInstanceLock();
 if (!isSingleInstance) {
-  logger.info("Another instance of Desktop Agent is already running. Exiting current process.");
+  logger.info(
+    "Another instance of Desktop Agent is already running. Exiting current process.",
+  );
   app.quit();
   process.exit(0);
 }
@@ -23,7 +25,9 @@ let mainWindow = null;
 // Register custom protocol scheme: desktop-agent://
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(config.appProtocol, process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient(config.appProtocol, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
   }
 } else {
   app.setAsDefaultProtocolClient(config.appProtocol);
@@ -100,7 +104,9 @@ app.on("second-instance", (event, commandLine) => {
   }
 
   // Find deep link URL argument
-  const urlArg = commandLine.find((arg) => arg.startsWith(`${config.appProtocol}://`));
+  const urlArg = commandLine.find((arg) =>
+    arg.startsWith(`${config.appProtocol}://`),
+  );
   if (urlArg) {
     authManager.handleProtocolUrl(urlArg).then(() => {
       if (mainWindow) mainWindow.webContents.send("agent:status-updated");
@@ -140,6 +146,18 @@ app.whenReady().then(() => {
   // Initialize Auto Updater
   autoUpdater.init();
   autoUpdater.checkForUpdates();
+
+  // Check process.argv for deep link URL on startup
+  const urlArg = process.argv.find((arg) =>
+    arg.startsWith(`${config.appProtocol}://`),
+  );
+  if (urlArg) {
+    logger.info("Startup deep link detected in process.argv", { urlArg });
+    authManager.handleProtocolUrl(urlArg).then(() => {
+      if (mainWindow) mainWindow.webContents.send("agent:status-updated");
+      heartbeatService.forceSyncNow();
+    });
+  }
 
   // Register IPC Handlers for Settings UI
   ipcMain.handle("agent:get-status", () => {

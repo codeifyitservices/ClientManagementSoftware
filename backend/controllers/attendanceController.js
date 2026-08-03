@@ -1,5 +1,6 @@
 import Attendance from "../models/attendanceModel.js";
 import Employee from "../models/employeeModel.js";
+import AgentSession from "../models/agentSessionModel.js";
 
 /**
  * Helper to get current YYYY-MM-DD string
@@ -29,6 +30,23 @@ export const checkIn = async (req, res) => {
     const employee = await Employee.findById(employeeId);
     if (!employee) {
       return res.status(404).json({ success: false, message: "Employee not found" });
+    }
+
+    // Verify desktop agent is connected for Employee check-in
+    if (req.user?.role === "Employee") {
+      const agentSession = await AgentSession.findOne({
+        $or: [
+          { employeeId: employee.employeeId },
+          { employeeId: employee._id.toString() }
+        ]
+      }).sort({ lastHeartbeatAt: -1 });
+      const isAgentConnected = !!(agentSession && agentSession.isPaired && (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000));
+      if (!isAgentConnected) {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot check in: Desktop agent is not running or connected. Please launch the desktop agent first."
+        });
+      }
     }
 
     const todayStr = getTodayDateString();
@@ -306,12 +324,44 @@ const autoCheckStaleAgentSessions = async (todayStr) => {
 export const getMyAttendanceSession = async (req, res) => {
   try {
     const todayStr = getTodayDateString();
-    const attendance = await Attendance.findOne({ employee: req.user._id, date: todayStr }).populate("employee", "fullName name companyEmail email department employeeId role");
+    const queryDate = req.query.date || todayStr;
+    const attendance = await Attendance.findOne({ employee: req.user._id, date: queryDate }).populate("employee", "fullName name companyEmail email department employeeId role");
+
+    // Fetch desktop agent pairing session for connection status
+    const agentSession = await AgentSession.findOne({
+      $or: [
+        { employeeId: req.user.employeeId },
+        { employeeId: req.user._id.toString() }
+      ]
+    }).sort({ lastHeartbeatAt: -1 });
+    
+    // Connected if paired and has had a heartbeat in the last 3 minutes (180,000 ms)
+    const isAgentConnected = !!(agentSession && agentSession.isPaired && (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000));
+    
+    // If agent is connected, ensure status is "Working" immediately (override idle/inactive)
+    if (isAgentConnected && attendance && attendance.currentStatus !== "Working" && attendance.currentStatus !== "Checked Out" && attendance.currentStatus !== "On Break") {
+      if (attendance.currentStatus === "Idle") {
+        const elapsedMins = (Date.now() - new Date(attendance.lastActivityAt || Date.now()).getTime()) / 60000;
+        attendance.totalIdleMinutes = (attendance.totalIdleMinutes || 0) + elapsedMins;
+      }
+      attendance.currentStatus = "Working";
+      attendance.lastActivityAt = new Date();
+      attendance.timeline.push({
+        eventType: "Became Active",
+        timestamp: new Date(),
+        description: "User resumed active desktop work (Auto-Sync)",
+        source: "Desktop Agent",
+      });
+      await attendance.save();
+    }
+    const agentDeviceName = agentSession ? agentSession.computerName : null;
 
     return res.status(200).json({
       success: true,
       currentStatus: attendance?.currentStatus || "Not Checked In",
       attendance,
+      isAgentConnected,
+      agentDeviceName,
     });
   } catch (error) {
     console.error("Error in getMyAttendanceSession:", error);
@@ -343,6 +393,15 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
     if (attendance.currentStatus === "Checked Out") return;
 
     const oldStatus = attendance.currentStatus;
+    const oldLastActivityAt = attendance.lastActivityAt || new Date();
+
+    // 1. Calculate incremental idle time when agent is reporting
+    const prevIdleSeconds = attendance.systemIdleSeconds || 0;
+    if (idleTimeSeconds > prevIdleSeconds) {
+      const incrementalIdleMins = (idleTimeSeconds - prevIdleSeconds) / 60;
+      attendance.totalIdleMinutes = (attendance.totalIdleMinutes || 0) + incrementalIdleMins;
+    }
+
     attendance.deviceId = deviceId;
     attendance.deviceName = computerName;
     attendance.systemIdleSeconds = idleTimeSeconds;
@@ -396,16 +455,22 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
         description: "Status changed to On Break via Desktop Agent",
         source: "Desktop Agent",
       });
-    } else if (status === "Idle" && oldStatus !== "Idle") {
-      attendance.currentStatus = "Idle";
-      attendance.totalIdleMinutes += 1;
-      attendance.timeline.push({
-        eventType: "Became Idle",
-        timestamp: new Date(),
-        description: `System idle for ${Math.round((idleTimeSeconds || 0) / 60)} minutes`,
-        source: "Desktop Agent",
-      });
+    } else if (status === "Idle") {
+      if (oldStatus !== "Idle") {
+        attendance.currentStatus = "Idle";
+        const initialIdleMins = Math.round((idleTimeSeconds || 0) / 60);
+        attendance.timeline.push({
+          eventType: "Became Idle",
+          timestamp: new Date(),
+          description: `System idle for ${initialIdleMins} minutes`,
+          source: "Desktop Agent",
+        });
+      }
     } else if (status === "Offline" || status === "Disconnected") {
+      if (oldStatus === "Idle") {
+        const elapsedMins = (Date.now() - new Date(oldLastActivityAt).getTime()) / 60000;
+        attendance.totalIdleMinutes = (attendance.totalIdleMinutes || 0) + elapsedMins;
+      }
       attendance.currentStatus = "Idle";
       attendance.timeline.push({
         eventType: "Became Idle",
@@ -415,6 +480,10 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
       });
     } else if (status === "Active" || status === "Working") {
       if (oldStatus !== "Working") {
+        if (oldStatus === "Idle") {
+          const elapsedMins = (Date.now() - new Date(oldLastActivityAt).getTime()) / 60000;
+          attendance.totalIdleMinutes = (attendance.totalIdleMinutes || 0) + elapsedMins;
+        }
         attendance.timeline.push({
           eventType: "Became Active",
           timestamp: new Date(),
@@ -423,6 +492,31 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
         });
       }
       attendance.currentStatus = "Working";
+    }
+
+    // Calculate longest idle minutes
+    const currentIdleMins = Math.round((idleTimeSeconds || 0) / 60);
+    if (currentIdleMins > (attendance.longestIdleMinutes || 0)) {
+      attendance.longestIdleMinutes = currentIdleMins;
+    }
+
+    // Ensure totalIdleMinutes is at least longestIdleMinutes
+    if ((attendance.totalIdleMinutes || 0) < (attendance.longestIdleMinutes || 0)) {
+      attendance.totalIdleMinutes = attendance.longestIdleMinutes;
+    }
+
+    // Calculate activityScore dynamically (percentage of active time over total working time)
+    let totalWorkingMins = attendance.totalWorkingMinutes || 0;
+    if (attendance.checkInTime && !attendance.checkOutTime) {
+      const elapsedMins = Math.round((Date.now() - new Date(attendance.checkInTime).getTime()) / 60000);
+      totalWorkingMins = Math.max(0, elapsedMins - (attendance.totalBreakMinutes || 0));
+    }
+    
+    if (totalWorkingMins > 0) {
+      const activeMins = Math.max(0, totalWorkingMins - (attendance.totalIdleMinutes || 0));
+      attendance.activityScore = Math.max(0, Math.min(100, Math.round((activeMins / totalWorkingMins) * 100)));
+    } else {
+      attendance.activityScore = 100;
     }
 
     await attendance.save();
@@ -440,14 +534,42 @@ export const getTodaySummary = async (req, res) => {
 
     // MANDATORY RBAC DATA ISOLATION (ProjectRules.md)
     if (req.user?.role === "Employee") {
-      const myRecord = await Attendance.findOne({ employee: userId, date: todayStr });
-      const startOfMonth = new Date();
+      const targetDate = req.query.date || todayStr;
+      const myRecord = await Attendance.findOne({ employee: userId, date: targetDate });
+      
+      // Fetch desktop agent pairing session for connection status
+      const agentSession = await AgentSession.findOne({
+        $or: [
+          { employeeId: req.user.employeeId },
+          { employeeId: req.user._id.toString() }
+        ]
+      }).sort({ lastHeartbeatAt: -1 });
+      const isAgentConnected = !!(agentSession && agentSession.isPaired && (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000));
+
+      // If agent is connected, ensure status is "Working" immediately (override idle/inactive)
+      if (isAgentConnected && myRecord && myRecord.currentStatus !== "Working" && myRecord.currentStatus !== "Checked Out" && myRecord.currentStatus !== "On Break") {
+        if (myRecord.currentStatus === "Idle") {
+          const elapsedMins = (Date.now() - new Date(myRecord.lastActivityAt || Date.now()).getTime()) / 60000;
+          myRecord.totalIdleMinutes = (myRecord.totalIdleMinutes || 0) + elapsedMins;
+        }
+        myRecord.currentStatus = "Working";
+        myRecord.lastActivityAt = new Date();
+        myRecord.timeline.push({
+          eventType: "Became Active",
+          timestamp: new Date(),
+          description: "User resumed active desktop work (Auto-Sync)",
+          source: "Desktop Agent",
+        });
+        await myRecord.save();
+      }
+
+      const startOfMonth = new Date(targetDate);
       startOfMonth.setDate(1);
       const startOfMonthStr = getTodayDateString(startOfMonth);
 
       const monthRecords = await Attendance.find({
         employee: userId,
-        date: { $gte: startOfMonthStr },
+        date: { $gte: startOfMonthStr, $lte: targetDate },
       });
 
       let totalMonthMins = 0;
@@ -464,6 +586,55 @@ export const getTodaySummary = async (req, res) => {
         currentWorkMins = Math.max(0, elapsedMins - (myRecord.totalBreakMinutes || 0));
       }
 
+      // Calculate week dates (Monday to Sunday) containing targetDate
+      const target = new Date(targetDate);
+      const dayOfWeek = target.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+      const diffToMon = target.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const monday = new Date(target.setDate(diffToMon));
+
+      const weekDates = [];
+      const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      for (let i = 0; i < 7; i++) {
+        const nextDay = new Date(monday);
+        nextDay.setDate(monday.getDate() + i);
+        weekDates.push(getTodayDateString(nextDay));
+      }
+
+      const weekRecords = await Attendance.find({
+        employee: userId,
+        date: { $in: weekDates },
+      });
+
+      const recordsByDate = {};
+      weekRecords.forEach((r) => {
+        recordsByDate[r.date] = r;
+      });
+
+      const weekTrend = dayNames.map((name, index) => {
+        const dateStr = weekDates[index];
+        const record = recordsByDate[dateStr];
+        let workingMinutes = record?.totalWorkingMinutes || 0;
+
+        // If today is in the week trend and we are currently working, calculate live elapsed working minutes
+        if (dateStr === todayStr && record && record.checkInTime && !record.checkOutTime && record.currentStatus !== "On Break") {
+          const elapsedMins = Math.round((Date.now() - new Date(record.checkInTime).getTime()) / 60000);
+          workingMinutes = Math.max(0, elapsedMins - (record.totalBreakMinutes || 0));
+        }
+
+        const hrs = Math.floor(workingMinutes / 60);
+        const mins = workingMinutes % 60;
+        const label = workingMinutes > 0 ? `${hrs}h ${String(mins).padStart(2, "0")}m` : "";
+        const decimalHours = parseFloat((workingMinutes / 60).toFixed(2));
+
+        return {
+          day: name,
+          date: dateStr,
+          workingMinutes,
+          hours: decimalHours,
+          label,
+        };
+      });
+
       return res.status(200).json({
         success: true,
         isEmployeeView: true,
@@ -473,14 +644,22 @@ export const getTodaySummary = async (req, res) => {
           myCheckInTime: myRecord?.checkInTime || null,
           myCheckOutTime: myRecord?.checkOutTime || null,
           myWorkingHoursToday: (currentWorkMins / 60).toFixed(1),
+          myWorkingMinutesToday: currentWorkMins,
           myBreakMinutesToday: myRecord?.totalBreakMinutes || 0,
           myMonthlyHours: (totalMonthMins / 60).toFixed(1),
           myLateCheckIns: lateCheckInsMonth,
+          longestIdleMinutes: myRecord?.longestIdleMinutes || 0,
+          activityScore: myRecord?.activityScore !== undefined ? myRecord.activityScore : 100,
+          notes: myRecord?.notes || "",
+          totalIdleMinutes: Math.round(myRecord?.totalIdleMinutes || 0),
+          breaks: myRecord?.breaks || [],
+          timeline: myRecord?.timeline || [],
         },
         trends: {
           todayCount: myRecord?.checkInTime ? 1 : 0,
           weekCount: monthRecords.length,
           monthCount: monthRecords.length,
+          weekTrend,
         },
       });
     }
@@ -988,5 +1167,43 @@ export const getAttendanceReports = async (req, res) => {
   } catch (error) {
     console.error("Error in getAttendanceReports:", error);
     return res.status(500).json({ success: false, message: "Failed to generate attendance reports", error: error.message });
+  }
+};
+
+/**
+ * @desc    Save Attendance Note
+ * @route   POST /api/attendance/note
+ * @access  Private
+ */
+export const saveAttendanceNote = async (req, res) => {
+  try {
+    const employeeId = req.user?._id;
+    const { date, note } = req.body;
+
+    if (!date) {
+      return res.status(400).json({ success: false, message: "Date is required" });
+    }
+
+    let attendance = await Attendance.findOne({ employee: employeeId, date });
+    if (!attendance) {
+      attendance = new Attendance({
+        employee: employeeId,
+        date,
+        currentStatus: "Not Checked In",
+        attendanceStatus: "Absent",
+      });
+    }
+
+    attendance.notes = note || "";
+    await attendance.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance note saved successfully",
+      attendance,
+    });
+  } catch (error) {
+    console.error("Error in saveAttendanceNote:", error);
+    return res.status(500).json({ success: false, message: "Failed to save note", error: error.message });
   }
 };

@@ -20,7 +20,11 @@ import {
 } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
-export default function AttendanceTable({ currentUser, onViewDetails, onEditAttendance }) {
+export default function AttendanceTable({
+  currentUser,
+  onViewDetails,
+  onEditAttendance,
+}) {
   const isEmployee = currentUser?.role === "Employee";
   const [viewMode, setViewMode] = useState(isEmployee ? "calendar" : "list"); // Default to calendar for Employees
   const [records, setRecords] = useState([]);
@@ -30,7 +34,9 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1 });
 
@@ -68,7 +74,9 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
       const year = calendarDate.getFullYear();
       const month = calendarDate.getMonth();
       const firstDayStr = new Date(year, month, 1).toISOString().split("T")[0];
-      const lastDayStr = new Date(year, month + 1, 0).toISOString().split("T")[0];
+      const lastDayStr = new Date(year, month + 1, 0)
+        .toISOString()
+        .split("T")[0];
 
       const res = await attendanceService.getReports({
         startDate: firstDayStr,
@@ -97,7 +105,9 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
               date: r.date,
               checkInTime: r.checkInTime !== "-" ? r.checkInTime : null,
               checkOutTime: r.checkOutTime !== "-" ? r.checkOutTime : null,
-              totalWorkingMinutes: Math.round(parseFloat(r.workingHours || 0) * 60),
+              totalWorkingMinutes: Math.round(
+                parseFloat(r.workingHours || 0) * 60,
+              ),
               totalBreakMinutes: Math.round(parseFloat(r.breakHours || 0) * 60),
               attendanceStatus: r.attendanceStatus || "Present",
               currentStatus: r.status || "Checked Out",
@@ -124,23 +134,59 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
       const interval = setInterval(() => fetchCalendarMonthData(true), 10000);
       return () => clearInterval(interval);
     }
-  }, [viewMode, search, departmentFilter, statusFilter, selectedDate, page, calendarDate]);
+  }, [
+    viewMode,
+    search,
+    departmentFilter,
+    statusFilter,
+    selectedDate,
+    page,
+    calendarDate,
+  ]);
 
   const handleExportCSV = () => {
     if (!records.length) return;
-    const headers = ["Employee ID", "Name", "Department", "Date", "Check-In", "Check-Out", "Status", "Work Hours", "Break Minutes", "Attendance Status"];
+    const headers = [
+      "Employee ID",
+      "Name",
+      "Department",
+      "Date",
+      "Check-In",
+      "Check-Out",
+      "Status",
+      "Work Hours",
+      "Break Minutes",
+      "Attendance Status",
+    ];
     const csvRows = [headers.join(",")];
 
     records.forEach((r) => {
       const empName = `"${r.employee?.fullName || r.employee?.name || "Unknown"}"`;
       const empId = `"${r.employeeCustomId || r.employee?.employeeId || ""}"`;
       const dept = `"${r.employee?.department || "General"}"`;
-      const checkIn = r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString() : "-";
-      const checkOut = r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString() : "-";
+      const checkIn = r.checkInTime
+        ? new Date(r.checkInTime).toLocaleTimeString()
+        : "-";
+      const checkOut = r.checkOutTime
+        ? new Date(r.checkOutTime).toLocaleTimeString()
+        : "-";
       const workHrs = ((r.totalWorkingMinutes || 0) / 60).toFixed(1);
       const breakMins = r.totalBreakMinutes || 0;
 
-      csvRows.push([empId, empName, dept, r.date, checkIn, checkOut, r.currentStatus, workHrs, breakMins, r.attendanceStatus].join(","));
+      csvRows.push(
+        [
+          empId,
+          empName,
+          dept,
+          r.date,
+          checkIn,
+          checkOut,
+          r.currentStatus,
+          workHrs,
+          breakMins,
+          r.attendanceStatus,
+        ].join(","),
+      );
     });
 
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
@@ -179,8 +225,18 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
   const todayStr = new Date().toISOString().split("T")[0];
 
   const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -190,7 +246,9 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h3 className="text-slate-900 font-extrabold text-base">
-            {isEmployee ? "My Attendance Records" : "Company Attendance Records"}
+            {isEmployee
+              ? "My Attendance Records"
+              : "Company Attendance Records"}
           </h3>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
             {isEmployee
@@ -264,7 +322,7 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                 onClick={() => setCalendarDate(new Date())}
                 className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
               >
-                Today
+                {monthNames[month]}
               </button>
               <button
                 onClick={nextMonth}
@@ -289,7 +347,10 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
           <div className="grid grid-cols-7 gap-2">
             {/* Blank leading cells */}
             {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
-              <div key={`blank-${idx}`} className="h-28 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200/60 opacity-40"></div>
+              <div
+                key={`blank-${idx}`}
+                className="h-28 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200/60 opacity-40"
+              ></div>
             ))}
 
             {/* Day Cells */}
@@ -312,12 +373,21 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                 } else if (record.attendanceStatus === "Absent") {
                   statusColor = "bg-rose-50 border-rose-200 text-rose-700";
                   badgeText = "Absent";
-                } else if (record.attendanceStatus === "Half Day" || record.attendanceStatus === "On Leave") {
+                } else if (
+                  record.attendanceStatus === "Half Day" ||
+                  record.attendanceStatus === "On Leave"
+                ) {
                   statusColor = "bg-indigo-50 border-indigo-200 text-[#5D5FEF]";
                   badgeText = record.attendanceStatus;
-                } else if (record.checkInTime || record.currentStatus === "Working" || record.currentStatus === "Checked Out") {
-                  statusColor = "bg-emerald-50 border-emerald-200 text-emerald-700";
-                  badgeText = record.currentStatus === "Working" ? "Working" : "Present";
+                } else if (
+                  record.checkInTime ||
+                  record.currentStatus === "Working" ||
+                  record.currentStatus === "Checked Out"
+                ) {
+                  statusColor =
+                    "bg-emerald-50 border-emerald-200 text-emerald-700";
+                  badgeText =
+                    record.currentStatus === "Working" ? "Working" : "Present";
                 }
               }
 
@@ -330,16 +400,24 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                     }
                   }}
                   className={`h-28 p-2.5 rounded-2xl border transition flex flex-col justify-between ${
-                    record ? "cursor-pointer hover:shadow-md hover:border-[#5D5FEF]" : "cursor-default"
+                    record
+                      ? "cursor-pointer hover:shadow-md hover:border-[#5D5FEF]"
+                      : "cursor-default"
                   } ${
-                    isToday ? "ring-2 ring-[#5D5FEF] ring-offset-2 bg-white" : "bg-white"
+                    isToday
+                      ? "ring-2 ring-[#5D5FEF] ring-offset-2 bg-white"
+                      : "bg-white"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className={`text-xs font-black ${isToday ? "text-[#5D5FEF]" : "text-slate-800"}`}>
+                    <span
+                      className={`text-xs font-black ${isToday ? "text-[#5D5FEF]" : "text-slate-800"}`}
+                    >
                       {dayNum}
                     </span>
-                    <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border ${statusColor}`}>
+                    <span
+                      className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md border ${statusColor}`}
+                    >
                       {badgeText}
                     </span>
                   </div>
@@ -348,14 +426,29 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                     <div className="space-y-1 mt-1">
                       <div className="text-[10px] font-bold text-slate-700 font-mono flex items-center justify-between">
                         <span>In:</span>
-                        <span>{record.checkInTime ? new Date(record.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "-"}</span>
+                        <span>
+                          {record.checkInTime
+                            ? new Date(record.checkInTime).toLocaleTimeString(
+                                [],
+                                { hour: "2-digit", minute: "2-digit" },
+                              )
+                            : "-"}
+                        </span>
                       </div>
                       <div className="text-[10px] font-semibold text-slate-500 font-mono flex items-center justify-between">
                         <span>Out:</span>
-                        <span>{record.checkOutTime ? new Date(record.checkOutTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "-"}</span>
+                        <span>
+                          {record.checkOutTime
+                            ? new Date(record.checkOutTime).toLocaleTimeString(
+                                [],
+                                { hour: "2-digit", minute: "2-digit" },
+                              )
+                            : "-"}
+                        </span>
                       </div>
                       <div className="text-[10px] font-black text-[#5D5FEF] font-mono text-right">
-                        {((record.totalWorkingMinutes || 0) / 60).toFixed(1)} hrs
+                        {((record.totalWorkingMinutes || 0) / 60).toFixed(1)}{" "}
+                        hrs
                       </div>
                     </div>
                   )}
@@ -461,27 +554,42 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                   <th className="py-3.5 px-4">Work Hours</th>
                   <th className="py-3.5 px-4">Break Time</th>
                   <th className="py-3.5 px-4">Attendance</th>
-                  <th className="py-3.5 px-4 text-right rounded-r-xl">Actions</th>
+                  <th className="py-3.5 px-4 text-right rounded-r-xl">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
+                    <td
+                      colSpan={8}
+                      className="py-8 text-center text-slate-400 font-medium"
+                    >
                       Loading attendance records...
                     </td>
                   </tr>
                 ) : records.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
+                    <td
+                      colSpan={8}
+                      className="py-8 text-center text-slate-400 font-medium"
+                    >
                       No attendance records found.
                     </td>
                   </tr>
                 ) : (
                   records.map((rec) => {
                     const emp = rec.employee || {};
-                    const displayName = emp.fullName || emp.name || emp.companyEmail || emp.email || "Employee";
-                    const workHrs = ((rec.totalWorkingMinutes || 0) / 60).toFixed(1);
+                    const displayName =
+                      emp.fullName ||
+                      emp.name ||
+                      emp.companyEmail ||
+                      emp.email ||
+                      "Employee";
+                    const workHrs = (
+                      (rec.totalWorkingMinutes || 0) / 60
+                    ).toFixed(1);
                     const breakMins = rec.totalBreakMinutes || 0;
 
                     const getAvatarStatusDot = (status) => {
@@ -499,7 +607,10 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                     };
 
                     return (
-                      <tr key={rec._id} className="hover:bg-slate-50/80 transition">
+                      <tr
+                        key={rec._id}
+                        className="hover:bg-slate-50/80 transition"
+                      >
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
                             <div className="relative">
@@ -512,29 +623,51 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                               />
                             </div>
                             <div>
-                              <div className="font-bold text-slate-900">{displayName}</div>
-                              <div className="text-[11px] font-semibold text-slate-400">{rec.employeeCustomId || emp.employeeId || emp._id}</div>
+                              <div className="font-bold text-slate-900">
+                                {displayName}
+                              </div>
+                              <div className="text-[11px] font-semibold text-slate-400">
+                                {rec.employeeCustomId ||
+                                  emp.employeeId ||
+                                  emp._id}
+                              </div>
                             </div>
                           </div>
                         </td>
 
                         <td className="py-3.5 px-4 text-slate-700 font-mono font-semibold">
-                          {rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "-"}
+                          {rec.checkInTime
+                            ? new Date(rec.checkInTime).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "-"}
                         </td>
 
                         <td className="py-3.5 px-4 text-slate-700 font-mono font-semibold">
-                          {rec.checkOutTime ? new Date(rec.checkOutTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "-"}
+                          {rec.checkOutTime
+                            ? new Date(rec.checkOutTime).toLocaleTimeString(
+                                [],
+                                { hour: "2-digit", minute: "2-digit" },
+                              )
+                            : "-"}
                         </td>
 
                         <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${getStatusBadge(rec.currentStatus)}`}>
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${getStatusBadge(rec.currentStatus)}`}
+                          >
                             {rec.currentStatus}
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 font-bold text-[#5D5FEF] font-mono">{workHrs} hrs</td>
+                        <td className="py-3.5 px-4 font-bold text-[#5D5FEF] font-mono">
+                          {workHrs} hrs
+                        </td>
 
-                        <td className="py-3.5 px-4 text-slate-500 font-mono">{breakMins} mins</td>
+                        <td className="py-3.5 px-4 text-slate-500 font-mono">
+                          {breakMins} mins
+                        </td>
 
                         <td className="py-3.5 px-4">
                           <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
@@ -573,7 +706,9 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
           {/* Pagination Footer */}
           <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-200 text-xs text-slate-500 font-medium">
             <div>
-              Showing page <strong>{pagination.page}</strong> of <strong>{pagination.pages || 1}</strong> ({pagination.total} records total)
+              Showing page <strong>{pagination.page}</strong> of{" "}
+              <strong>{pagination.pages || 1}</strong> ({pagination.total}{" "}
+              records total)
             </div>
 
             <div className="flex items-center gap-2">
@@ -585,7 +720,9 @@ export default function AttendanceTable({ currentUser, onViewDetails, onEditAtte
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <button
-                onClick={() => setPage((p) => Math.min(pagination.pages || 1, p + 1))}
+                onClick={() =>
+                  setPage((p) => Math.min(pagination.pages || 1, p + 1))
+                }
                 disabled={page >= (pagination.pages || 1)}
                 className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 disabled:opacity-40 hover:bg-slate-100 transition cursor-pointer"
               >

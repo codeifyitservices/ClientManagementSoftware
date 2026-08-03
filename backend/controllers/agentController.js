@@ -152,8 +152,10 @@ export const receiveHeartbeat = async (req, res) => {
     });
 
     const finalStatus = syncRes?.serverStatus || session.currentStatus;
-    if (session.currentStatus !== finalStatus) {
-      session.currentStatus = finalStatus;
+    const agentPersistedStatus = finalStatus === "Working" ? "Active" : finalStatus;
+
+    if (session.currentStatus !== agentPersistedStatus) {
+      session.currentStatus = agentPersistedStatus;
       await session.save();
     }
 
@@ -268,6 +270,12 @@ export const logoutAgentDevice = async (req, res) => {
  */
 export const downloadAgentInstaller = async (req, res) => {
   try {
+    // 0. Support external CDN/Storage redirect for production (e.g. Vercel, Render)
+    const externalUrl = process.env.AGENT_INSTALLER_URL;
+    if (externalUrl) {
+      return res.redirect(externalUrl);
+    }
+
     const fs = await import("fs");
     const path = await import("path");
 

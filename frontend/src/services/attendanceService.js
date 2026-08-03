@@ -51,14 +51,16 @@ export const attendanceService = {
   },
 
   // Get My Attendance Session (Ultra Fast)
-  getMySession: async () => {
-    const res = await fetch(`${API_BASE}/my-session`, { headers: getHeaders() });
+  getMySession: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/my-session?${query}`, { headers: getHeaders() });
     return res.json();
   },
 
   // Get Today Summary Stats
-  getSummary: async () => {
-    const res = await fetch(`${API_BASE}/summary`, { headers: getHeaders() });
+  getSummary: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/summary?${query}`, { headers: getHeaders() });
     return res.json();
   },
 
@@ -118,6 +120,16 @@ export const attendanceService = {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify({ employeeId }),
+    });
+    return res.json();
+  },
+
+  // Save Attendance Note
+  saveNote: async (data) => {
+    const res = await fetch(`${API_BASE}/note`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
     });
     return res.json();
   },

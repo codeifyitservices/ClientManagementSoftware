@@ -13,16 +13,21 @@ import AttendanceReports from "./AttendanceReports";
 import AttendanceDetailsModal from "./AttendanceDetailsModal";
 import ManualAttendanceModal from "./ManualAttendanceModal";
 import AgentPairingModal from "./AgentPairingModal";
+import EmployeeAttendanceDashboard from "./EmployeeAttendanceDashboard";
 
 export default function AttendancePage({ currentUser }) {
+  const isManager = currentUser?.role !== "Employee";
+
+  if (!isManager) {
+    return <EmployeeAttendanceDashboard currentUser={currentUser} />;
+  }
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showAgentPairingModal, setShowAgentPairingModal] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  const isManager = currentUser?.role !== "Employee";
 
   const handleViewDetails = (record) => {
     setSelectedRecord(record);

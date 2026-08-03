@@ -78,6 +78,22 @@ class AuthManager {
           return await this.pairWithToken(token, empId);
         }
       }
+
+      if (parsedUrl.hostname === "status" || parsedUrl.pathname.includes("status")) {
+        const val = parsedUrl.searchParams.get("value");
+        if (val) {
+          logger.info(`Setting status from deep link: ${val}`);
+          const onBreak = val === "On Break";
+          const idleDetector = require("../idle/idleDetector");
+          const trayManager = require("../tray/trayManager");
+          const heartbeatService = require("../heartbeat/heartbeatService");
+
+          idleDetector.setManualBreak(onBreak);
+          trayManager.updateTrayStatus(idleDetector.getCurrentStatus());
+          // Force sync to the server
+          await heartbeatService.forceSyncNow();
+        }
+      }
     } catch (err) {
       logger.error("Failed to parse deep link URL", err);
     }

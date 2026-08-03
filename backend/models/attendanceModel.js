@@ -173,6 +173,18 @@ const attendanceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    longestIdleMinutes: {
+      type: Number,
+      default: 0,
+    },
+    activityScore: {
+      type: Number,
+      default: 100,
+    },
+    notes: {
+      type: String,
+      default: "",
+    },
     timeline: [timelineEventSchema],
     correctionRequests: [correctionRequestSchema],
     adminRemarks: {

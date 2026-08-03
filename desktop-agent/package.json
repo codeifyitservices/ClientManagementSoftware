@@ -37,6 +37,7 @@
       "package.json"
     ],
     "win": {
+      "sign": null,
       "target": [
         {
           "target": "nsis",

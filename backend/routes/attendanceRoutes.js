@@ -12,6 +12,7 @@ import {
   approveCorrection,
   getAttendanceReports,
   getMyAttendanceSession,
+  saveAttendanceNote,
 } from "../controllers/attendanceController.js";
 
 const router = express.Router();
@@ -28,5 +29,6 @@ router.post("/manual", manualUpsertAttendance);
 router.post("/request-correction", requestCorrection);
 router.post("/approve-correction", approveCorrection);
 router.get("/reports", getAttendanceReports);
+router.post("/note", saveAttendanceNote);
 
 export default router;
