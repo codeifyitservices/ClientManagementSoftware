@@ -32,6 +32,7 @@ import EmployeeList from "./components/EmployeeList";
 import EmployeeProfile from "./components/EmployeeProfile";
 import EmployeeModal from "./components/EmployeeModal";
 import EmployeeDashboard from "./components/EmployeeDashboard";
+import HRDashboard from "./components/HRDashboard";
 import { useAppService } from "./services/appService";
 import TaskListPage from "./components/TaskListPage";
 import TaskDetailPage from "./components/TaskDetailPage";
@@ -140,7 +141,11 @@ function AppShell({
   fetchInvoices,
   activeAlerts = [],
   onDismissAlert,
-  currentUser = { role: "Admin", email: "admin@codenap.in", fullName: "System Admin" },
+  currentUser = {
+    role: "Admin",
+    email: "admin@codenap.in",
+    fullName: "System Admin",
+  },
   notifications = [],
   unreadNotificationsCount = 0,
   fetchNotifications,
@@ -161,7 +166,10 @@ function AppShell({
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
         setShowUserMenu(false);
       }
-      if (notificationMenuRef.current && !notificationMenuRef.current.contains(e.target)) {
+      if (
+        notificationMenuRef.current &&
+        !notificationMenuRef.current.contains(e.target)
+      ) {
         setShowNotificationMenu(false);
       }
     };
@@ -172,7 +180,10 @@ function AppShell({
   const headerMeta = {
     "/": {
       title: "Dashboard",
-      sub: currentUser?.role === "Employee" ? "Employee Workspace" : "Welcome back, Admin!",
+      sub:
+        currentUser?.role === "Employee"
+          ? "Employee Workspace"
+          : "Welcome back, Admin!",
     },
     "/clients": {
       title: "Clients Profiles",
@@ -240,37 +251,40 @@ function AppShell({
     },
   };
 
-
   const isEditInvoice = /^\/invoices\/.+\/edit$/.test(path);
   const isEmployeeProfile = /^\/employees\/.+$/.test(path);
   const isTaskDetail = /^\/tasks\/.+$/.test(path);
   const isTicketDetail = /^\/tickets\/.+$/.test(path);
-  
+
   const currentMeta = isEditInvoice
     ? {
         title: "Edit Invoice",
         sub: "Modify fields and item calculations on existing invoice records",
       }
     : isEmployeeProfile
-    ? {
-        title: "Employee Profile",
-        sub: "Detailed profile, personal records, identity proofs, notes, and activity timeline",
-      }
-    : isTaskDetail
-    ? {
-        title: "Task Details",
-        sub: "Review task details, track progress, and write comments",
-      }
-    : isTicketDetail
-    ? {
-        title: "Bug Ticket Details",
-        sub: "Review reproduction steps, assign developer, and resolve bug ticket",
-      }
-    : headerMeta[path] || { title: "", sub: "" };
+      ? {
+          title: "Employee Profile",
+          sub: "Detailed profile, personal records, identity proofs, notes, and activity timeline",
+        }
+      : isTaskDetail
+        ? {
+            title: "Task Details",
+            sub: "Review task details, track progress, and write comments",
+          }
+        : isTicketDetail
+          ? {
+              title: "Bug Ticket Details",
+              sub: "Review reproduction steps, assign developer, and resolve bug ticket",
+            }
+          : headerMeta[path] || { title: "", sub: "" };
 
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-800 grid-bg flex">
-      <Sidebar companyName={companyName} companyLogo={companyLogo} currentUser={currentUser} />
+      <Sidebar
+        companyName={companyName}
+        companyLogo={companyLogo}
+        currentUser={currentUser}
+      />
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Page Header */}
@@ -325,7 +339,7 @@ function AppShell({
                 className="relative p-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer select-none flex items-center justify-center animate-none"
               >
                 <Bell className="h-4 w-4" />
-                {(activeAlerts.length + unreadNotificationsCount) > 0 && (
+                {activeAlerts.length + unreadNotificationsCount > 0 && (
                   <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[8px] font-black flex items-center justify-center animate-bounce">
                     {activeAlerts.length + unreadNotificationsCount}
                   </span>
@@ -350,13 +364,21 @@ function AppShell({
                   <div className="max-h-64 overflow-y-auto divide-y divide-slate-50 mt-1">
                     {/* Subscription Alerts */}
                     {activeAlerts.map((alert) => (
-                      <div key={`${alert.subscriptionId}-${alert.alertType}`} className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-slate-50/50">
+                      <div
+                        key={`${alert.subscriptionId}-${alert.alertType}`}
+                        className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-slate-50/50"
+                      >
                         <div className="flex-1 min-w-0">
                           <p className="text-[10px] font-bold text-slate-900 leading-tight truncate">
                             {alert.client?.companyName}
                           </p>
                           <p className="text-[9px] text-slate-450 mt-0.5 leading-relaxed">
-                            {alert.type.charAt(0).toUpperCase() + alert.type.slice(1)} subscription expires on {new Date(alert.endDate).toLocaleDateString("en-IN")}
+                            {alert.type.charAt(0).toUpperCase() +
+                              alert.type.slice(1)}{" "}
+                            subscription expires on{" "}
+                            {new Date(alert.endDate).toLocaleDateString(
+                              "en-IN",
+                            )}
                           </p>
                         </div>
                         <button
@@ -389,7 +411,9 @@ function AppShell({
                       >
                         <div className="flex-1 min-w-0">
                           <p className="text-[10px] font-bold text-slate-900 leading-tight flex items-center gap-1.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${!notif.isRead ? "bg-indigo-500" : "bg-slate-300"}`} />
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${!notif.isRead ? "bg-indigo-500" : "bg-slate-300"}`}
+                            />
                             {notif.title}
                           </p>
                           <p className="text-[9px] text-slate-450 mt-0.5 leading-normal">
@@ -399,11 +423,12 @@ function AppShell({
                       </div>
                     ))}
 
-                    {activeAlerts.length === 0 && notifications.length === 0 && (
-                      <div className="px-4 py-6 text-center text-[10px] text-slate-400 font-semibold">
-                        No active alerts or notifications 🎉
-                      </div>
-                    )}
+                    {activeAlerts.length === 0 &&
+                      notifications.length === 0 && (
+                        <div className="px-4 py-6 text-center text-[10px] text-slate-400 font-semibold">
+                          No active alerts or notifications 🎉
+                        </div>
+                      )}
                   </div>
                 </div>
               )}
@@ -608,32 +633,67 @@ export default function App() {
   };
 
   // ─── Views ────────────────────────────────────────────────────────────────
-  const DashboardPage = () => (
-    <div className="space-y-6">
-      <DashboardStats clients={clients} invoices={invoices} />
-      <DashboardView
-        clients={clients}
-        invoices={invoices}
-        onViewClient={(c) => {
-          setSelectedClientForView(c);
-          setIsClientProfileOpen(true);
-        }}
-        onViewInvoice={(inv) =>
-          navigate(`/invoices/${inv._id}/edit`, { state: { invoice: inv } })
-        }
-        onMarkInvoiceAsPaid={handleMarkAsPaid}
-        onDownloadInvoicePdf={handleDownloadPdf}
-        onCreateInvoice={() => navigate("/invoices/create")}
-        onAddClient={() => {
-          setSelectedClientForEdit(null);
-          setIsClientFormOpen(true);
-        }}
-        processingInvoiceIds={processingInvoiceIds}
-        onNavigate={(path) => navigate(`/${path}`)}
-        activeAlerts={activeAlerts}
-      />
-    </div>
-  );
+  const DashboardPage = () => {
+    const [dashTab, setDashTab] = useState("business");
+    return (
+      <div className="space-y-6">
+        {/* Dashboard Tab Switcher */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl w-fit">
+          <button
+            onClick={() => setDashTab("business")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              dashTab === "business"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Business Overview
+          </button>
+          <button
+            onClick={() => setDashTab("hr")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              dashTab === "hr"
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            HR & Operations
+          </button>
+        </div>
+
+        {dashTab === "business" ? (
+          <>
+            <DashboardStats clients={clients} invoices={invoices} />
+            <DashboardView
+              clients={clients}
+              invoices={invoices}
+              onViewClient={(c) => {
+                setSelectedClientForView(c);
+                setIsClientProfileOpen(true);
+              }}
+              onViewInvoice={(inv) =>
+                navigate(`/invoices/${inv._id}/edit`, {
+                  state: { invoice: inv },
+                })
+              }
+              onMarkInvoiceAsPaid={handleMarkAsPaid}
+              onDownloadInvoicePdf={handleDownloadPdf}
+              onCreateInvoice={() => navigate("/invoices/create")}
+              onAddClient={() => {
+                setSelectedClientForEdit(null);
+                setIsClientFormOpen(true);
+              }}
+              processingInvoiceIds={processingInvoiceIds}
+              onNavigate={(path) => navigate(`/${path}`)}
+              activeAlerts={activeAlerts}
+            />
+          </>
+        ) : (
+          <HRDashboard token={token} />
+        )}
+      </div>
+    );
+  };
 
   const ClientsPage = () => (
     <div className="space-y-4">
@@ -774,7 +834,6 @@ export default function App() {
           onDeleteSelected={handleInvoiceBulkDelete}
           onDownloadSelectedZip={handleDownloadSelectedZip}
         />
-
       )}
     </div>
   );
@@ -834,7 +893,10 @@ export default function App() {
                   currentUser={currentUser}
                   onEditProfile={() => {
                     const loggedInEmp = employeesList.find(
-                      (emp) => emp._id === currentUser._id || emp.companyEmail?.toLowerCase() === currentUser.email?.toLowerCase()
+                      (emp) =>
+                        emp._id === currentUser._id ||
+                        emp.companyEmail?.toLowerCase() ===
+                          currentUser.email?.toLowerCase(),
                     ) || {
                       _id: currentUser._id,
                       fullName: currentUser.fullName,
@@ -968,10 +1030,7 @@ export default function App() {
               path="create"
               element={
                 <AdminRoute currentUser={currentUser}>
-                  <ProjectFormPage
-                    token={token}
-                    clients={clients}
-                  />
+                  <ProjectFormPage token={token} clients={clients} />
                 </AdminRoute>
               }
             />
@@ -992,15 +1051,12 @@ export default function App() {
               path=":id/edit"
               element={
                 <AdminRoute currentUser={currentUser}>
-                  <ProjectFormPage
-                    token={token}
-                    clients={clients}
-                  />
+                  <ProjectFormPage token={token} clients={clients} />
                 </AdminRoute>
               }
             />
           </Route>
-          
+
           <Route
             path="employees"
             element={
@@ -1091,8 +1147,6 @@ export default function App() {
           />
 
           <Route path="*" element={<Navigate to="/" replace />} />
-
-
         </Route>
       </Routes>
 
@@ -1161,7 +1215,12 @@ function EmployeeProfilePageWrapper({ token, currentUser, showToast }) {
 
   // Only redirect if we have a valid _id and it differs from the requested id
   // Avoids redirect loop when currentUser._id is not yet hydrated
-  if (currentUser?.role === "Employee" && currentUser._id && id && id !== currentUser._id) {
+  if (
+    currentUser?.role === "Employee" &&
+    currentUser._id &&
+    id &&
+    id !== currentUser._id
+  ) {
     return <Navigate to={`/employees/${currentUser._id}`} replace />;
   }
 
@@ -1170,7 +1229,11 @@ function EmployeeProfilePageWrapper({ token, currentUser, showToast }) {
       employeeId={id}
       token={token}
       currentUser={currentUser}
-      onBack={currentUser?.role === "Employee" ? () => navigate("/") : () => navigate("/employees")}
+      onBack={
+        currentUser?.role === "Employee"
+          ? () => navigate("/")
+          : () => navigate("/employees")
+      }
       showToast={showToast}
     />
   );
