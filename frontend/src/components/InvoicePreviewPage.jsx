@@ -366,14 +366,21 @@ export default function InvoicePreviewPage({
   let totalGstAmount = 0;
   items.forEach((item) => {
     const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : ((item.qty || 1) * (item.rate || 0)));
-    subTotal += base;
-    const effectiveGstRate = activeClient.isForeign ? 0 : (item.gstRate || 0);
-    totalGstAmount += base * (effectiveGstRate / 100);
+    const effectiveGstRate = activeClient.isForeign ? 0 : ((item.gstRate !== undefined && item.gstRate !== null) ? item.gstRate : 18);
+    const gst = item.isInclusive && item.originalAmount > 0
+      ? (item.originalAmount - base)
+      : (base * (effectiveGstRate / 100));
+
+    const roundedBase = Math.round(base * 100) / 100;
+    const roundedGst = Math.round(gst * 100) / 100;
+
+    subTotal += roundedBase;
+    totalGstAmount += roundedGst;
   });
   const grandTotal = subTotal + totalGstAmount;
 
   // Get active item GST rate for informational text
-  const primaryGstRate = items[0]?.gstRate || 18;
+  const primaryGstRate = (items[0]?.gstRate !== undefined && items[0]?.gstRate !== null) ? items[0].gstRate : 18;
 
   const handleBack = () => {
     if (isDummyPreview) {

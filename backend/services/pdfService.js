@@ -173,7 +173,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
     amount: invoice.amount || 0,
     rate: invoice.amount || 0,
     qty: 1,
-    gstRate: invoice.gstRate || 18,
+    gstRate: (invoice.gstRate !== undefined && invoice.gstRate !== null) ? invoice.gstRate : 18,
   }];
 
   let subTotal = 0;
@@ -182,9 +182,15 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   items.forEach((item, idx) => {
     const lineBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
     const effectiveGstRate = client.isForeign ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
-    const lineGst = lineBase * (effectiveGstRate / 100);
-    subTotal += lineBase;
-    totalGst += lineGst;
+    const lineGst = item.isInclusive && item.originalAmount > 0
+      ? (item.originalAmount - lineBase)
+      : (lineBase * (effectiveGstRate / 100));
+
+    const roundedBase = Math.round(lineBase * 100) / 100;
+    const roundedGst = Math.round(lineGst * 100) / 100;
+
+    subTotal += roundedBase;
+    totalGst += roundedGst;
 
     const descHeight = doc.heightOfString(item.description || "Item", { width: 330 });
     const rowHeight = Math.max(20, descHeight + 6);

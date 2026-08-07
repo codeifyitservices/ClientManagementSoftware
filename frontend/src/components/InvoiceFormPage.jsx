@@ -48,6 +48,11 @@ const getDefaultDueDate = () => {
   return date.toISOString().split("T")[0];
 };
 
+// Grid template shared by the header row and every item row so columns
+// always line up, regardless of how tall each cell's content is.
+const ITEMS_GRID_COLS =
+  "grid-cols-[1.5rem_minmax(0,2.6fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,1.1fr)_minmax(0,0.6fr)]";
+
 export default function InvoiceFormPage({
   clients = [],
   onSubmit,
@@ -138,11 +143,21 @@ export default function InvoiceFormPage({
   const [currency, setCurrency] = useState("INR (₹)");
   const [notes, setNotes] = useState("");
   const [projectId, setProjectId] = useState(draftInvoice?.projectId || null);
-  const [milestoneId, setMilestoneId] = useState(draftInvoice?.milestoneId || null);
+  const [milestoneId, setMilestoneId] = useState(
+    draftInvoice?.milestoneId || null,
+  );
 
   // Invoice items list state
   const [items, setItems] = useState([
-    { serviceName: "", description: "", sacCode: "998314", amount: 0, rate: 0, qty: 1, gstRate: 18 },
+    {
+      serviceName: "",
+      description: "",
+      sacCode: "998314",
+      amount: 0,
+      rate: 0,
+      qty: 1,
+      gstRate: 18,
+    },
   ]);
 
   // Populate edits if present
@@ -153,7 +168,9 @@ export default function InvoiceFormPage({
         sourceInvoice.client?._id || sourceInvoice.client || "",
       );
       setInvoiceDate(
-        new Date(sourceInvoice.invoiceDate || sourceInvoice.createdAt || new Date())
+        new Date(
+          sourceInvoice.invoiceDate || sourceInvoice.createdAt || new Date(),
+        )
           .toISOString()
           .split("T")[0],
       );
@@ -172,10 +189,17 @@ export default function InvoiceFormPage({
             serviceName: i.serviceName || "",
             description: i.description || "",
             sacCode: i.sacCode || "998314",
-            amount: i.amount !== undefined && i.amount !== null ? i.amount : (i.rate || 0),
-            rate: i.amount !== undefined && i.amount !== null ? i.amount : (i.rate || 0),
+            amount:
+              i.amount !== undefined && i.amount !== null
+                ? i.amount
+                : i.rate || 0,
+            rate:
+              i.amount !== undefined && i.amount !== null
+                ? i.amount
+                : i.rate || 0,
             qty: 1,
-            gstRate: i.gstRate || 18,
+            gstRate:
+              i.gstRate !== undefined && i.gstRate !== null ? i.gstRate : 18,
           })),
         );
       } else {
@@ -186,7 +210,11 @@ export default function InvoiceFormPage({
             amount: sourceInvoice.amount || 0,
             rate: sourceInvoice.amount || 0,
             qty: 1,
-            gstRate: sourceInvoice.gstRate || 18,
+            gstRate:
+              sourceInvoice.gstRate !== undefined &&
+              sourceInvoice.gstRate !== null
+                ? sourceInvoice.gstRate
+                : 18,
           },
         ]);
       }
@@ -196,7 +224,14 @@ export default function InvoiceFormPage({
   const handleAddItem = () => {
     setItems((prev) => [
       ...prev,
-      { description: "", sacCode: "998314", amount: 0, rate: 0, qty: 1, gstRate: 18 },
+      {
+        description: "",
+        sacCode: "998314",
+        amount: 0,
+        rate: 0,
+        qty: 1,
+        gstRate: 18,
+      },
     ]);
   };
 
@@ -210,12 +245,19 @@ export default function InvoiceFormPage({
       prev.map((item, i) => {
         if (i !== index) return item;
         const updated = { ...item };
-        if (field === "amount" || field === "rate" || field === "gstRate" || field === "qty") {
+        if (
+          field === "amount" ||
+          field === "rate" ||
+          field === "gstRate" ||
+          field === "qty"
+        ) {
           const num = Number(value) || 0;
           updated[field] = num;
           if (field === "amount") {
             updated.rate = num;
           }
+        } else if (field === "isInclusive") {
+          updated.isInclusive = !!value;
         } else {
           updated[field] = value;
         }
@@ -246,7 +288,9 @@ export default function InvoiceFormPage({
             ? {
                 ...item,
                 serviceName: selected.name,
-                description: item.description ? item.description : selected.name,
+                description: item.description
+                  ? item.description
+                  : selected.name,
                 sacCode: selected.sacCode,
                 gstRate: selected.gstRate,
               }
@@ -262,31 +306,145 @@ export default function InvoiceFormPage({
   // Auto-detect Place of Supply (Intrastate vs. Interstate)
   const detectStateCode = (c) => {
     if (!c) return "";
-    if (c.gstNumber && typeof c.gstNumber === "string" && /^\d{2}/.test(c.gstNumber.trim())) {
+    if (
+      c.gstNumber &&
+      typeof c.gstNumber === "string" &&
+      /^\d{2}/.test(c.gstNumber.trim())
+    ) {
       return c.gstNumber.trim().slice(0, 2);
     }
     const text = `${c.address || ""} ${c.city || ""}`.toLowerCase();
-    if (text.includes("west bengal") || text.includes("kolkata") || text.includes("calcutta") || text.includes("wb")) return "19";
-    if (text.includes("maharashtra") || text.includes("mumbai") || text.includes("pune") || text.includes("nagpur") || text.includes("mh")) return "27";
-    if (text.includes("delhi") || text.includes("new delhi") || text.includes("ncr")) return "07";
-    if (text.includes("karnataka") || text.includes("bengaluru") || text.includes("bangalore") || text.includes("ka")) return "29";
-    if (text.includes("tamil nadu") || text.includes("chennai") || text.includes("tn")) return "33";
-    if (text.includes("telangana") || text.includes("hyderabad") || text.includes("ts")) return "36";
-    if (text.includes("gujarat") || text.includes("ahmedabad") || text.includes("surat") || text.includes("gj")) return "24";
-    if (text.includes("uttar pradesh") || text.includes("noida") || text.includes("lucknow") || text.includes("kanpur") || text.includes("up")) return "09";
-    if (text.includes("punjab") || text.includes("chandigarh") || text.includes("ludhiana") || text.includes("pb")) return "03";
-    if (text.includes("rajasthan") || text.includes("jaipur") || text.includes("rj")) return "08";
-    if (text.includes("haryana") || text.includes("gurgaon") || text.includes("gurugram") || text.includes("faridabad") || text.includes("hr")) return "06";
-    if (text.includes("uttarakhand") || text.includes("dehradun") || text.includes("uk")) return "05";
-    if (text.includes("kerala") || text.includes("kochi") || text.includes("cochin") || text.includes("trivandrum") || text.includes("kl")) return "32";
-    if (text.includes("madhya pradesh") || text.includes("bhopal") || text.includes("indore") || text.includes("mp")) return "23";
-    if (text.includes("bihar") || text.includes("patna") || text.includes("br")) return "10";
-    if (text.includes("jharkhand") || text.includes("ranchi") || text.includes("jh")) return "20";
-    if (text.includes("odisha") || text.includes("orissa") || text.includes("bhubaneswar") || text.includes("or")) return "21";
-    if (text.includes("chhattisgarh") || text.includes("raipur") || text.includes("cg")) return "22";
-    if (text.includes("assam") || text.includes("guwahati") || text.includes("as")) return "18";
+    if (
+      text.includes("west bengal") ||
+      text.includes("kolkata") ||
+      text.includes("calcutta") ||
+      text.includes("wb")
+    )
+      return "19";
+    if (
+      text.includes("maharashtra") ||
+      text.includes("mumbai") ||
+      text.includes("pune") ||
+      text.includes("nagpur") ||
+      text.includes("mh")
+    )
+      return "27";
+    if (
+      text.includes("delhi") ||
+      text.includes("new delhi") ||
+      text.includes("ncr")
+    )
+      return "07";
+    if (
+      text.includes("karnataka") ||
+      text.includes("bengaluru") ||
+      text.includes("bangalore") ||
+      text.includes("ka")
+    )
+      return "29";
+    if (
+      text.includes("tamil nadu") ||
+      text.includes("chennai") ||
+      text.includes("tn")
+    )
+      return "33";
+    if (
+      text.includes("telangana") ||
+      text.includes("hyderabad") ||
+      text.includes("ts")
+    )
+      return "36";
+    if (
+      text.includes("gujarat") ||
+      text.includes("ahmedabad") ||
+      text.includes("surat") ||
+      text.includes("gj")
+    )
+      return "24";
+    if (
+      text.includes("uttar pradesh") ||
+      text.includes("noida") ||
+      text.includes("lucknow") ||
+      text.includes("kanpur") ||
+      text.includes("up")
+    )
+      return "09";
+    if (
+      text.includes("punjab") ||
+      text.includes("chandigarh") ||
+      text.includes("ludhiana") ||
+      text.includes("pb")
+    )
+      return "03";
+    if (
+      text.includes("rajasthan") ||
+      text.includes("jaipur") ||
+      text.includes("rj")
+    )
+      return "08";
+    if (
+      text.includes("haryana") ||
+      text.includes("gurgaon") ||
+      text.includes("gurugram") ||
+      text.includes("faridabad") ||
+      text.includes("hr")
+    )
+      return "06";
+    if (
+      text.includes("uttarakhand") ||
+      text.includes("dehradun") ||
+      text.includes("uk")
+    )
+      return "05";
+    if (
+      text.includes("kerala") ||
+      text.includes("kochi") ||
+      text.includes("cochin") ||
+      text.includes("trivandrum") ||
+      text.includes("kl")
+    )
+      return "32";
+    if (
+      text.includes("madhya pradesh") ||
+      text.includes("bhopal") ||
+      text.includes("indore") ||
+      text.includes("mp")
+    )
+      return "23";
+    if (text.includes("bihar") || text.includes("patna") || text.includes("br"))
+      return "10";
+    if (
+      text.includes("jharkhand") ||
+      text.includes("ranchi") ||
+      text.includes("jh")
+    )
+      return "20";
+    if (
+      text.includes("odisha") ||
+      text.includes("orissa") ||
+      text.includes("bhubaneswar") ||
+      text.includes("or")
+    )
+      return "21";
+    if (
+      text.includes("chhattisgarh") ||
+      text.includes("raipur") ||
+      text.includes("cg")
+    )
+      return "22";
+    if (
+      text.includes("assam") ||
+      text.includes("guwahati") ||
+      text.includes("as")
+    )
+      return "18";
     if (text.includes("goa") || text.includes("panaji")) return "30";
-    if (text.includes("jammu") || text.includes("srinagar") || text.includes("j&k")) return "01";
+    if (
+      text.includes("jammu") ||
+      text.includes("srinagar") ||
+      text.includes("j&k")
+    )
+      return "01";
     if (text.includes("himachal") || text.includes("shimla")) return "02";
     return "";
   };
@@ -296,7 +454,9 @@ export default function InvoiceFormPage({
     : "06";
   const clientStateCode = detectStateCode(activeClient);
 
-  const isInterstate = !!(clientStateCode && companyStateCode !== clientStateCode);
+  const isInterstate = !!(
+    clientStateCode && companyStateCode !== clientStateCode
+  );
   const clientStateName =
     stateLookup[clientStateCode] || activeClient.city || "Unknown State";
 
@@ -308,20 +468,38 @@ export default function InvoiceFormPage({
   let subTotal = 0;
   let totalGstAmount = 0;
   items.forEach((item) => {
-    const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || 0));
-    subTotal += base;
+    const entered = Number(
+      item.amount !== undefined && item.amount !== null
+        ? item.amount
+        : item.rate || 0,
+    );
     const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
-    totalGstAmount += base * (effectiveGstRate / 100);
+    const base = item.isInclusive
+      ? Math.round(entered / (1 + effectiveGstRate / 100))
+      : entered;
+    const gst = item.isInclusive
+      ? entered - base
+      : base * (effectiveGstRate / 100);
+
+    const roundedBase = Math.round(base * 100) / 100;
+    const roundedGst = Math.round(gst * 100) / 100;
+
+    subTotal += roundedBase;
+    totalGstAmount += roundedGst;
   });
   const grandTotal = subTotal + totalGstAmount;
 
   // Get active item GST rate for informational text
-  const primaryGstRate = activeClient.isForeign ? 0 : (items[0]?.gstRate || 18);
-  const taxTypeText = activeClient.isForeign 
+  const primaryGstRate = activeClient.isForeign
+    ? 0
+    : items[0]?.gstRate !== undefined && items[0]?.gstRate !== null
+      ? items[0].gstRate
+      : 18;
+  const taxTypeText = activeClient.isForeign
     ? "No Tax (Foreign client)"
-    : (isInterstate
+    : isInterstate
       ? `IGST (${primaryGstRate}%)`
-      : `CGST (${primaryGstRate / 2}%) + SGST (${primaryGstRate / 2}%)`);
+      : `CGST (${primaryGstRate / 2}%) + SGST (${primaryGstRate / 2}%)`;
 
   const handleFormSubmit = (statusOverride = null, shouldSendEmail = false) => {
     if (!selectedClientId) {
@@ -338,9 +516,29 @@ export default function InvoiceFormPage({
       return;
     }
 
-    const payloadItems = activeClient.isForeign
-      ? items.map(item => ({ ...item, gstRate: 0 }))
-      : items;
+    const resolvePayloadItems = (itemsList) => {
+      return itemsList.map((item) => {
+        const entered = Number(
+          item.amount !== undefined && item.amount !== null
+            ? item.amount
+            : item.rate || 0,
+        );
+        const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
+        const base = item.isInclusive
+          ? Math.round(entered / (1 + effectiveGstRate / 100))
+          : entered;
+        return {
+          ...item,
+          amount: base,
+          rate: base,
+          gstRate: effectiveGstRate,
+          isInclusive: !!item.isInclusive,
+          originalAmount: entered,
+        };
+      });
+    };
+
+    const payloadItems = resolvePayloadItems(items);
 
     const payload = {
       ...(invoice?._id ? { _id: invoice._id } : {}),
@@ -375,9 +573,29 @@ export default function InvoiceFormPage({
       return;
     }
 
-    const payloadItems = activeClient.isForeign
-      ? items.map(item => ({ ...item, gstRate: 0 }))
-      : items;
+    const resolvePayloadItems = (itemsList) => {
+      return itemsList.map((item) => {
+        const entered = Number(
+          item.amount !== undefined && item.amount !== null
+            ? item.amount
+            : item.rate || 0,
+        );
+        const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
+        const base = item.isInclusive
+          ? Math.round(entered / (1 + effectiveGstRate / 100))
+          : entered;
+        return {
+          ...item,
+          amount: base,
+          rate: base,
+          gstRate: effectiveGstRate,
+          isInclusive: !!item.isInclusive,
+          originalAmount: entered,
+        };
+      });
+    };
+
+    const payloadItems = resolvePayloadItems(items);
 
     navigate("/invoices/preview", {
       state: {
@@ -390,7 +608,11 @@ export default function InvoiceFormPage({
           notes,
           items: payloadItems,
           paymentStatus,
-          invoiceNumber: invoice?.invoiceNumber || draftInvoice?.invoiceNumber || nextInvoiceNumber || "",
+          invoiceNumber:
+            invoice?.invoiceNumber ||
+            draftInvoice?.invoiceNumber ||
+            nextInvoiceNumber ||
+            "",
           _id: invoice?._id || null,
         },
         returnTo: isEdit ? `/invoices/${invoice._id}/edit` : "/invoices/create",
@@ -514,123 +736,179 @@ export default function InvoiceFormPage({
             Billing Line Items
           </h3>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  <th className="pb-3 w-8">#</th>
-                  <th className="pb-3 w-96">Service / Line Item Description</th>
-                  <th className="pb-3 w-28">SAC Code</th>
-                  <th className="pb-3 w-32 text-right">Amount (₹)</th>
-                  <th className="pb-3 w-20 text-center">GST (%)</th>
-                  <th className="pb-3 w-32 text-right">Total (₹)</th>
-                  <th className="pb-3 w-12 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {items.map((item, index) => {
-                  const lineTaxable = Number(item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || 0));
-                  const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
-                  const lineTotal = lineTaxable * (1 + effectiveGstRate / 100);
+          {/* CSS Grid replaces the old <table>: every row (header + items)
+              shares the exact same column template, so columns stay
+              perfectly aligned even though the Description cell holds two
+              stacked controls (select + input) while the others hold one.
+              Columns are sized with minmax(0, ...) fr units so they shrink
+              together to fit the container width instead of overflowing. */}
+          <div>
+            {/* Header row */}
+            <div
+              className={`grid ${ITEMS_GRID_COLS} gap-2 sm:gap-3 items-center border-b border-slate-100 pb-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400`}
+            >
+              <span>#</span>
+              <span>Service / Line Item Description</span>
+              <span>SAC Code</span>
+              <span className="text-right">Amount (₹)</span>
+              <span className="text-center">Incl. GST</span>
+              <span className="text-center">GST (%)</span>
+              <span className="text-right">Total (₹)</span>
+              <span className="text-center">Action</span>
+            </div>
 
-                  return (
-                    <tr key={index} className="hover:bg-slate-50/20">
-                      <td className="py-4 font-bold text-slate-450">
-                        {index + 1}
-                      </td>
-                      <td className="py-4 pr-3">
-                        <div className="space-y-2">
-                          {/* Service pre-fill selector */}
-                          <select
-                            value={item.serviceName || ""}
-                            onChange={(e) =>
-                              handleServiceSelect(index, e.target.value)
-                            }
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-600 bg-slate-50/40 hover:bg-slate-50 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          >
-                            <option value="">
-                              -- Prefill from billing services --
-                            </option>
-                            {backendServices.map((s) => (
-                              <option key={s._id} value={s.name}>
-                                {s.name} (SAC {s.sacCode} | GST {s.gstRate}%)
-                              </option>
-                            ))}
-                          </select>
+            {/* Item rows */}
+            <div className="divide-y divide-slate-100">
+              {items.map((item, index) => {
+                const entered = Number(
+                  item.amount !== undefined && item.amount !== null
+                    ? item.amount
+                    : item.rate || 0,
+                );
+                const effectiveGstRate = activeClient.isForeign
+                  ? 0
+                  : item.gstRate;
+                const lineTaxable = item.isInclusive
+                  ? Math.round(entered / (1 + effectiveGstRate / 100))
+                  : entered;
+                const lineTotal = item.isInclusive
+                  ? entered
+                  : lineTaxable * (1 + effectiveGstRate / 100);
 
-                          {/* Fully editable description input field */}
-                          <input
-                            type="text"
-                            value={item.description}
-                            onChange={(e) =>
-                              handleItemChange(
-                                index,
-                                "description",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Enter description (e.g. Website development - Phase 2)..."
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold"
-                          />
-                        </div>
-                      </td>
-                      <td className="py-4 pr-2.5 align-bottom">
-                        <input
-                          type="text"
-                          value={item.sacCode}
-                          onChange={(e) =>
-                            handleItemChange(index, "sacCode", e.target.value)
-                          }
-                          placeholder="e.g. 998314"
-                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </td>
-                      <td className="py-4 pr-2.5 align-bottom">
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.amount !== undefined && item.amount !== null ? item.amount : (item.rate || "")}
-                          onChange={(e) =>
-                            handleItemChange(index, "amount", e.target.value)
-                          }
-                          placeholder="0"
-                          className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
-                        />
-                      </td>
-                      <td className="py-4 pr-2.5 align-bottom">
-                        <input
-                          type="number"
-                          min="0"
-                          value={activeClient.isForeign ? 0 : item.gstRate}
-                          disabled={activeClient.isForeign}
-                          onChange={(e) =>
-                            handleItemChange(index, "gstRate", e.target.value)
-                          }
-                          className="w-full px-1.5 py-1.5 rounded-lg border border-slate-200 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:bg-slate-50"
-                        />
-                      </td>
-                      <td className="py-4 text-right font-black text-slate-900 pr-2 align-bottom pb-6">
-                        ₹
-                        {lineTotal.toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </td>
-                      <td className="py-4 text-center align-bottom pb-5">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          disabled={items.length === 1}
-                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 cursor-pointer"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                return (
+                  <div
+                    key={index}
+                    className={`grid ${ITEMS_GRID_COLS} gap-3 items-center py-4 text-xs text-slate-700 hover:bg-slate-50/40`}
+                  >
+                    {/* # */}
+                    <span className="font-bold text-slate-400 self-start pt-2">
+                      {index + 1}
+                    </span>
+
+                    {/* Description column: prefill select + free-text input, stacked */}
+                    <div className="space-y-2">
+                      <select
+                        value={item.serviceName || ""}
+                        onChange={(e) =>
+                          handleServiceSelect(index, e.target.value)
+                        }
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-600 bg-slate-50/40 hover:bg-slate-50 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="">
+                          -- Prefill from billing services --
+                        </option>
+                        {backendServices.map((s) => (
+                          <option key={s._id} value={s.name}>
+                            {s.name} (SAC {s.sacCode} | GST {s.gstRate}%)
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) =>
+                          handleItemChange(index, "description", e.target.value)
+                        }
+                        placeholder="Enter description (e.g. Website development - Phase 2)..."
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold"
+                      />
+                    </div>
+
+                    {/* SAC code */}
+                    <input
+                      type="text"
+                      value={item.sacCode}
+                      onChange={(e) =>
+                        handleItemChange(index, "sacCode", e.target.value)
+                      }
+                      placeholder="e.g. 998314"
+                      className="w-full self-start px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+
+                    {/* Amount */}
+                    <div className="self-start">
+                      <input
+                        type="number"
+                        min="0"
+                        value={
+                          item.amount !== undefined && item.amount !== null
+                            ? item.amount
+                            : item.rate || ""
+                        }
+                        onChange={(e) =>
+                          handleItemChange(index, "amount", e.target.value)
+                        }
+                        placeholder="0"
+                        className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+                      />
+                      {item.isInclusive && (
+                        <span className="block mt-1 text-[9px] font-bold text-slate-400/90 text-right select-none">
+                          Base: ₹
+                          {Math.round(
+                            (Number(item.amount) || 0) /
+                              (1 +
+                                (activeClient.isForeign
+                                  ? 0
+                                  : item.gstRate || 18) /
+                                  100),
+                          )}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Incl. GST checkbox */}
+                    <div className="self-start flex justify-center pt-2">
+                      <input
+                        type="checkbox"
+                        checked={!!item.isInclusive}
+                        onChange={(e) =>
+                          handleItemChange(
+                            index,
+                            "isInclusive",
+                            e.target.checked,
+                          )
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-[#5D5FEF] focus:ring-[#5D5FEF] cursor-pointer"
+                      />
+                    </div>
+
+                    {/* GST rate */}
+                    <input
+                      type="number"
+                      min="0"
+                      value={activeClient.isForeign ? 0 : item.gstRate}
+                      disabled={activeClient.isForeign}
+                      onChange={(e) =>
+                        handleItemChange(index, "gstRate", e.target.value)
+                      }
+                      className="w-full self-start px-1.5 py-1.5 rounded-lg border border-slate-200 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:bg-slate-50"
+                    />
+
+                    {/* Line total */}
+                    <span className="self-start pt-2 text-right font-black text-slate-900">
+                      ₹
+                      {lineTotal.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+
+                    {/* Remove row */}
+                    <div className="self-start flex justify-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(index)}
+                        disabled={items.length === 1}
+                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Add Item Button */}
@@ -646,7 +924,9 @@ export default function InvoiceFormPage({
           {/* GST Auto Calculations Info Box */}
           <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100/50 text-xs text-indigo-950/80 space-y-1 select-none">
             <h4 className="font-extrabold text-[#5D5FEF]">
-              {activeClient.isForeign ? "No GST applied for Foreign Client" : "GST is calculated automatically"}
+              {activeClient.isForeign
+                ? "No GST applied for Foreign Client"
+                : "GST is calculated automatically"}
             </h4>
             {!activeClient.isForeign && (
               <>
@@ -658,7 +938,9 @@ export default function InvoiceFormPage({
                 </p>
                 <p className="font-semibold text-slate-500">
                   Tax Type:{" "}
-                  <span className="text-[#5D5FEF] font-bold">{taxTypeText}</span>
+                  <span className="text-[#5D5FEF] font-bold">
+                    {taxTypeText}
+                  </span>
                 </p>
               </>
             )}

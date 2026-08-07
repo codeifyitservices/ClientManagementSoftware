@@ -33,6 +33,14 @@ const invoiceItemSchema = new mongoose.Schema({
     required: true,
     default: 18,
   },
+  isInclusive: {
+    type: Boolean,
+    default: false,
+  },
+  originalAmount: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const invoiceSchema = new mongoose.Schema(
@@ -145,16 +153,30 @@ invoiceSchema.pre("save", async function () {
     const sacCodes = [];
 
     this.items.forEach((item) => {
-      const itemBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
+      // If client is foreign, force GST rate to 0
+      const effectiveGstRate = isForeign ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
+      item.gstRate = effectiveGstRate;
+
+      let itemBase = 0;
+      let itemGst = 0;
+
+      if (item.isInclusive && item.originalAmount > 0) {
+        // Calculate rounded base amount
+        itemBase = Math.round(item.originalAmount / (1 + effectiveGstRate / 100));
+        // GST is the difference to ensure total matches exactly
+        itemGst = item.originalAmount - itemBase;
+      } else {
+        itemBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
+        itemGst = itemBase * (effectiveGstRate / 100);
+      }
+
+      itemBase = Math.round(itemBase * 100) / 100;
+      itemGst = Math.round(itemGst * 100) / 100;
+
       item.amount = itemBase;
       item.rate = itemBase;
       item.qty = 1;
       
-      // If client is foreign, force GST rate to 0
-      const effectiveGstRate = isForeign ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
-      item.gstRate = effectiveGstRate;
-      
-      const itemGst = itemBase * (effectiveGstRate / 100);
       baseSum += itemBase;
       gstSum += itemGst;
       
