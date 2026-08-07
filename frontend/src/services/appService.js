@@ -113,23 +113,24 @@ export function useAppService() {
   const [toasts, setToasts] = useState([]);
 
   const showToast = (message, type = "success") => {
-    const id = Date.now();
-    let shouldScheduleTimeout = false;
+    // Check if duplicate toast exists in current render state
+    const exists = toasts.some((t) => t.message === message);
+    if (exists) {
+      return;
+    }
 
+    const id = Date.now();
     setToasts((prevToasts) => {
-      const exists = prevToasts.some((t) => t.message === message);
-      if (exists) {
+      // Double check within updater to prevent duplicates in batched updates
+      if (prevToasts.some((t) => t.message === message)) {
         return prevToasts;
       }
-      shouldScheduleTimeout = true;
       return [...prevToasts, { id, message, type }];
     });
 
-    if (shouldScheduleTimeout) {
-      setTimeout(() => {
-        setToasts((p) => p.filter((t) => t.id !== id));
-      }, 4500);
-    }
+    setTimeout(() => {
+      setToasts((p) => p.filter((t) => t.id !== id));
+    }, 4500);
   };
 
   const removeToast = (id) => setToasts((p) => p.filter((t) => t.id !== id));

@@ -84,7 +84,17 @@ export const getProjectById = async (req, res) => {
 // POST /api/projects - Create a project
 export const createProject = async (req, res) => {
   try {
-    const { projectName, client, startDate, expectedEndDate, milestones, assignedEmployees } = req.body;
+    const {
+      projectName,
+      client,
+      startDate,
+      expectedEndDate,
+      milestones,
+      assignedEmployees,
+      projectValue,
+      inclusiveGst,
+      isPersonalAccount
+    } = req.body;
 
     if (!projectName || !client || !startDate || !expectedEndDate) {
       return res.status(400).json({ message: "Project Name, Client, Start Date, and Expected End Date are required." });
@@ -101,6 +111,9 @@ export const createProject = async (req, res) => {
       milestones: milestones || [],
       assignedEmployees: assignedEmployees || [],
       status: "Ongoing",
+      projectValue: projectValue !== undefined ? Number(projectValue) : 0,
+      inclusiveGst: inclusiveGst !== undefined ? inclusiveGst : true,
+      isPersonalAccount: isPersonalAccount !== undefined ? isPersonalAccount : false,
     });
 
     const savedProject = await newProject.save();
@@ -116,7 +129,18 @@ export const createProject = async (req, res) => {
 // PUT /api/projects/:id - Update project (including milestones & assigned employees)
 export const updateProject = async (req, res) => {
   try {
-    const { projectName, client, startDate, expectedEndDate, milestones, status, assignedEmployees } = req.body;
+    const {
+      projectName,
+      client,
+      startDate,
+      expectedEndDate,
+      milestones,
+      status,
+      assignedEmployees,
+      projectValue,
+      inclusiveGst,
+      isPersonalAccount
+    } = req.body;
 
     const project = await Project.findById(req.params.id);
     if (!project) {
@@ -129,6 +153,9 @@ export const updateProject = async (req, res) => {
     project.expectedEndDate = expectedEndDate ?? project.expectedEndDate;
     project.status = status ?? project.status;
     project.assignedEmployees = assignedEmployees ?? project.assignedEmployees;
+    project.projectValue = projectValue !== undefined ? Number(projectValue) : project.projectValue;
+    project.inclusiveGst = inclusiveGst !== undefined ? inclusiveGst : project.inclusiveGst;
+    project.isPersonalAccount = isPersonalAccount !== undefined ? isPersonalAccount : project.isPersonalAccount;
 
     if (milestones) {
       // Map existing milestone invoice links back to updated milestones if IDs match

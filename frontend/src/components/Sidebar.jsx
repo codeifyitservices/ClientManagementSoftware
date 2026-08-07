@@ -13,6 +13,7 @@ import {
   CheckSquare,
   Bug,
   Clock,
+  TrendingUp,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -32,6 +33,7 @@ export default function Sidebar({
       : [
           { to: "/", name: "Dashboard", icon: LayoutDashboard, exact: true },
           { to: "/clients", name: "Clients", icon: Users },
+          { to: "/leads", name: "Leads", icon: TrendingUp },
           { to: "/projects", name: "Projects", icon: Folder },
           { to: "/invoices", name: "Invoices", icon: Receipt },
           { to: "/subscriptions", name: "Subscriptions", icon: CalendarDays },

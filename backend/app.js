@@ -15,6 +15,7 @@ import ticketRoutes from "./routes/ticketRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import agentRoutes from "./routes/agentRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
+import leadRoutes from "./routes/leadRoutes.js";
 import protect from "./middleware/authMiddleware.js";
 import { startSubscriptionScheduler } from "./services/subscriptionScheduler.js";
 import Service from "./models/serviceModel.js";
@@ -50,6 +51,7 @@ app.use("/api/tickets", protect, ticketRoutes);
 app.use("/api/notifications", protect, notificationRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/attendance", protect, attendanceRoutes);
+app.use("/api/leads", protect, leadRoutes);
 
 app.use("/health", (req, res) => {
   res.status(200).json({

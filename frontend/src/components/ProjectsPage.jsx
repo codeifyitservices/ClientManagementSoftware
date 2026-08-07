@@ -107,6 +107,16 @@ export default function ProjectsPage({
 
   // Handle Quick Invoice Generation from milestone
   const handleGenerateInvoice = (project, milestone) => {
+    const isForeign = project.client?.isForeign === true;
+    const isPersonal = project.isPersonalAccount === true;
+    const gstRate = (isForeign || isPersonal) ? 0 : 18;
+
+    const isInclusive = project.inclusiveGst !== false;
+    let rate = milestone.amount;
+    if (isInclusive && gstRate > 0) {
+      rate = Math.round((milestone.amount / 1.18) * 100) / 100;
+    }
+
     // Generate draft state for InvoiceFormPage
     const draftInvoice = {
       client: project.client?._id || project.client,
@@ -116,9 +126,9 @@ export default function ProjectsPage({
           description: `${project.projectName} - Milestone: ${milestone.name} (${milestone.service})`,
           sacCode: "998314",
           qty: 1,
-          rate: milestone.amount,
-          amount: milestone.amount,
-          gstRate: 18,
+          rate: rate,
+          amount: rate,
+          gstRate: gstRate,
         },
       ],
       projectId: project._id,
@@ -258,8 +268,9 @@ export default function ProjectsPage({
   let totalOutstanding = 0;
 
   projects.forEach((proj) => {
+    const val = proj.finalAmount !== undefined ? proj.finalAmount : (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0);
+    totalProjectsValue += val;
     proj.milestones?.forEach((m) => {
-      totalProjectsValue += m.amount || 0;
       if (m.status !== "Paid") {
         totalOutstanding += m.amount || 0;
       }
@@ -269,13 +280,12 @@ export default function ProjectsPage({
   // Calculate values for individual project helper
   const getProjectFinancials = (proj) => {
     if (!proj) return { value: 0, received: 0, pending: 0, invoicesCount: 0, percent: 0 };
-    let value = 0;
+    const value = proj.finalAmount !== undefined ? proj.finalAmount : (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0);
     let received = 0;
     let pending = 0;
     let invoicesCount = 0;
 
     proj.milestones?.forEach((m) => {
-      value += m.amount || 0;
       if (m.status === "Paid") {
         received += m.amount || 0;
       } else {

@@ -18,6 +18,7 @@ import {
 export default function ProjectFormPage({
   token,
   clients = [],
+  showToast,
 }) {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -36,6 +37,11 @@ export default function ProjectFormPage({
   const [services, setServices] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [assignedEmployees, setAssignedEmployees] = useState([]);
+
+  // Project value and GST fields
+  const [projectValue, setProjectValue] = useState("");
+  const [inclusiveGst, setInclusiveGst] = useState(true);
+  const [isPersonalAccount, setIsPersonalAccount] = useState(false);
 
   // Fetch services & employees list
   useEffect(() => {
@@ -110,6 +116,9 @@ export default function ProjectFormPage({
         setStartDate("");
         setExpectedEndDate("");
         setStatus("Ongoing");
+        setProjectValue("");
+        setInclusiveGst(true);
+        setIsPersonalAccount(false);
         setMilestones([
           { name: "Advance Payment", service: "", amount: 0, dueDate: "", status: "Pending" },
         ]);
@@ -134,6 +143,9 @@ export default function ProjectFormPage({
         : ""
     );
     setStatus(projectData.status || "Ongoing");
+    setProjectValue(projectData.projectValue || "");
+    setInclusiveGst(projectData.inclusiveGst !== false);
+    setIsPersonalAccount(projectData.isPersonalAccount === true);
     setMilestones(
       projectData.milestones
         ? projectData.milestones.map((m) => ({
@@ -177,29 +189,53 @@ export default function ProjectFormPage({
     );
   };
 
+  const activeClient = clients.find((c) => c._id === clientId) || {};
+
+  const getCalculatedFinalAmount = () => {
+    if (!projectValue || isNaN(projectValue)) return 0;
+    const base = Number(projectValue);
+    if (activeClient.isForeign || isPersonalAccount) {
+      return base;
+    }
+    if (inclusiveGst) {
+      return base;
+    }
+    return Math.round(base * 1.18 * 100) / 100;
+  };
+
   const handleFormSubmit = async (e) => {
     if (e) e.preventDefault();
     setError("");
 
     if (!projectName.trim()) {
       setError("Project Name is required.");
+      if (showToast) showToast("Project Name is required.", "error");
       return;
     }
     if (!clientId) {
       setError("Please select a client.");
+      if (showToast) showToast("Please select a client.", "error");
       return;
     }
     if (!startDate) {
       setError("Start Date is required.");
+      if (showToast) showToast("Start Date is required.", "error");
       return;
     }
     if (!expectedEndDate) {
       setError("Expected End Date is required.");
+      if (showToast) showToast("Expected End Date is required.", "error");
+      return;
+    }
+    if (!projectValue || isNaN(projectValue) || Number(projectValue) < 0) {
+      setError("Please enter a valid Project Value.");
+      if (showToast) showToast("Please enter a valid Project Value.", "error");
       return;
     }
 
     if (milestones.length === 0) {
       setError("Please add at least one milestone.");
+      if (showToast) showToast("Please add at least one milestone.", "error");
       return;
     }
 
@@ -208,7 +244,19 @@ export default function ProjectFormPage({
     );
 
     if (invalidMilestone) {
-      setError("Please fill out all milestone fields (name, service, positive amount, and due date).");
+      const msg = "Please fill out all milestone fields (name, service, positive amount, and due date).";
+      setError(msg);
+      if (showToast) showToast(msg, "error");
+      return;
+    }
+
+    // Verify milestone sum doesn't exceed finalAmount
+    const sumMilestones = milestones.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+    const finalAmountVal = getCalculatedFinalAmount();
+    if (sumMilestones > finalAmountVal + 0.05) {
+      const msg = `The sum of payment milestones (₹${sumMilestones.toLocaleString("en-IN")}) cannot exceed the final project value (₹${finalAmountVal.toLocaleString("en-IN")}).`;
+      setError(msg);
+      if (showToast) showToast(msg, "error");
       return;
     }
 
@@ -220,6 +268,9 @@ export default function ProjectFormPage({
       status,
       milestones,
       assignedEmployees,
+      projectValue: Number(projectValue),
+      inclusiveGst: (activeClient.isForeign || isPersonalAccount) ? false : inclusiveGst,
+      isPersonalAccount,
     };
 
     setIsSaving(true);
@@ -251,7 +302,7 @@ export default function ProjectFormPage({
   };
 
   // Realtime calculated values
-  const calcTotalValue = milestones.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  const calcTotalValue = getCalculatedFinalAmount();
   const calcReceived = milestones.filter(m => m.status === "Paid").reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
   const calcOutstanding = calcTotalValue - calcReceived;
   const calcProgressPercent = calcTotalValue > 0 ? Math.round((calcReceived / calcTotalValue) * 100) : 0;
@@ -405,6 +456,71 @@ export default function ProjectFormPage({
                   </div>
                 </div>
               </div>
+
+              {/* Personal Account Checkbox */}
+              <div className="flex items-start gap-2 bg-amber-50/50 border border-amber-100 p-3 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="isPersonalAccount"
+                  checked={isPersonalAccount}
+                  disabled={activeClient.isForeign}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsPersonalAccount(checked);
+                    if (checked) {
+                      setInclusiveGst(false);
+                    } else {
+                      setInclusiveGst(true);
+                    }
+                  }}
+                  className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
+                />
+                <label htmlFor="isPersonalAccount" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
+                  <span>Personal Account</span>
+                  <span className="text-[10px] text-slate-450 font-semibold normal-case leading-normal font-sans">
+                    {activeClient.isForeign ? "Disabled - foreign client." : "If checked, no GST will be applied (personal/individual billing)."}
+                  </span>
+                </label>
+              </div>
+
+              {/* GST Inclusive Checkbox — hidden for personal account and foreign clients */}
+              {!isPersonalAccount && !activeClient.isForeign && (
+                <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="inclusiveGst"
+                    checked={inclusiveGst}
+                    onChange={(e) => setInclusiveGst(e.target.checked)}
+                    className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                  />
+                  <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                    <span>Inclusive GST (18%)</span>
+                    <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal font-sans">
+                      If unchecked, 18% tax will automatically be added to obtain the final billing amount.
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Project Value / Base Amount */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Base Amount (INR) / Project Value <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={projectValue}
+                    onChange={(e) => setProjectValue(e.target.value)}
+                    required
+                    placeholder="Enter base amount"
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
+                  />
+                  <span className="absolute left-3.5 top-3 text-slate-400 text-xs font-bold pointer-events-none">₹</span>
+                </div>
+              </div>
             </div>
 
             {/* Assign Employees */}
@@ -460,16 +576,25 @@ export default function ProjectFormPage({
 
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="p-2.5 bg-white/5 rounded-xl border border-white/5">
-                <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Project Value</p>
-                <p className="text-sm font-black mt-1">₹{calcTotalValue.toLocaleString("en-IN")}</p>
+                <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Final Value</p>
+                <p className="text-sm font-black mt-1">₹{calcTotalValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                {!isPersonalAccount && !activeClient.isForeign && !inclusiveGst && projectValue && (
+                  <span className="text-[8px] text-[#8e90ff] font-bold uppercase select-none block mt-0.5">(+18% GST)</span>
+                )}
+                {isPersonalAccount && (
+                  <span className="text-[8px] text-amber-400 font-bold uppercase select-none block mt-0.5">(Personal)</span>
+                )}
+                {activeClient.isForeign && (
+                  <span className="text-[8px] text-emerald-400 font-bold uppercase select-none block mt-0.5">(Foreign)</span>
+                )}
               </div>
               <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/15">
                 <p className="text-[9px] font-bold uppercase text-emerald-450 tracking-wider">Paid</p>
-                <p className="text-sm font-black text-emerald-400 mt-1">₹{calcReceived.toLocaleString("en-IN")}</p>
+                <p className="text-sm font-black text-emerald-400 mt-1">₹{calcReceived.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="p-2.5 bg-rose-500/10 rounded-xl border border-rose-500/15">
                 <p className="text-[9px] font-bold uppercase text-rose-400 tracking-wider">Outstanding</p>
-                <p className="text-sm font-black text-rose-450 mt-1">₹{calcOutstanding.toLocaleString("en-IN")}</p>
+                <p className="text-sm font-black text-rose-455 mt-1">₹{calcOutstanding.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
 

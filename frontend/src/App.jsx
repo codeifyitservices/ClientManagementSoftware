@@ -39,6 +39,9 @@ import TaskDetailPage from "./components/TaskDetailPage";
 import TicketListPage from "./components/TicketListPage";
 import TicketDetailPage from "./components/TicketDetailPage";
 import AttendancePage from "./components/attendance/AttendancePage";
+import LeadsPage from "./components/LeadsPage";
+import LeadFormPage from "./components/LeadFormPage";
+import LeadDetailPage from "./components/LeadDetailPage";
 
 const API_CLIENTS = `${import.meta.env.VITE_BACKEND_URL}/api/clients`;
 const API_INVOICES = `${import.meta.env.VITE_BACKEND_URL}/api/invoices`;
@@ -189,6 +192,14 @@ function AppShell({
       title: "Clients Profiles",
       sub: "Manage company coordinates, contact list, and GSTIN directories",
     },
+    "/leads": {
+      title: "Leads Pipeline",
+      sub: "Track prospective clients, pipeline stages, and communication history",
+    },
+    "/leads/create": {
+      title: "Create Lead",
+      sub: "Configure initial parameters for a new pipeline lead",
+    },
     "/invoices": {
       title: "Invoices Ledger",
       sub: "Track transactions, SAC tax codes, and payments",
@@ -256,6 +267,12 @@ function AppShell({
   const isTaskDetail = /^\/tasks\/.+$/.test(path);
   const isTicketDetail = /^\/tickets\/.+$/.test(path);
 
+  const isEditProject = /^\/projects\/.+\/edit$/.test(path);
+  const isProjectDetail = /^\/projects\/.+$/.test(path) && !isEditProject && path !== "/projects/create";
+
+  const isEditLead = /^\/leads\/.+\/edit$/.test(path);
+  const isLeadDetail = /^\/leads\/.+$/.test(path) && !isEditLead && path !== "/leads/create";
+
   const currentMeta = isEditInvoice
     ? {
         title: "Edit Invoice",
@@ -276,7 +293,27 @@ function AppShell({
               title: "Bug Ticket Details",
               sub: "Review reproduction steps, assign developer, and resolve bug ticket",
             }
-          : headerMeta[path] || { title: "", sub: "" };
+          : isEditProject
+            ? {
+                title: "Edit Project",
+                sub: "Modify project metadata and milestone details",
+              }
+            : isProjectDetail
+              ? {
+                  title: "Project Coordinates",
+                  sub: "Inspect project budget installments, payment milestones, and generated invoices",
+                }
+              : isEditLead
+                ? {
+                    title: "Edit Lead",
+                    sub: "Modify prospective lead metadata and follow-up alerts",
+                  }
+                : isLeadDetail
+                  ? {
+                      title: "Lead Coordinates",
+                      sub: "Inspect prospective client details and history of follow-up interactions",
+                    }
+                  : headerMeta[path] || { title: "", sub: "" };
 
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-800 grid-bg flex">
@@ -1012,6 +1049,56 @@ export default function App() {
               </AdminRoute>
             }
           />
+          <Route path="leads">
+            <Route
+              index
+              element={
+                <AdminRoute currentUser={currentUser}>
+                  <LeadsPage
+                    token={token}
+                    showToast={showToast}
+                    authenticatedFetch={authenticatedFetch}
+                  />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="create"
+              element={
+                <AdminRoute currentUser={currentUser}>
+                  <LeadFormPage
+                    token={token}
+                    showToast={showToast}
+                    authenticatedFetch={authenticatedFetch}
+                  />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path=":id"
+              element={
+                <AdminRoute currentUser={currentUser}>
+                  <LeadDetailPage
+                    token={token}
+                    showToast={showToast}
+                    authenticatedFetch={authenticatedFetch}
+                  />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path=":id/edit"
+              element={
+                <AdminRoute currentUser={currentUser}>
+                  <LeadFormPage
+                    token={token}
+                    showToast={showToast}
+                    authenticatedFetch={authenticatedFetch}
+                  />
+                </AdminRoute>
+              }
+            />
+          </Route>
           <Route path="projects">
             <Route
               index
@@ -1030,7 +1117,7 @@ export default function App() {
               path="create"
               element={
                 <AdminRoute currentUser={currentUser}>
-                  <ProjectFormPage token={token} clients={clients} />
+                  <ProjectFormPage token={token} clients={clients} showToast={showToast} />
                 </AdminRoute>
               }
             />
@@ -1051,7 +1138,7 @@ export default function App() {
               path=":id/edit"
               element={
                 <AdminRoute currentUser={currentUser}>
-                  <ProjectFormPage token={token} clients={clients} />
+                  <ProjectFormPage token={token} clients={clients} showToast={showToast} />
                 </AdminRoute>
               }
             />

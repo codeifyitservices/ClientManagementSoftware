@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import dns from "dns";
 import Admin from "../models/adminModel.js";
 import Service from "../models/serviceModel.js";
 
@@ -50,6 +51,13 @@ const seedServices = async () => {
 };
 
 const connectMongo = () => {
+  // Set DNS servers to avoid querySrv ECONNREFUSED issues on local networks
+  try {
+    dns.setServers(["8.8.8.8", "8.8.4.4"]);
+  } catch (dnsErr) {
+    console.warn("Could not set DNS servers:", dnsErr.message);
+  }
+
   mongoose
     .connect(process.env.MONGO_URI)
     .then(() => {

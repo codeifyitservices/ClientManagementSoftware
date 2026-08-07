@@ -89,6 +89,16 @@ export default function ProjectDetailPage({
     const milestone = project.milestones[selectedMilestoneIdx];
     if (milestone.status !== "Pending") return;
 
+    const isForeign = project.client?.isForeign === true;
+    const isPersonal = project.isPersonalAccount === true;
+    const gstRate = (isForeign || isPersonal) ? 0 : 18;
+
+    const isInclusive = project.inclusiveGst !== false;
+    let rate = milestone.amount;
+    if (isInclusive && gstRate > 0) {
+      rate = Math.round((milestone.amount / 1.18) * 100) / 100;
+    }
+
     const draftInvoice = {
       client: project.client?._id || project.client,
       dueDate: milestone.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
@@ -98,9 +108,9 @@ export default function ProjectDetailPage({
           description: milestone.name,
           sacCode: "998314",
           qty: 1,
-          rate: milestone.amount,
-          amount: milestone.amount,
-          gstRate: 18,
+          rate: rate,
+          amount: rate,
+          gstRate: gstRate,
         },
       ],
       projectId: project._id,
@@ -170,14 +180,13 @@ export default function ProjectDetailPage({
   }
 
   // Calculate project financial stats
-  let projectValue = 0;
+  const projectValue = project.finalAmount !== undefined ? project.finalAmount : (project.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0);
   let received = 0;
   let outstanding = 0;
   let invoicesCount = 0;
   let nextDueMilestone = null;
 
   project.milestones?.forEach((m) => {
-    projectValue += m.amount || 0;
     if (m.status === "Paid") {
       received += m.amount || 0;
     } else {
@@ -301,6 +310,17 @@ export default function ProjectDetailPage({
           <div className="p-4 bg-slate-50/40 border border-slate-100 rounded-xl">
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Project Value</span>
             <h4 className="text-lg font-black text-slate-900 mt-1">₹{projectValue.toLocaleString("en-IN")}</h4>
+            {project.isPersonalAccount && (
+              <span className="text-[8px] text-amber-500 font-bold uppercase select-none block mt-0.5">(Personal)</span>
+            )}
+            {project.client?.isForeign && (
+              <span className="text-[8px] text-emerald-500 font-bold uppercase select-none block mt-0.5">(Foreign)</span>
+            )}
+            {!project.isPersonalAccount && !project.client?.isForeign && project.projectValue !== undefined && (
+              <span className="text-[8px] text-indigo-500 font-bold uppercase select-none block mt-0.5">
+                ({project.inclusiveGst ? "Inclusive" : "Exclusive"} GST)
+              </span>
+            )}
           </div>
 
           {/* Received */}
