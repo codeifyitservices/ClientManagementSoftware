@@ -204,21 +204,17 @@ invoiceSchema.post("save", async function (doc) {
   try {
     const Project = mongoose.model("Project");
     const milestoneStatus = doc.paymentStatus === "Paid" ? "Paid" : "Invoiced";
+    console.log(`[Invoice Post-Save Hook] Invoice ${doc.invoiceNumber} (${doc._id}) saved. Status: ${doc.paymentStatus}. Updating linked milestones to: ${milestoneStatus}`);
     
-    // Find all projects that reference this invoice in their milestones array
-    const projects = await Project.find({ "milestones.invoice": doc._id });
-    for (const project of projects) {
-      let modified = false;
-      project.milestones.forEach((m) => {
-        if (m.invoice && m.invoice.toString() === doc._id.toString()) {
-          m.status = milestoneStatus;
-          modified = true;
+    const updateResult = await Project.updateMany(
+      { "milestones.invoice": doc._id },
+      {
+        $set: {
+          "milestones.$.status": milestoneStatus
         }
-      });
-      if (modified) {
-        await project.save();
       }
-    }
+    );
+    console.log(`[Invoice Post-Save Hook] Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
   } catch (err) {
     console.error("Error updating project milestone status on invoice save:", err);
   }
