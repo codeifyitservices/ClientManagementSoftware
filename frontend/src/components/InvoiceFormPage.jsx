@@ -190,13 +190,13 @@ export default function InvoiceFormPage({
             description: i.description || "",
             sacCode: i.sacCode || "998314",
             amount:
-              i.amount !== undefined && i.amount !== null
-                ? i.amount
-                : i.rate || 0,
+              i.isInclusive && i.originalAmount > 0
+                ? i.originalAmount
+                : (i.amount !== undefined && i.amount !== null ? i.amount : i.rate || 0),
             rate:
-              i.amount !== undefined && i.amount !== null
-                ? i.amount
-                : i.rate || 0,
+              i.isInclusive && i.originalAmount > 0
+                ? i.originalAmount
+                : (i.amount !== undefined && i.amount !== null ? i.amount : i.rate || 0),
             qty: 1,
             gstRate:
               i.gstRate !== undefined && i.gstRate !== null ? i.gstRate : 18,
@@ -209,8 +209,14 @@ export default function InvoiceFormPage({
           {
             description: sourceInvoice.serviceDescription || "",
             sacCode: sourceInvoice.sacCode || "998314",
-            amount: sourceInvoice.amount || 0,
-            rate: sourceInvoice.amount || 0,
+            amount:
+              sourceInvoice.isInclusive && sourceInvoice.originalAmount > 0
+                ? sourceInvoice.originalAmount
+                : (sourceInvoice.amount || 0),
+            rate:
+              sourceInvoice.isInclusive && sourceInvoice.originalAmount > 0
+                ? sourceInvoice.originalAmount
+                : (sourceInvoice.amount || 0),
             qty: 1,
             gstRate:
               sourceInvoice.gstRate !== undefined &&

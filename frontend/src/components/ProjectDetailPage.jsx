@@ -451,6 +451,14 @@ export default function ProjectDetailPage({
                           ) : (
                             <button
                               onClick={() => {
+                                const isForeign = project.client?.isForeign === true;
+                                const isPersonal = m.isPersonal === true;
+                                const gstRate = (isForeign || isPersonal) ? 0 : 18;
+                                const isInclusive = m.isInclusive === true;
+                                let rate = m.amount;
+                                if (isInclusive && gstRate > 0) {
+                                  rate = Math.round(m.amount / (1 + gstRate / 100));
+                                }
                                 const draftInvoice = {
                                   client: project.client?._id || project.client,
                                   dueDate: m.dueDate ? new Date(m.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
@@ -460,9 +468,11 @@ export default function ProjectDetailPage({
                                       description: m.name,
                                       sacCode: "998314",
                                       qty: 1,
-                                      rate: m.amount,
-                                      amount: m.amount,
-                                      gstRate: 18,
+                                      rate: rate,
+                                      amount: rate,
+                                      gstRate: gstRate,
+                                      isInclusive: isInclusive && gstRate > 0,
+                                      originalAmount: m.amount,
                                     },
                                   ],
                                   projectId: project._id,

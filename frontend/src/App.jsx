@@ -569,6 +569,16 @@ function AppShell({
   );
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
+
 // ─── Root App ────────────────────────────────────────────────────────────────
 export default function App() {
   const navigate = useNavigate();
@@ -878,6 +888,7 @@ export default function App() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
+      <ScrollToTop />
       <Routes>
         {/* Public */}
         <Route
