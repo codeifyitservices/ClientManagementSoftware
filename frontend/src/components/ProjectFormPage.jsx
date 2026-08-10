@@ -120,7 +120,7 @@ export default function ProjectFormPage({
         setInclusiveGst(true);
         setIsPersonalAccount(false);
         setMilestones([
-          { name: "Advance Payment", service: "", amount: 0, dueDate: "", status: "Pending" },
+          { name: "Advance Payment", service: "", amount: 0, dueDate: "", status: "Pending", isInclusive: false, isPersonal: false },
         ]);
         setLoading(false);
       }
@@ -166,7 +166,7 @@ export default function ProjectFormPage({
   const handleAddMilestone = () => {
     setMilestones((prev) => [
       ...prev,
-      { name: "", service: "", amount: 0, dueDate: "", status: "Pending" },
+      { name: "", service: "", amount: 0, dueDate: "", status: "Pending", isInclusive: false, isPersonal: false },
     ]);
   };
 
@@ -190,6 +190,7 @@ export default function ProjectFormPage({
   };
 
   const activeClient = clients.find((c) => c._id === clientId) || {};
+  const gstRate = (activeClient.isForeign || isPersonalAccount) ? 0 : 18;
 
   const getCalculatedFinalAmount = () => {
     if (!projectValue || isNaN(projectValue)) return 0;
@@ -769,6 +770,49 @@ export default function ProjectFormPage({
                         />
                         <IndianRupee className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                       </div>
+                      
+                      {/* Milestone-level tax checkboxes */}
+                      {!activeClient.isForeign && (
+                        <div className="flex items-center gap-4 mt-2 select-none">
+                          <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-650 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!m.isInclusive}
+                              disabled={m.status === "Paid" || m.status === "Invoiced" || !!m.isPersonal}
+                              onChange={(e) => handleMilestoneChange(idx, "isInclusive", e.target.checked)}
+                              className="h-3.5 w-3.5 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 cursor-pointer disabled:opacity-50"
+                            />
+                            <span>Incl. GST</span>
+                          </label>
+
+                          <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-655 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!m.isPersonal}
+                              disabled={m.status === "Paid" || m.status === "Invoiced"}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                handleMilestoneChange(idx, "isPersonal", checked);
+                                if (checked) {
+                                  handleMilestoneChange(idx, "isInclusive", false);
+                                }
+                              }}
+                              className="h-3.5 w-3.5 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 cursor-pointer"
+                            />
+                            <span>Personal</span>
+                          </label>
+                        </div>
+                      )}
+
+                      {m.isInclusive && !m.isPersonal && !activeClient.isForeign ? (
+                        <span className="block mt-1 text-[9px] font-bold text-slate-400/90 text-right select-none pr-1 animate-fade-in">
+                          Base: ₹{Math.round((Number(m.amount) || 0) / 1.18)}
+                        </span>
+                      ) : (!m.isInclusive && !m.isPersonal && !activeClient.isForeign) ? (
+                        <span className="block mt-1 text-[9px] font-bold text-[#5D5FEF] text-right select-none pr-1 animate-fade-in">
+                          Total (with GST): ₹{Math.round((Number(m.amount) || 0) * 1.18)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </div>

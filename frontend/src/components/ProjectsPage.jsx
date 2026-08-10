@@ -108,13 +108,13 @@ export default function ProjectsPage({
   // Handle Quick Invoice Generation from milestone
   const handleGenerateInvoice = (project, milestone) => {
     const isForeign = project.client?.isForeign === true;
-    const isPersonal = project.isPersonalAccount === true;
+    const isPersonal = milestone.isPersonal === true;
     const gstRate = (isForeign || isPersonal) ? 0 : 18;
 
-    const isInclusive = project.inclusiveGst !== false;
+    const isInclusive = milestone.isInclusive === true;
     let rate = milestone.amount;
     if (isInclusive && gstRate > 0) {
-      rate = Math.round((milestone.amount / 1.18) * 100) / 100;
+      rate = Math.round(milestone.amount / (1 + gstRate / 100));
     }
 
     // Generate draft state for InvoiceFormPage
@@ -129,6 +129,8 @@ export default function ProjectsPage({
           rate: rate,
           amount: rate,
           gstRate: gstRate,
+          isInclusive: isInclusive && gstRate > 0,
+          originalAmount: milestone.amount,
         },
       ],
       projectId: project._id,

@@ -90,13 +90,13 @@ export default function ProjectDetailPage({
     if (milestone.status !== "Pending") return;
 
     const isForeign = project.client?.isForeign === true;
-    const isPersonal = project.isPersonalAccount === true;
+    const isPersonal = milestone.isPersonal === true;
     const gstRate = (isForeign || isPersonal) ? 0 : 18;
 
-    const isInclusive = project.inclusiveGst !== false;
+    const isInclusive = milestone.isInclusive === true;
     let rate = milestone.amount;
     if (isInclusive && gstRate > 0) {
-      rate = Math.round((milestone.amount / 1.18) * 100) / 100;
+      rate = Math.round(milestone.amount / (1 + gstRate / 100));
     }
 
     const draftInvoice = {
@@ -111,6 +111,8 @@ export default function ProjectDetailPage({
           rate: rate,
           amount: rate,
           gstRate: gstRate,
+          isInclusive: isInclusive && gstRate > 0,
+          originalAmount: milestone.amount,
         },
       ],
       projectId: project._id,

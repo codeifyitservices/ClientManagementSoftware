@@ -200,6 +200,8 @@ export default function InvoiceFormPage({
             qty: 1,
             gstRate:
               i.gstRate !== undefined && i.gstRate !== null ? i.gstRate : 18,
+            isInclusive: !!i.isInclusive,
+            originalAmount: i.originalAmount !== undefined && i.originalAmount !== null ? i.originalAmount : (i.isInclusive ? (i.amount || i.rate || 0) : 0),
           })),
         );
       } else {
@@ -215,6 +217,8 @@ export default function InvoiceFormPage({
               sourceInvoice.gstRate !== null
                 ? sourceInvoice.gstRate
                 : 18,
+            isInclusive: !!sourceInvoice.isInclusive,
+            originalAmount: sourceInvoice.originalAmount !== undefined && sourceInvoice.originalAmount !== null ? sourceInvoice.originalAmount : (sourceInvoice.isInclusive ? (sourceInvoice.amount || 0) : 0),
           },
         ]);
       }

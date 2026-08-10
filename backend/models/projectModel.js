@@ -30,6 +30,14 @@ const milestoneSchema = new mongoose.Schema({
     enum: ["Pending", "Invoiced", "Paid"],
     default: "Pending",
   },
+  isInclusive: {
+    type: Boolean,
+    default: false,
+  },
+  isPersonal: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const projectSchema = new mongoose.Schema(
