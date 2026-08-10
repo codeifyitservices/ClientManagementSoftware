@@ -624,6 +624,8 @@ export default function InvoiceFormPage({
             nextInvoiceNumber ||
             "",
           _id: invoice?._id || null,
+          projectId: projectId || draftInvoice?.projectId || invoice?.projectId || null,
+          milestoneId: milestoneId || draftInvoice?.milestoneId || invoice?.milestoneId || null,
         },
         returnTo: isEdit ? `/invoices/${invoice._id}/edit` : "/invoices/create",
       },
