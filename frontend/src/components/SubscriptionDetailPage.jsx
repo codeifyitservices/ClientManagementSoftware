@@ -59,7 +59,9 @@ export default function SubscriptionDetailPage({
   const [paymentMethod, setPaymentMethod] = useState("bank_transfer");
   const [paymentRef, setPaymentRef] = useState("");
   const [invoiceNo, setInvoiceNo] = useState("");
-  const [billingPeriodText, setBillingPeriodText] = useState("");
+  const [billingPeriodStart, setBillingPeriodStart] = useState("");
+  const [billingPeriodEnd, setBillingPeriodEnd] = useState("");
+  const [autoGenerateInvoice, setAutoGenerateInvoice] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState("Paid");
   const [isSavingPayment, setIsSavingPayment] = useState(false);
 
@@ -144,6 +146,78 @@ export default function SubscriptionDetailPage({
     }
   }, [subscription]);
 
+  // Helper to open Record Payment Modal and automate billing period & invoice number
+  const handleOpenRecordPaymentModal = async () => {
+    setPaymentAmount(totalAmount || "");
+    const todayStr = new Date().toISOString().split("T")[0];
+    setPaymentDate(todayStr);
+
+    const paidPayments = subscription?.payments || [];
+    const cycle = (
+      subscription?.billingCycle ||
+      (subscription?.durationUnit === "years" ? "yearly" : "monthly")
+    ).toLowerCase();
+
+    let startDateObj = new Date();
+    if (paidPayments && paidPayments.length > 0) {
+      const lastP = paidPayments[paidPayments.length - 1];
+      if (lastP.paymentDate) {
+        startDateObj = addBillingCycleInterval(new Date(lastP.paymentDate), cycle);
+      }
+    } else if (subscription?.startDate) {
+      startDateObj = new Date(subscription.startDate);
+    }
+
+    const endDateObj = addBillingCycleInterval(startDateObj, cycle);
+
+    setBillingPeriodStart(startDateObj.toISOString().split("T")[0]);
+    setBillingPeriodEnd(endDateObj.toISOString().split("T")[0]);
+    setAutoGenerateInvoice(true);
+    setInvoiceNo("");
+
+    setIsRecordPaymentOpen(true);
+  };
+
+  const handleBillingPeriodStartChange = (newStartStr) => {
+    setBillingPeriodStart(newStartStr);
+    if (newStartStr) {
+      const cycle = (
+        subscription?.billingCycle ||
+        (subscription?.durationUnit === "years" ? "yearly" : "monthly")
+      ).toLowerCase();
+      const newStartObj = new Date(newStartStr);
+      if (!isNaN(newStartObj.getTime())) {
+        const autoEndObj = addBillingCycleInterval(newStartObj, cycle);
+        setBillingPeriodEnd(autoEndObj.toISOString().split("T")[0]);
+      }
+    }
+  };
+
+  const formatBillingPeriodRange = (startStr, endStr) => {
+    if (!startStr) return "";
+    const startD = new Date(startStr);
+    if (isNaN(startD.getTime())) return "";
+
+    const startFmt = startD.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    if (!endStr) return startFmt;
+
+    const endD = new Date(endStr);
+    if (isNaN(endD.getTime())) return startFmt;
+
+    const endFmt = endD.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    return `${startFmt} - ${endFmt}`;
+  };
+
   // Handler for Recording a Real Payment
   const handleRecordPaymentSubmit = async (e) => {
     e.preventDefault();
@@ -154,6 +228,13 @@ export default function SubscriptionDetailPage({
 
     setIsSavingPayment(true);
     try {
+      const formattedPeriod = formatBillingPeriodRange(
+        billingPeriodStart,
+        billingPeriodEnd,
+      );
+
+      const finalInvoiceNo = invoiceNo.trim();
+
       const res = await authenticatedFetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/subscriptions/${subscription._id}/payments`,
         {
@@ -161,12 +242,8 @@ export default function SubscriptionDetailPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             paymentDate,
-            invoiceNumber:
-              invoiceNo.trim() ||
-              `INV-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-            billingPeriod:
-              billingPeriodText.trim() ||
-              `${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })} - ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`,
+            invoiceNumber: finalInvoiceNo,
+            billingPeriod: formattedPeriod,
             amount: Number(paymentAmount),
             paymentMethod,
             referenceNo: paymentRef.trim(),
@@ -178,12 +255,45 @@ export default function SubscriptionDetailPage({
       if (res.ok) {
         const updatedSub = await res.json();
         setSubscription(updatedSub);
-        showToast("Payment recorded successfully!", "success");
+
+        if (autoGenerateInvoice) {
+          try {
+            const invoiceItems = buildInvoiceItems();
+            await authenticatedFetch(
+              `${import.meta.env.VITE_BACKEND_URL}/api/invoices`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  client: subscription.client._id || subscription.client,
+                  invoiceDate: paymentDate,
+                  dueDate: billingPeriodEnd || paymentDate,
+                  invoiceType: "Tax Invoice",
+                  currency: subscription.currency || "INR (₹)",
+                  items: invoiceItems,
+                  paymentStatus: paymentStatus === "Paid" ? "Paid" : "Pending",
+                  notes: `Subscription Payment for Period: ${formattedPeriod}`,
+                }),
+              },
+            );
+            showToast(
+              "Payment & Official Invoice record generated successfully!",
+              "success",
+            );
+          } catch (invErr) {
+            console.error("Error auto-generating invoice record:", invErr);
+            showToast("Payment recorded successfully!", "success");
+          }
+        } else {
+          showToast("Payment recorded successfully!", "success");
+        }
+
         setIsRecordPaymentOpen(false);
         setPaymentAmount("");
         setPaymentRef("");
         setInvoiceNo("");
-        setBillingPeriodText("");
+        setBillingPeriodStart("");
+        setBillingPeriodEnd("");
       } else {
         showToast("Failed to record payment", "error");
       }
@@ -414,19 +524,36 @@ export default function SubscriptionDetailPage({
   const lastPayment =
     paymentsList.length > 0 ? paymentsList[paymentsList.length - 1] : null;
 
-  // Calculate accurate Next Billing Date based on billing cycle (Monthly vs Yearly)
+  const addBillingCycleInterval = (date, cycle) => {
+    const next = new Date(date);
+    const c = (cycle || "").toLowerCase();
+    if (c === "weekly") {
+      next.setDate(next.getDate() + 7);
+    } else if (c === "quarterly") {
+      next.setMonth(next.getMonth() + 3);
+    } else if (c === "yearly") {
+      next.setFullYear(next.getFullYear() + 1);
+    } else {
+      next.setMonth(next.getMonth() + 1);
+    }
+    return next;
+  };
+
+  // Calculate accurate Next Billing Date based on billing cycle (weekly, monthly, quarterly, yearly)
   const computeNextBillingDate = () => {
-    const isMonthly =
-      subscription.billingCycle === "monthly" ||
-      subscription.durationUnit === "months";
+    if (!subscription || !subscription.startDate) return new Date();
+
+    const cycle = (
+      subscription.billingCycle ||
+      (subscription.durationUnit === "years" ? "yearly" : "monthly")
+    ).toLowerCase();
+
     const start = new Date(subscription.startDate);
-    const end = new Date(subscription.endDate);
+    const end = subscription.endDate
+      ? new Date(subscription.endDate)
+      : addBillingCycleInterval(start, cycle);
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-
-    if (!isMonthly) {
-      return end;
-    }
 
     let baseDate = start;
     if (paidPayments && paidPayments.length > 0) {
@@ -437,8 +564,20 @@ export default function SubscriptionDetailPage({
     }
 
     let nextBill = new Date(baseDate);
+
+    if (paidPayments && paidPayments.length > 0) {
+      nextBill = addBillingCycleInterval(baseDate, cycle);
+    }
+
     if (nextBill <= now) {
-      nextBill.setMonth(nextBill.getMonth() + 1);
+      while (nextBill <= now) {
+        const temp = addBillingCycleInterval(nextBill, cycle);
+        if (temp > end) {
+          nextBill = end;
+          break;
+        }
+        nextBill = temp;
+      }
     }
 
     if (nextBill > end) {
@@ -573,10 +712,7 @@ export default function SubscriptionDetailPage({
               {/* Top Header Buttons */}
               <div className="flex flex-wrap items-center gap-3">
                 <button
-                  onClick={() => {
-                    setPaymentAmount(totalAmount || "");
-                    setIsRecordPaymentOpen(true);
-                  }}
+                  onClick={handleOpenRecordPaymentModal}
                   className="px-4 py-2.5 rounded-xl border border-indigo-200 text-indigo-600 bg-white hover:bg-indigo-50 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-xs"
                 >
                   <FileText className="h-4 w-4 text-indigo-600" />
@@ -655,10 +791,13 @@ export default function SubscriptionDetailPage({
                       {Number(totalAmount).toLocaleString("en-IN")}{" "}
                       <span className="text-[10px] text-slate-400 font-semibold">
                         /{" "}
-                        {subscription.billingCycle === "yearly" ||
-                        subscription.durationUnit === "years"
-                          ? "year"
-                          : "month"}
+                        {(() => {
+                          const c = (subscription.billingCycle || "").toLowerCase();
+                          if (c === "weekly") return "week";
+                          if (c === "quarterly") return "quarter";
+                          if (c === "yearly" || subscription.durationUnit === "years") return "year";
+                          return "month";
+                        })()}
                       </span>
                     </span>
                   </Field>
@@ -781,10 +920,7 @@ export default function SubscriptionDetailPage({
                         </p>
                       </div>
                       <button
-                        onClick={() => {
-                          setPaymentAmount(totalAmount || "");
-                          setIsRecordPaymentOpen(true);
-                        }}
+                        onClick={handleOpenRecordPaymentModal}
                         className="px-3.5 py-2 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -912,21 +1048,21 @@ export default function SubscriptionDetailPage({
                     <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
                       Payment Summary
                     </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5">
                       {/* Card 1: Total Paid */}
-                      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 custom-shadow flex flex-col justify-between space-y-4">
-                        <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                          <CheckCircle2 className="h-5 w-5" />
+                      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 custom-shadow flex flex-col justify-between space-y-3">
+                        <div className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                          <CheckCircle2 className="h-4.5 w-4.5" />
                         </div>
                         <div>
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
                             Total Paid
                           </span>
-                          <span className="text-base font-black text-slate-900 block leading-tight">
+                          <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
                             {currencySym}
                             {totalPaidAmount.toLocaleString()}
                           </span>
-                          <span className="text-xs text-slate-400 font-semibold block mt-1">
+                          <span className="text-[11px] text-slate-400 font-semibold block mt-0.5">
                             {paidPayments.length}{" "}
                             {paidPayments.length === 1 ? "payment" : "payments"}
                           </span>
@@ -934,19 +1070,19 @@ export default function SubscriptionDetailPage({
                       </div>
 
                       {/* Card 2: Total Pending */}
-                      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 custom-shadow flex flex-col justify-between space-y-4">
-                        <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                          <Clock className="h-5 w-5" />
+                      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 custom-shadow flex flex-col justify-between space-y-3">
+                        <div className="h-9 w-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                          <Clock className="h-4.5 w-4.5" />
                         </div>
                         <div>
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
                             Total Pending
                           </span>
-                          <span className="text-base font-black text-slate-900 block leading-tight">
+                          <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
                             {currencySym}
                             {totalPendingAmount.toLocaleString()}
                           </span>
-                          <span className="text-xs text-slate-400 font-semibold block mt-1">
+                          <span className="text-[11px] text-slate-400 font-semibold block mt-0.5">
                             {pendingPayments.length}{" "}
                             {pendingPayments.length === 1
                               ? "payment"
@@ -956,19 +1092,19 @@ export default function SubscriptionDetailPage({
                       </div>
 
                       {/* Card 3: Total Failed */}
-                      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 custom-shadow flex flex-col justify-between space-y-4">
-                        <div className="h-10 w-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                          <AlertTriangle className="h-5 w-5" />
+                      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 custom-shadow flex flex-col justify-between space-y-3">
+                        <div className="h-9 w-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                          <AlertTriangle className="h-4.5 w-4.5" />
                         </div>
                         <div>
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
                             Total Failed
                           </span>
-                          <span className="text-base font-black text-slate-900 block leading-tight">
+                          <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
                             {currencySym}
                             {totalFailedAmount.toLocaleString()}
                           </span>
-                          <span className="text-xs text-slate-400 font-semibold block mt-1">
+                          <span className="text-[11px] text-slate-400 font-semibold block mt-0.5">
                             {failedPayments.length}{" "}
                             {failedPayments.length === 1
                               ? "payment"
@@ -978,15 +1114,15 @@ export default function SubscriptionDetailPage({
                       </div>
 
                       {/* Card 4: Last Payment */}
-                      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 custom-shadow flex flex-col justify-between space-y-4">
-                        <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                          <Calendar className="h-5 w-5" />
+                      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 custom-shadow flex flex-col justify-between space-y-3">
+                        <div className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                          <Calendar className="h-4.5 w-4.5" />
                         </div>
                         <div>
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
                             Last Payment
                           </span>
-                          <span className="text-base font-black text-slate-900 block leading-tight">
+                          <span className="text-xs sm:text-sm font-black text-slate-900 block leading-tight whitespace-nowrap">
                             {lastPayment
                               ? new Date(
                                   lastPayment.paymentDate,
@@ -997,7 +1133,7 @@ export default function SubscriptionDetailPage({
                                 })
                               : "None"}
                           </span>
-                          <span className="text-xs text-slate-400 font-semibold block mt-1">
+                          <span className="text-[11px] text-slate-400 font-semibold block mt-0.5 truncate">
                             {lastPayment
                               ? `via ${formatPaymentMethod(lastPayment.paymentMethod)}`
                               : "No record"}
@@ -1006,22 +1142,22 @@ export default function SubscriptionDetailPage({
                       </div>
 
                       {/* Card 5: Next Payment */}
-                      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 custom-shadow flex flex-col justify-between space-y-4">
-                        <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                          <Calendar className="h-5 w-5" />
+                      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 custom-shadow flex flex-col justify-between space-y-3">
+                        <div className="h-9 w-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                          <Calendar className="h-4.5 w-4.5" />
                         </div>
                         <div>
                           <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
                             Next Payment
                           </span>
-                          <span className="text-base font-black text-slate-900 block leading-tight">
+                          <span className="text-xs sm:text-sm font-black text-slate-900 block leading-tight whitespace-nowrap">
                             {nextBillingDateObj.toLocaleDateString("en-IN", {
                               day: "numeric",
                               month: "short",
                               year: "numeric",
                             })}
                           </span>
-                          <span className="text-xs text-rose-500 font-extrabold block mt-1">
+                          <span className="text-[11px] text-rose-500 font-extrabold block mt-0.5 whitespace-nowrap">
                             {nextBillDiffDays <= 0
                               ? "Due Today"
                               : `${nextBillDiffDays} days left`}
@@ -1055,15 +1191,53 @@ export default function SubscriptionDetailPage({
 
                     <div className="grid grid-cols-6 sm:grid-cols-12 gap-3 pt-2">
                       {monthsTimeline.map((m, idx) => {
-                        const monthPaid = paymentsList.some((p) => {
-                          const d = new Date(p.paymentDate);
-                          return (
-                            d.getMonth() === idx &&
-                            d.getFullYear() === new Date().getFullYear() &&
-                            p.status === "Paid"
-                          );
+                        const year = new Date().getFullYear();
+
+                        // Check payments for this month
+                        const matchingPayments = paymentsList.filter((p) => {
+                          if (p.paymentDate) {
+                            const d = new Date(p.paymentDate);
+                            if (
+                              d.getFullYear() === year &&
+                              d.getMonth() === idx
+                            ) {
+                              return true;
+                            }
+                          }
+                          // If yearly subscription, check if last paid payment date covers this month
+                          if (
+                            subscription?.billingCycle === "yearly" &&
+                            p.status === "Paid" &&
+                            p.paymentDate
+                          ) {
+                            const pDate = new Date(p.paymentDate);
+                            const monthStart = new Date(year, idx, 1);
+                            const coverEnd = addBillingCycleInterval(
+                              pDate,
+                              "yearly",
+                            );
+                            if (
+                              monthStart >= pDate &&
+                              monthStart < coverEnd
+                            ) {
+                              return true;
+                            }
+                          }
+                          return false;
                         });
-                        const isPastMonth = idx <= currentMonthIndex;
+
+                        const isPaid = matchingPayments.some(
+                          (p) => p.status === "Paid",
+                        );
+                        const isPending =
+                          !isPaid &&
+                          matchingPayments.some(
+                            (p) => p.status === "Pending",
+                          );
+                        const isFailed =
+                          !isPaid &&
+                          !isPending &&
+                          matchingPayments.some((p) => p.status === "Failed");
 
                         return (
                           <div
@@ -1075,15 +1249,22 @@ export default function SubscriptionDetailPage({
                             </span>
                             <div
                               className={`h-9 w-9 rounded-full flex items-center justify-center border transition-all ${
-                                monthPaid ||
-                                (isPastMonth && paymentsList.length > 0)
+                                isPaid
                                   ? "bg-emerald-50 border-emerald-200 text-emerald-600 font-black shadow-xs"
-                                  : "bg-slate-50 border-slate-200 text-slate-300"
+                                  : isPending
+                                    ? "bg-amber-50 border-amber-200 text-amber-600 font-black shadow-xs"
+                                    : isFailed
+                                      ? "bg-rose-50 border-rose-200 text-rose-600 font-black shadow-xs"
+                                      : "bg-slate-50 border-slate-200 text-slate-300"
                               }`}
+                              title={`${m}: ${isPaid ? "Paid" : isPending ? "Pending" : isFailed ? "Failed" : "No payment"}`}
                             >
-                              {monthPaid ||
-                              (isPastMonth && paymentsList.length > 0) ? (
+                              {isPaid ? (
                                 <CheckCircle className="h-4 w-4" />
+                              ) : isPending ? (
+                                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                              ) : isFailed ? (
+                                <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
                               ) : (
                                 <Clock className="h-3.5 w-3.5 text-slate-300" />
                               )}
@@ -1361,7 +1542,13 @@ export default function SubscriptionDetailPage({
                       <span className="text-slate-600 font-bold">+</span>
                       <div>
                         <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">
-                          Monthly Add-ons
+                          {(() => {
+                            const c = (subscription.billingCycle || "").toLowerCase();
+                            if (c === "weekly") return "Weekly Add-ons";
+                            if (c === "quarterly") return "Quarterly Add-ons";
+                            if (c === "yearly" || subscription.durationUnit === "years") return "Yearly Add-ons";
+                            return "Monthly Add-ons";
+                          })()}
                         </span>
                         <span className="text-indigo-300 font-bold">
                           {currencySym}{totalAddonAmount.toLocaleString("en-IN")}
@@ -1374,7 +1561,16 @@ export default function SubscriptionDetailPage({
                       </span>
                       <span className="text-base font-black text-emerald-400">
                         {currencySym}{totalAmount.toLocaleString("en-IN")}{" "}
-                        <span className="text-[10px] text-emerald-300 font-semibold">/ month</span>
+                        <span className="text-[10px] text-emerald-300 font-semibold">
+                          /{" "}
+                          {(() => {
+                            const c = (subscription.billingCycle || "").toLowerCase();
+                            if (c === "weekly") return "week";
+                            if (c === "quarterly") return "quarter";
+                            if (c === "yearly" || subscription.durationUnit === "years") return "year";
+                            return "month";
+                          })()}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -1785,17 +1981,50 @@ export default function SubscriptionDetailPage({
                   />
                 </div>
 
+                {/* Billing Period Date Range Selectors */}
                 <div className="space-y-1.5">
                   <label className="block text-[10px] uppercase font-bold text-slate-450">
-                    Billing Period
+                    Billing Period (Start & End Date) *
                   </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 25 May 2026 - 24 Jun 2026"
-                    value={billingPeriodText}
-                    onChange={(e) => setBillingPeriodText(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-900 font-semibold"
-                  />
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <span className="block text-[9px] text-slate-400 font-semibold mb-1">
+                        Start Date
+                      </span>
+                      <input
+                        type="date"
+                        value={billingPeriodStart}
+                        onChange={(e) =>
+                          handleBillingPeriodStartChange(e.target.value)
+                        }
+                        className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-900 font-semibold text-xs"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-slate-400 font-semibold mb-1">
+                        End Date
+                      </span>
+                      <input
+                        type="date"
+                        value={billingPeriodEnd}
+                        onChange={(e) => setBillingPeriodEnd(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-900 font-semibold text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+                  {billingPeriodStart && (
+                    <div className="mt-1.5 p-2 rounded-lg bg-indigo-50/70 border border-indigo-100 text-[10px] font-bold text-indigo-700 flex items-center justify-between">
+                      <span>⚡ Auto-calculated Period:</span>
+                      <strong className="text-slate-900 font-extrabold">
+                        {formatBillingPeriodRange(
+                          billingPeriodStart,
+                          billingPeriodEnd,
+                        )}
+                      </strong>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -1839,6 +2068,23 @@ export default function SubscriptionDetailPage({
                     onChange={(e) => setPaymentRef(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-900 font-medium"
                   />
+                </div>
+
+                {/* Auto Generate & Link Invoice Toggle */}
+                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    id="autoGenerateInvoiceCheckbox"
+                    checked={autoGenerateInvoice}
+                    onChange={(e) => setAutoGenerateInvoice(e.target.checked)}
+                    className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-[#5D5FEF] border-slate-300 cursor-pointer"
+                  />
+                  <label
+                    htmlFor="autoGenerateInvoiceCheckbox"
+                    className="text-xs font-bold text-slate-800 cursor-pointer"
+                  >
+                    Auto-create official Invoice in system for this payment
+                  </label>
                 </div>
               </div>
 
