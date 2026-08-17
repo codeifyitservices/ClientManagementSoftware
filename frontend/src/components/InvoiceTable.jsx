@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import ConfirmDialog from "./ConfirmDialog";
+import { formatWithINRConversion, formatCurrencyOnly, convertToINR } from "../utils/currencyUtils";
 
 const ROWS_PER_PAGE = 10;
 
@@ -47,6 +48,7 @@ export default function InvoiceTable({
 
   // ── Pagination ───────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // ── Multi-select ─────────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -111,13 +113,26 @@ export default function InvoiceTable({
     });
   }, [invoices, activeTab, selectedClientId, startDate, endDate]);
 
+  const calculatedTotals = useMemo(() => {
+    let base = 0;
+    let gst = 0;
+    let grand = 0;
 
-  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / ROWS_PER_PAGE));
+    filteredInvoices.forEach((inv) => {
+      base += convertToINR(inv.amount || 0, inv.currency);
+      gst += convertToINR(inv.gstAmount || 0, inv.currency);
+      grand += convertToINR(inv.totalAmount || 0, inv.currency);
+    });
+
+    return { base, gst, grand };
+  }, [filteredInvoices]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / rowsPerPage));
 
   const paginatedInvoices = useMemo(() => {
-    const start = (currentPage - 1) * ROWS_PER_PAGE;
-    return filteredInvoices.slice(start, start + ROWS_PER_PAGE);
-  }, [filteredInvoices, currentPage]);
+    const start = (currentPage - 1) * rowsPerPage;
+    return filteredInvoices.slice(start, start + rowsPerPage);
+  }, [filteredInvoices, currentPage, rowsPerPage]);
 
   // ── Checkbox helpers ─────────────────────────────────────────────────────────
   const pageIds = paginatedInvoices.map((inv) => inv._id ?? inv.id);
@@ -178,7 +193,31 @@ export default function InvoiceTable({
   };
 
   const isFilterActive = !!(selectedClientId || startDate || endDate);
-  const TOTAL_COLS = 9;
+  const TOTAL_COLS = 10;
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "—";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "—";
+      if (typeof dateStr === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+        const [year, month, day] = dateStr.split("T")[0].split("-");
+        const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+        return dateObj.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+      }
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "—";
+    }
+  };
 
 
   return (
@@ -286,7 +325,7 @@ export default function InvoiceTable({
           <thead className="bg-gray-50">
             <tr>
               {/* Select-all checkbox */}
-              <th className="w-10 px-4 py-3 text-left">
+              <th className="w-9 px-3 py-2.5 text-left">
                 <input
                   type="checkbox"
                   checked={allPageSelected}
@@ -298,28 +337,31 @@ export default function InvoiceTable({
                   aria-label="Select all on this page"
                 />
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-left font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 Invoice No
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-left font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
+                Date
+              </th>
+              <th className="px-3 py-2.5 text-left font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 Client / Company
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-right font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 Base Amount
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-right font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 GST Rate
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-right font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 GST Amount
               </th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-right font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 Grand Total
               </th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-left font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 Status
               </th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-600 uppercase tracking-wide text-xs whitespace-nowrap">
+              <th className="px-3 py-2.5 text-center font-bold text-gray-600 uppercase tracking-wider text-[11px] whitespace-nowrap">
                 Actions
               </th>
             </tr>
@@ -347,12 +389,12 @@ export default function InvoiceTable({
                 return (
                   <tr
                     key={id}
-                    className={`transition-colors duration-100 ${
+                    className={`transition-colors duration-100 text-xs ${
                       isSelected ? "bg-indigo-50" : "hover:bg-gray-50"
                     }`}
                   >
                     {/* Row checkbox */}
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5">
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -363,58 +405,57 @@ export default function InvoiceTable({
                     </td>
 
                     {/* Invoice No */}
-                    <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">
+                    <td className="px-3 py-2.5 font-bold text-indigo-600 whitespace-nowrap">
                       {invoice.invoiceNumber ?? "—"}
                     </td>
 
+                    {/* Date */}
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
+                      {formatDate(invoice.invoiceDate)}
+                    </td>
+
                     {/* Client / Company */}
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                      <div className="font-medium">{invoice.client?.clientName ?? "—"}</div>
+                    <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap max-w-[140px] truncate" title={`${invoice.client?.clientName || ''} ${invoice.client?.companyName || ''}`}>
+                      <div className="font-semibold text-slate-800 truncate">{invoice.client?.clientName ?? "—"}</div>
                       {invoice.client?.companyName && (
-                        <div className="text-xs text-gray-400">{invoice.client.companyName}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{invoice.client.companyName}</div>
                       )}
                     </td>
 
                     {/* Base Amount */}
-                    <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right text-gray-700 whitespace-nowrap font-medium">
                       {invoice.amount != null
-                        ? `₹${Number(invoice.amount).toLocaleString("en-IN", {
-                            minimumFractionDigits: 2,
-                          })}`
+                        ? formatCurrencyOnly(invoice.amount, invoice.currency)
                         : "—"}
                     </td>
 
                     {/* GST Rate */}
-                    <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right text-gray-600 whitespace-nowrap">
                       {invoice.gstRate != null ? `${invoice.gstRate}%` : "—"}
                     </td>
 
                     {/* GST Amount */}
-                    <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap font-medium">
+                    <td className="px-3 py-2.5 text-right text-indigo-600 whitespace-nowrap font-medium">
                       {invoice.gstAmount != null
-                        ? `₹${Number(invoice.gstAmount).toLocaleString("en-IN", {
-                            minimumFractionDigits: 2,
-                          })}`
+                        ? formatCurrencyOnly(invoice.gstAmount, invoice.currency)
                         : "—"}
                     </td>
 
                     {/* Grand Total */}
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-black text-slate-900 whitespace-nowrap">
                       {invoice.totalAmount != null
-                        ? `₹${Number(invoice.totalAmount).toLocaleString("en-IN", {
-                            minimumFractionDigits: 2,
-                          })}`
+                        ? formatWithINRConversion(invoice.totalAmount, invoice.currency)
                         : "—"}
                     </td>
 
                     {/* Status */}
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       {statusBadge(invoice.paymentStatus)}
                     </td>
 
                     {/* Actions */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
+                    <td className="px-2 py-2.5">
+                      <div className="flex items-center justify-center gap-0.5">
                         {/* Edit */}
                         <button
                           onClick={() => onEdit?.(invoice)}
@@ -481,19 +522,64 @@ export default function InvoiceTable({
               })
             )}
           </tbody>
+
+          {/* ── Table Footer Totals ── */}
+          {filteredInvoices.length > 0 && (
+            <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold text-xs">
+              <tr>
+                <td colSpan={4} className="px-3 py-2.5 text-slate-700 font-extrabold uppercase tracking-wider">
+                  Total ({filteredInvoices.length} Invoices)
+                </td>
+                {/* Base Amount */}
+                <td className="px-3 py-2.5 text-right text-slate-900 whitespace-nowrap font-black">
+                  ₹{calculatedTotals.base.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                {/* GST Rate empty cell */}
+                <td className="px-3 py-2.5 text-right text-slate-400">—</td>
+                {/* GST Amount */}
+                <td className="px-3 py-2.5 text-right text-indigo-600 whitespace-nowrap font-black">
+                  ₹{calculatedTotals.gst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                {/* Grand Total */}
+                <td className="px-3 py-2.5 text-right text-slate-900 whitespace-nowrap font-black">
+                  ₹{calculatedTotals.grand.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 
       {/* ── Pagination ────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-1">
-        <p className="text-sm text-gray-500">
-          {filteredInvoices.length === 0
-            ? "No records"
-            : `Showing ${(currentPage - 1) * ROWS_PER_PAGE + 1}–${Math.min(
-                currentPage * ROWS_PER_PAGE,
-                filteredInvoices.length
-              )} of ${filteredInvoices.length} invoices`}
-        </p>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+            <span>Rows per page:</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <p className="text-xs sm:text-sm text-gray-500">
+            {filteredInvoices.length === 0
+              ? "No records"
+              : `Showing ${(currentPage - 1) * rowsPerPage + 1}–${Math.min(
+                  currentPage * rowsPerPage,
+                  filteredInvoices.length
+                )} of ${filteredInvoices.length} invoices`}
+          </p>
+        </div>
 
         <div className="flex items-center gap-2">
           <button

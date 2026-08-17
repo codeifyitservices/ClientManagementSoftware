@@ -9,6 +9,7 @@ import {
   Globe,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { getCurrencySymbol } from "../utils/currencyUtils";
 
 // Helper function to convert numeric value into Indian English word format
 const numberToWords = (num) => {
@@ -532,7 +533,7 @@ export default function InvoicePreviewPage({
                 <th className="py-2.5 px-3 rounded-l w-8">#</th>
                 <th className="py-2.5 px-3">Description</th>
                 <th className="py-2.5 px-3 text-center">SAC Code</th>
-                <th className="py-2.5 px-3 text-right rounded-r">Amount (₹)</th>
+                <th className="py-2.5 px-3 text-right rounded-r">Amount ({getCurrencySymbol(invoiceData.currency)})</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 font-normal text-slate-800">
@@ -563,7 +564,7 @@ export default function InvoicePreviewPage({
             <div className="w-64 grid grid-cols-2 text-right text-[10px]">
               <span className="text-slate-600 font-medium">Sub Total</span>
               <span className="text-slate-900 font-bold">
-                ₹
+                {getCurrencySymbol(invoiceData.currency)}{" "}
                 {subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </span>
 
@@ -573,7 +574,7 @@ export default function InvoicePreviewPage({
                     IGST ({primaryGstRate}%)
                   </span>
                   <span className="text-slate-900 font-bold">
-                    ₹
+                    {getCurrencySymbol(invoiceData.currency)}{" "}
                     {totalGstAmount.toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                     })}
@@ -586,7 +587,7 @@ export default function InvoicePreviewPage({
                     %)
                   </span>
                   <span className="text-slate-900 font-bold">
-                    ₹
+                    {getCurrencySymbol(invoiceData.currency)}{" "}
                     {(totalGstAmount / 2).toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                     })}
@@ -596,7 +597,7 @@ export default function InvoicePreviewPage({
                     %)
                   </span>
                   <span className="text-slate-900 font-bold">
-                    ₹
+                    {getCurrencySymbol(invoiceData.currency)}{" "}
                     {(totalGstAmount / 2).toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                     })}
@@ -607,7 +608,7 @@ export default function InvoicePreviewPage({
             <div className="w-64 bg-slate-100 p-2.5 rounded-lg border border-slate-200 mt-2 grid grid-cols-2 text-right text-xs">
               <span className="font-bold text-slate-900">Total</span>
               <span className="font-bold text-slate-900">
-                ₹
+                {getCurrencySymbol(invoiceData.currency)}{" "}
                 {grandTotal.toLocaleString("en-IN", {
                   minimumFractionDigits: 2,
                 })}

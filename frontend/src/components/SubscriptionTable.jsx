@@ -50,6 +50,7 @@ export default function SubscriptionTable({
   onDeleteSelected,
 }) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkDeleteIds, setBulkDeleteIds] = useState(null);
 
@@ -58,7 +59,7 @@ export default function SubscriptionTable({
     setCurrentPage(1);
   }, [subscriptions.length]);
 
-  const totalPages = Math.max(1, Math.ceil(subscriptions.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(subscriptions.length / rowsPerPage));
 
   // Clamp current page when total pages shrink
   useEffect(() => {
@@ -66,9 +67,9 @@ export default function SubscriptionTable({
   }, [totalPages, currentPage]);
 
   const pageRows = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return subscriptions.slice(start, start + PAGE_SIZE);
-  }, [subscriptions, currentPage]);
+    const start = (currentPage - 1) * rowsPerPage;
+    return subscriptions.slice(start, start + rowsPerPage);
+  }, [subscriptions, currentPage, rowsPerPage]);
 
   // ── Selection helpers ──────────────────────────────────────────────────────
   const pageIds = pageRows.map((s) => s._id);
@@ -270,15 +271,34 @@ export default function SubscriptionTable({
       </div>
 
       {/* ── Pagination ── */}
-      <div className="flex items-center justify-between mt-4 px-1">
-        <p className="text-sm text-gray-500">
-          {subscriptions.length === 0
-            ? "No records"
-            : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(
-                currentPage * PAGE_SIZE,
-                subscriptions.length
-              )} of ${subscriptions.length} subscriptions`}
-        </p>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-1">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+            <span>Rows per page:</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <p className="text-xs sm:text-sm text-gray-500">
+            {subscriptions.length === 0
+              ? "No records"
+              : `Showing ${(currentPage - 1) * rowsPerPage + 1}–${Math.min(
+                  currentPage * rowsPerPage,
+                  subscriptions.length
+                )} of ${subscriptions.length} subscriptions`}
+          </p>
+        </div>
 
         <div className="flex items-center gap-2">
           <button

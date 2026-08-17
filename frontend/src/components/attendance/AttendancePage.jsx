@@ -5,6 +5,7 @@ import {
   FileSpreadsheet,
   Monitor,
   Plus,
+  ShieldCheck,
 } from "lucide-react";
 import AttendanceWorkflowBar from "./AttendanceWorkflowBar";
 import AttendanceDashboard from "./AttendanceDashboard";
@@ -14,6 +15,7 @@ import AttendanceDetailsModal from "./AttendanceDetailsModal";
 import ManualAttendanceModal from "./ManualAttendanceModal";
 import AgentPairingModal from "./AgentPairingModal";
 import EmployeeAttendanceDashboard from "./EmployeeAttendanceDashboard";
+import AttendanceSecurityAdmin from "./AttendanceSecurityAdmin";
 
 export default function AttendancePage({ currentUser }) {
   const isManager = currentUser?.role !== "Employee";
@@ -46,7 +48,12 @@ export default function AttendancePage({ currentUser }) {
   const tabs = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "list", label: "Attendance Records", icon: ListFilter },
-    ...(isManager ? [{ id: "reports", label: "Reports & Analytics", icon: FileSpreadsheet }] : []),
+    ...(isManager
+      ? [
+          { id: "reports", label: "Reports & Analytics", icon: FileSpreadsheet },
+          { id: "security", label: "Attendance Security", icon: ShieldCheck },
+        ]
+      : []),
   ];
 
   return (
@@ -130,6 +137,8 @@ export default function AttendancePage({ currentUser }) {
         )}
 
         {activeTab === "reports" && <AttendanceReports />}
+
+        {activeTab === "security" && <AttendanceSecurityAdmin currentUser={currentUser} />}
       </div>
 
       {/* Modals */}

@@ -153,6 +153,19 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   doc.font("Helvetica-Bold").fontSize(8).fillColor(isPaid ? "#16A34A" : "#D97706")
     .text(isPaid ? "Paid" : "Pending", 455, infoTop + 26, { width: 100, align: "left" });
 
+  // Determine Currency Symbol
+  const getPdfCurrencySymbol = (currencyStr) => {
+    if (!currencyStr) return "Rs.";
+    const str = String(currencyStr).trim().toUpperCase();
+    if (str.includes("USD")) return "$";
+    if (str.includes("AED")) return "AED";
+    if (str.includes("GBP")) return "£";
+    if (str.includes("EUR")) return "€";
+    if (str.includes("AUD") || str.includes("A$")) return "A$";
+    return "Rs.";
+  };
+  const pdfCurrency = getPdfCurrencySymbol(invoice.currency);
+
   // Determine Table Top
   const tableTop = Math.max(225, addrY + 15);
 
@@ -163,7 +176,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
     .text("#", 45, tableTop + 6, { width: 25, align: "center" })
     .text("Description", 75, tableTop + 6, { width: 330 })
     .text("SAC Code", 410, tableTop + 6, { width: 60, align: "center" })
-    .text("Amount (Rs.)", 475, tableTop + 6, { width: 75, align: "right" });
+    .text(`Amount (${pdfCurrency})`, 475, tableTop + 6, { width: 75, align: "right" });
 
   // 5. Items Table Rows
   let currentY = tableTop + 28;
@@ -255,7 +268,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
     .text("Sub Total:", totalBlockX, currentY, { width: 110, align: "right" });
   doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
-    .text(`Rs. ${subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
+    .text(`${pdfCurrency} ${subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
 
   currentY += 16;
   if (client.isForeign) {
@@ -264,7 +277,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
     doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
       .text(`IGST (${primaryRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });
     doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
-      .text(`Rs. ${totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
+      .text(`${pdfCurrency} ${totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
     currentY += 16;
   } else {
     const halfGst = totalGst / 2;
@@ -272,13 +285,13 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
     doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
       .text(`CGST (${halfRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });
     doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
-      .text(`Rs. ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
+      .text(`${pdfCurrency} ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
     currentY += 16;
 
     doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
       .text(`SGST (${halfRate}%):`, totalBlockX, currentY, { width: 110, align: "right" });
     doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A")
-      .text(`Rs. ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
+      .text(`${pdfCurrency} ${halfGst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
     currentY += 16;
   }
 
@@ -286,7 +299,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   doc.rect(totalBlockX, currentY - 2, 225, 20).fill("#F3F4F6");
   doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0F172A")
     .text("Total", totalBlockX + 5, currentY + 3, { width: 105, align: "left" })
-    .text(`Rs. ${grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY + 3, { width: 100, align: "right" });
+    .text(`${pdfCurrency} ${grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY + 3, { width: 100, align: "right" });
 
   currentY += 28;
 

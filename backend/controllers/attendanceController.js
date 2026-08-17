@@ -1,6 +1,15 @@
 import Attendance from "../models/attendanceModel.js";
 import Employee from "../models/employeeModel.js";
 import AgentSession from "../models/agentSessionModel.js";
+import IpWhitelist from "../models/ipWhitelistModel.js";
+import EmployeeLocation from "../models/employeeLocationModel.js";
+import WfhRequest from "../models/wfhRequestModel.js";
+import AttendanceSecurityAudit from "../models/attendanceSecurityAuditModel.js";
+import {
+  getClientIp,
+  validateAttendanceAccess,
+  logSecurityAudit,
+} from "../services/attendanceSecurityService.js";
 
 /**
  * Helper to get current YYYY-MM-DD string
@@ -48,6 +57,43 @@ export const checkIn = async (req, res) => {
         });
       }
     }
+
+    // ── Attendance Security Validation (IP & Geolocation Whitelist) ──
+    const clientIp = getClientIp(req);
+    const { latitude, longitude } = req.body;
+    const accessCheck = await validateAttendanceAccess(employee._id, {
+      ip: clientIp,
+      latitude,
+      longitude,
+    });
+
+    if (!accessCheck.allowed) {
+      await logSecurityAudit({
+        action: "CHECKIN_BLOCKED",
+        performedBy: req.user?._id,
+        employee: employee._id,
+        ip: clientIp,
+        location: accessCheck.location,
+        reason: accessCheck.reason,
+        metadata: { message: accessCheck.message },
+      });
+
+      return res.status(403).json({
+        success: false,
+        message: accessCheck.message,
+        validation: accessCheck,
+      });
+    }
+
+    await logSecurityAudit({
+      action: "CHECKIN_ALLOWED",
+      performedBy: req.user?._id,
+      employee: employee._id,
+      ip: clientIp,
+      location: accessCheck.location,
+      reason: accessCheck.reason,
+      matchedRule: accessCheck.matchedRule,
+    });
 
     const todayStr = getTodayDateString();
     let attendance = await Attendance.findOne({ employee: employee._id, date: todayStr });
@@ -1205,5 +1251,536 @@ export const saveAttendanceNote = async (req, res) => {
   } catch (error) {
     console.error("Error in saveAttendanceNote:", error);
     return res.status(500).json({ success: false, message: "Failed to save note", error: error.message });
+  }
+};
+
+/**
+ * @desc    Get Attendance Security Status for current employee/request
+ * @route   GET /api/attendance/security-status
+ * @access  Private
+ */
+export const getEmployeeSecurityStatus = async (req, res) => {
+  try {
+    const employeeId = req.user?._id;
+    const clientIp = getClientIp(req);
+    const lat = req.query.latitude ? Number(req.query.latitude) : null;
+    const lng = req.query.longitude ? Number(req.query.longitude) : null;
+
+    const accessCheck = await validateAttendanceAccess(employeeId, {
+      ip: clientIp,
+      latitude: lat,
+      longitude: lng,
+    });
+
+    return res.status(200).json({
+      success: true,
+      clientIp,
+      validation: accessCheck,
+    });
+  } catch (error) {
+    console.error("Error in getEmployeeSecurityStatus:", error);
+    return res.status(500).json({ success: false, message: "Failed to get security status", error: error.message });
+  }
+};
+
+/**
+ * @desc    Get all IP Whitelist entries
+ * @route   GET /api/attendance/whitelist
+ * @access  Private (Admin)
+ */
+export const getWhitelists = async (req, res) => {
+  try {
+    const { status, scope, type, search } = req.query;
+    let query = {};
+    if (status && status !== "all") query.status = status;
+    if (scope && scope !== "all") query.scope = scope;
+    if (type && type !== "all") query.type = type;
+    if (search) {
+      query.$or = [
+        { ipAddress: { $regex: search, $options: "i" } },
+        { locationName: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const whitelists = await IpWhitelist.find(query)
+      .populate("employee", "fullName employeeId email designation")
+      .populate("addedBy", "fullName email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, whitelists });
+  } catch (error) {
+    console.error("Error in getWhitelists:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch IP whitelists", error: error.message });
+  }
+};
+
+/**
+ * @desc    Create manual IP Whitelist entry
+ * @route   POST /api/attendance/whitelist
+ * @access  Private (Admin)
+ */
+export const createWhitelist = async (req, res) => {
+  try {
+    const {
+      ipAddress,
+      scope,
+      employeeId,
+      locationName,
+      expiryType,
+      customExpiryDate,
+      type,
+      notes,
+    } = req.body;
+
+    if (!ipAddress) {
+      return res.status(400).json({ success: false, message: "IP address is required" });
+    }
+
+    let expiresAt = null;
+    const now = new Date();
+    if (expiryType === "24 Hours" || expiryType === "1 Day") {
+      expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    } else if (expiryType === "1 Week") {
+      expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    } else if (expiryType === "1 Month") {
+      expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    } else if (expiryType === "Custom" && customExpiryDate) {
+      expiresAt = new Date(customExpiryDate);
+    }
+
+    const newWhitelist = await IpWhitelist.create({
+      ipAddress: ipAddress.trim(),
+      scope: scope || "Organization",
+      employee: scope === "Employee" && employeeId ? employeeId : null,
+      locationName: locationName || "Manually Whitelisted Network",
+      addedBy: req.user?._id,
+      expiryType: expiryType || "Never",
+      expiresAt,
+      status: "Active",
+      type: type || "Permanent",
+      notes: notes || "",
+    });
+
+    await logSecurityAudit({
+      action: "WHITELIST_CREATED",
+      performedBy: req.user?._id,
+      employee: scope === "Employee" ? employeeId : null,
+      ip: ipAddress,
+      location: locationName || "Manually Whitelisted Network",
+      reason: `Manually added ${type || 'Permanent'} whitelist (${expiryType || 'Never'})`,
+      matchedRule: newWhitelist._id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "IP address whitelisted successfully",
+      whitelist: newWhitelist,
+    });
+  } catch (error) {
+    console.error("Error in createWhitelist:", error);
+    return res.status(500).json({ success: false, message: "Failed to create IP whitelist entry", error: error.message });
+  }
+};
+
+/**
+ * @desc    Update IP Whitelist status / fields
+ * @route   PUT /api/attendance/whitelist/:id
+ * @access  Private (Admin)
+ */
+export const updateWhitelist = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, locationName, notes } = req.body;
+
+    const whitelist = await IpWhitelist.findById(id);
+    if (!whitelist) {
+      return res.status(404).json({ success: false, message: "Whitelist entry not found" });
+    }
+
+    if (status) whitelist.status = status;
+    if (locationName) whitelist.locationName = locationName;
+    if (notes !== undefined) whitelist.notes = notes;
+
+    await whitelist.save();
+
+    await logSecurityAudit({
+      action: "WHITELIST_UPDATED",
+      performedBy: req.user?._id,
+      employee: whitelist.employee,
+      ip: whitelist.ipAddress,
+      location: whitelist.locationName,
+      reason: `Updated status to ${whitelist.status}`,
+      matchedRule: whitelist._id,
+    });
+
+    return res.status(200).json({ success: true, message: "Whitelist entry updated", whitelist });
+  } catch (error) {
+    console.error("Error in updateWhitelist:", error);
+    return res.status(500).json({ success: false, message: "Failed to update whitelist entry", error: error.message });
+  }
+};
+
+/**
+ * @desc    Delete/Deactivate IP Whitelist entry
+ * @route   DELETE /api/attendance/whitelist/:id
+ * @access  Private (Admin)
+ */
+export const deleteWhitelist = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const whitelist = await IpWhitelist.findById(id);
+    if (!whitelist) {
+      return res.status(404).json({ success: false, message: "Whitelist entry not found" });
+    }
+
+    await IpWhitelist.findByIdAndDelete(id);
+
+    await logSecurityAudit({
+      action: "WHITELIST_DELETED",
+      performedBy: req.user?._id,
+      employee: whitelist.employee,
+      ip: whitelist.ipAddress,
+      location: whitelist.locationName,
+      reason: "Permanently deleted whitelist entry",
+      matchedRule: whitelist._id,
+    });
+
+    return res.status(200).json({ success: true, message: "Whitelist entry deleted successfully" });
+  } catch (error) {
+    console.error("Error in deleteWhitelist:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete whitelist entry", error: error.message });
+  }
+};
+
+/**
+ * @desc    Get all Office & Employee Registered Locations
+ * @route   GET /api/attendance/locations
+ * @access  Private
+ */
+export const getLocations = async (req, res) => {
+  try {
+    const locations = await EmployeeLocation.find()
+      .populate("employee", "fullName employeeId email designation")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, locations });
+  } catch (error) {
+    console.error("Error in getLocations:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch locations", error: error.message });
+  }
+};
+
+/**
+ * @desc    Create registered Office / Employee Location
+ * @route   POST /api/attendance/locations
+ * @access  Private (Admin)
+ */
+export const createLocation = async (req, res) => {
+  try {
+    const { locationName, latitude, longitude, radiusMeters, isOrgWide, employeeId, address } = req.body;
+
+    if (!locationName || latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ success: false, message: "Location name, latitude, and longitude are required" });
+    }
+
+    const newLoc = await EmployeeLocation.create({
+      locationName: locationName.trim(),
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      radiusMeters: Number(radiusMeters) || 200,
+      isOrgWide: isOrgWide !== undefined ? !!isOrgWide : true,
+      employee: !isOrgWide && employeeId ? employeeId : null,
+      address: address || "",
+      status: "Active",
+    });
+
+    await logSecurityAudit({
+      action: "LOCATION_CREATED",
+      performedBy: req.user?._id,
+      employee: newLoc.employee,
+      location: newLoc.locationName,
+      reason: `Created registered location (${newLoc.radiusMeters}m radius)`,
+    });
+
+    return res.status(201).json({ success: true, message: "Location registered successfully", location: newLoc });
+  } catch (error) {
+    console.error("Error in createLocation:", error);
+    return res.status(500).json({ success: false, message: "Failed to create location", error: error.message });
+  }
+};
+
+/**
+ * @desc    Update Registered Location
+ * @route   PUT /api/attendance/locations/:id
+ * @access  Private (Admin)
+ */
+export const updateLocation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { locationName, latitude, longitude, radiusMeters, status, isOrgWide, employeeId, address } = req.body;
+
+    const loc = await EmployeeLocation.findById(id);
+    if (!loc) {
+      return res.status(404).json({ success: false, message: "Location not found" });
+    }
+
+    if (locationName) loc.locationName = locationName;
+    if (latitude !== undefined) loc.latitude = Number(latitude);
+    if (longitude !== undefined) loc.longitude = Number(longitude);
+    if (radiusMeters !== undefined) loc.radiusMeters = Number(radiusMeters);
+    if (status) loc.status = status;
+    if (isOrgWide !== undefined) loc.isOrgWide = !!isOrgWide;
+    if (employeeId !== undefined) loc.employee = employeeId || null;
+    if (address !== undefined) loc.address = address;
+
+    await loc.save();
+
+    return res.status(200).json({ success: true, message: "Location updated successfully", location: loc });
+  } catch (error) {
+    console.error("Error in updateLocation:", error);
+    return res.status(500).json({ success: false, message: "Failed to update location", error: error.message });
+  }
+};
+
+/**
+ * @desc    Delete Registered Location
+ * @route   DELETE /api/attendance/locations/:id
+ * @access  Private (Admin)
+ */
+export const deleteLocation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await EmployeeLocation.findByIdAndDelete(id);
+    return res.status(200).json({ success: true, message: "Location deleted successfully" });
+  } catch (error) {
+    console.error("Error in deleteLocation:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete location", error: error.message });
+  }
+};
+
+/**
+ * @desc    Employee Submit Work From Home Request
+ * @route   POST /api/attendance/wfh-request
+ * @access  Private (Employee)
+ */
+export const createWfhRequest = async (req, res) => {
+  try {
+    const employeeId = req.user?._id;
+    const { startDate, endDate, duration, reason, latitude, longitude, locationName } = req.body;
+
+    if (!startDate) {
+      return res.status(400).json({ success: false, message: "Start date is required" });
+    }
+
+    const clientIp = getClientIp(req);
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
+    const wfhReq = await WfhRequest.create({
+      employee: employeeId,
+      startDate: start,
+      endDate: end,
+      duration: duration || "1 Day",
+      reason: reason || "",
+      requestIp: clientIp,
+      requestLatitude: latitude !== undefined && latitude !== null ? Number(latitude) : null,
+      requestLongitude: longitude !== undefined && longitude !== null ? Number(longitude) : null,
+      requestLocation: locationName || "Remote / Home Network",
+      status: "Pending",
+    });
+
+    await logSecurityAudit({
+      action: "WFH_REQUESTED",
+      performedBy: employeeId,
+      employee: employeeId,
+      ip: clientIp,
+      location: locationName || "Remote / Home Network",
+      reason: `Submitted WFH request (${duration || '1 Day'}): ${reason || 'No reason provided'}`,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Work From Home request submitted successfully for approval",
+      wfhRequest: wfhReq,
+    });
+  } catch (error) {
+    console.error("Error in createWfhRequest:", error);
+    return res.status(500).json({ success: false, message: "Failed to submit WFH request", error: error.message });
+  }
+};
+
+/**
+ * @desc    Get WFH Requests
+ * @route   GET /api/attendance/wfh-requests
+ * @access  Private
+ */
+export const getWfhRequests = async (req, res) => {
+  try {
+    const { status } = req.query;
+    let query = {};
+
+    // Employees only see their own requests
+    if (req.user?.role === "Employee") {
+      query.employee = req.user._id;
+    }
+    if (status && status !== "all") {
+      query.status = status;
+    }
+
+    const requests = await WfhRequest.find(query)
+      .populate("employee", "fullName employeeId email designation department profilePicture")
+      .populate("reviewedBy", "fullName email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, requests });
+  } catch (error) {
+    console.error("Error in getWfhRequests:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch WFH requests", error: error.message });
+  }
+};
+
+/**
+ * @desc    Admin Approve WFH Request & Create Temporary Whitelist Entry
+ * @route   PUT /api/attendance/wfh-requests/:id/approve
+ * @access  Private (Admin)
+ */
+export const approveWfhRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { customDurationHours } = req.body;
+
+    const wfhReq = await WfhRequest.findById(id).populate("employee");
+    if (!wfhReq) {
+      return res.status(404).json({ success: false, message: "WFH request not found" });
+    }
+
+    if (wfhReq.status === "Approved") {
+      return res.status(400).json({ success: false, message: "WFH request is already approved" });
+    }
+
+    const now = new Date();
+    let hoursToExpiry = 24; // default 24h
+    if (wfhReq.duration === "24 Hours" || wfhReq.duration === "1 Day") {
+      hoursToExpiry = 24;
+    } else if (wfhReq.duration === "1 Week") {
+      hoursToExpiry = 7 * 24;
+    } else if (customDurationHours && Number(customDurationHours) > 0) {
+      hoursToExpiry = Number(customDurationHours);
+    }
+
+    const expiresAt = new Date(now.getTime() + hoursToExpiry * 60 * 60 * 1000);
+
+    // Auto-create temporary IP whitelist entry for this employee
+    const tempWhitelist = await IpWhitelist.create({
+      ipAddress: wfhReq.requestIp || getClientIp(req),
+      scope: "Employee",
+      employee: wfhReq.employee._id,
+      locationName: `Approved WFH: ${wfhReq.requestLocation || 'Home Network'}`,
+      addedBy: req.user?._id,
+      expiryType: wfhReq.duration || "24 Hours",
+      expiresAt,
+      status: "Active",
+      type: "WFH",
+      wfhRequestId: wfhReq._id,
+      notes: `Auto-generated via WFH approval. Reason: ${wfhReq.reason || 'None'}`,
+    });
+
+    wfhReq.status = "Approved";
+    wfhReq.reviewedBy = req.user?._id;
+    wfhReq.reviewedAt = now;
+    wfhReq.createdWhitelistId = tempWhitelist._id;
+    await wfhReq.save();
+
+    await logSecurityAudit({
+      action: "WFH_APPROVED",
+      performedBy: req.user?._id,
+      employee: wfhReq.employee._id,
+      ip: tempWhitelist.ipAddress,
+      location: tempWhitelist.locationName,
+      reason: `Approved WFH request until ${expiresAt.toLocaleString()}`,
+      matchedRule: tempWhitelist._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `WFH request approved. Temporary IP whitelist active for ${hoursToExpiry} hours.`,
+      wfhRequest: wfhReq,
+      whitelist: tempWhitelist,
+    });
+  } catch (error) {
+    console.error("Error in approveWfhRequest:", error);
+    return res.status(500).json({ success: false, message: "Failed to approve WFH request", error: error.message });
+  }
+};
+
+/**
+ * @desc    Admin Reject WFH Request
+ * @route   PUT /api/attendance/wfh-requests/:id/reject
+ * @access  Private (Admin)
+ */
+export const rejectWfhRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejectionReason } = req.body;
+
+    const wfhReq = await WfhRequest.findById(id);
+    if (!wfhReq) {
+      return res.status(404).json({ success: false, message: "WFH request not found" });
+    }
+
+    wfhReq.status = "Rejected";
+    wfhReq.reviewedBy = req.user?._id;
+    wfhReq.reviewedAt = new Date();
+    wfhReq.rejectionReason = rejectionReason || "Rejected by administrator";
+    await wfhReq.save();
+
+    await logSecurityAudit({
+      action: "WFH_REJECTED",
+      performedBy: req.user?._id,
+      employee: wfhReq.employee,
+      ip: wfhReq.requestIp,
+      reason: `Rejected WFH request: ${rejectionReason || 'No reason provided'}`,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "WFH request rejected",
+      wfhRequest: wfhReq,
+    });
+  } catch (error) {
+    console.error("Error in rejectWfhRequest:", error);
+    return res.status(500).json({ success: false, message: "Failed to reject WFH request", error: error.message });
+  }
+};
+
+/**
+ * @desc    Get Security Audit Logs
+ * @route   GET /api/attendance/audit-logs
+ * @access  Private (Admin)
+ */
+export const getSecurityAuditLogs = async (req, res) => {
+  try {
+    const { action, ip, search } = req.query;
+    let query = {};
+    if (action && action !== "all") query.action = action;
+    if (ip) query.ip = { $regex: ip, $options: "i" };
+    if (search) {
+      query.$or = [
+        { ip: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
+        { reason: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const logs = await AttendanceSecurityAudit.find(query)
+      .populate("performedBy", "fullName email")
+      .populate("employee", "fullName employeeId email designation")
+      .sort({ timestamp: -1 })
+      .limit(500);
+
+    return res.status(200).json({ success: true, logs });
+  } catch (error) {
+    console.error("Error in getSecurityAuditLogs:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch security audit logs", error: error.message });
   }
 };

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "./ConfirmDialog";
+import { convertToINR, formatWithINRConversion } from "../utils/currencyUtils";
 
 export default function ProjectsPage({
   token,
@@ -120,6 +121,7 @@ export default function ProjectsPage({
     // Generate draft state for InvoiceFormPage
     const draftInvoice = {
       client: project.client?._id || project.client,
+      currency: project.currency || "INR (₹)",
       dueDate: milestone.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       items: [
         {
@@ -271,10 +273,10 @@ export default function ProjectsPage({
 
   projects.forEach((proj) => {
     const val = proj.finalAmount !== undefined ? proj.finalAmount : (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0);
-    totalProjectsValue += val;
+    totalProjectsValue += convertToINR(val, proj.currency);
     proj.milestones?.forEach((m) => {
       if (m.status !== "Paid") {
-        totalOutstanding += m.amount || 0;
+        totalOutstanding += convertToINR(m.amount || 0, proj.currency);
       }
     });
   });
@@ -523,14 +525,14 @@ export default function ProjectsPage({
                         <td className="py-3.5 text-slate-500">
                           {proj.startDate ? new Date(proj.startDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }) : "N/A"}
                         </td>
-                        <td className="py-3.5 text-right text-slate-900">
-                          ₹{financials.value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        <td className="py-3.5 text-right text-slate-900 font-semibold whitespace-nowrap">
+                          {formatWithINRConversion(financials.value, proj.currency)}
                         </td>
-                        <td className="py-3.5 text-right text-emerald-600">
-                          ₹{financials.received.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        <td className="py-3.5 text-right text-emerald-600 font-semibold whitespace-nowrap">
+                          {formatWithINRConversion(financials.received, proj.currency)}
                         </td>
-                        <td className="py-3.5 text-right text-rose-500">
-                          ₹{financials.pending.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        <td className="py-3.5 text-right text-rose-500 font-semibold whitespace-nowrap">
+                          {formatWithINRConversion(financials.pending, proj.currency)}
                         </td>
                         <td className="py-3.5 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${getStatusBadgeClass(proj.status)}`}>
@@ -569,15 +571,35 @@ export default function ProjectsPage({
               </table>
 
               {/* Pagination controls */}
-              {totalPages > 1 && (
+              {sortedProjects.length > 0 && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-5 mt-4 border-t border-slate-100">
-                  <div className="text-[11px] font-bold text-slate-400">
-                    Showing <span className="text-slate-700">{indexOfFirstItem + 1}</span> to{" "}
-                    <span className="text-slate-700">
-                      {Math.min(indexOfLastItem, sortedProjects.length)}
-                    </span>{" "}
-                    of <span className="text-slate-700">{sortedProjects.length}</span> projects
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+                      <span>Rows per page:</span>
+                      <select
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                          setItemsPerPage(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-700 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs"
+                      >
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+
+                    <div className="text-[11px] font-bold text-slate-400">
+                      Showing <span className="text-slate-700">{indexOfFirstItem + 1}</span> to{" "}
+                      <span className="text-slate-700">
+                        {Math.min(indexOfLastItem, sortedProjects.length)}
+                      </span>{" "}
+                      of <span className="text-slate-700">{sortedProjects.length}</span> projects
+                    </div>
                   </div>
+
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}

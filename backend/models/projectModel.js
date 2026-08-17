@@ -86,6 +86,10 @@ const projectSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    currency: {
+      type: String,
+      default: "INR (₹)",
+    },
     inclusiveGst: {
       type: Boolean,
       default: true,

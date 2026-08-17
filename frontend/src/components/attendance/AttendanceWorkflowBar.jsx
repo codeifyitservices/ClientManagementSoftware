@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
+import WfhRequestModal from "./WfhRequestModal";
+
 export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, onOpenAgentPairing }) {
   const [currentAttendance, setCurrentAttendance] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -9,8 +11,27 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [breakReason, setBreakReason] = useState("Lunch Break");
+  const [coords, setCoords] = useState(null);
+  const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
+  const [showWfhModal, setShowWfhModal] = useState(false);
 
   const empId = currentUser?._id || currentUser?.id;
+
+  useEffect(() => {
+    // Attempt browser GPS detection
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+        },
+        (err) => console.log("GPS position not available", err),
+        { timeout: 8000 }
+      );
+    }
+  }, []);
 
   const fetchCurrentSession = async () => {
     try {
@@ -51,16 +72,24 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
 
   const handleCheckIn = async () => {
     setLoading(true);
+    setSecurityCheckMsg(null);
     try {
-      const res = await attendanceService.checkIn({ employeeId: empId, isRemote });
+      const payload = {
+        employeeId: empId,
+        isRemote,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+      };
+      const res = await attendanceService.checkIn(payload);
       if (res.success) {
         setCurrentAttendance(res.attendance);
         if (onStatusChanged) onStatusChanged();
       } else {
-        alert(res.message || "Failed to check in");
+        const msg = res.message || "Failed to check in";
+        setSecurityCheckMsg(msg);
       }
     } catch (err) {
-      alert("Error checking in");
+      setSecurityCheckMsg("Error checking in");
     } finally {
       setLoading(false);
     }
@@ -172,6 +201,14 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
         <div className="flex items-center flex-wrap gap-3">
           {!currentAttendance?.checkInTime && (
             <>
+              <button
+                type="button"
+                onClick={() => setShowWfhModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-[#5D5FEF] transition border border-indigo-100 cursor-pointer"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                <span>Request WFH</span>
+              </button>
               <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -311,6 +348,36 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
           </div>
         </div>
       )}
+
+      {/* Security Validation Warning Banner */}
+      {securityCheckMsg && (
+        <div className="mt-4 p-4 rounded-2xl bg-red-50 border border-red-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-3 text-red-800 text-xs font-semibold">
+            <ShieldCheck size={20} className="shrink-0 text-red-600" />
+            <div>
+              <p className="font-bold text-red-900">Attendance Check-In Restricted</p>
+              <p className="text-[11px] text-red-700 mt-0.5">{securityCheckMsg}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowWfhModal(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition shrink-0 cursor-pointer shadow-sm"
+          >
+            Request WFH Authorization
+          </button>
+        </div>
+      )}
+
+      {/* WFH Request Modal */}
+      <WfhRequestModal
+        isOpen={showWfhModal}
+        onClose={() => setShowWfhModal(false)}
+        onSuccess={() => {
+          setSecurityCheckMsg(null);
+          if (onStatusChanged) onStatusChanged();
+        }}
+      />
     </div>
   );
 }

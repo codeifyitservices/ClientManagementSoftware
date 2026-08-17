@@ -133,4 +133,110 @@ export const attendanceService = {
     });
     return res.json();
   },
+
+  // ── Attendance Security & Geolocation Methods ──
+  getSecurityStatus: async (lat = null, lng = null) => {
+    const query = new URLSearchParams();
+    if (lat !== null && lat !== undefined) query.append("latitude", lat);
+    if (lng !== null && lng !== undefined) query.append("longitude", lng);
+    const res = await fetch(`${API_BASE}/security-status?${query.toString()}`, { headers: getHeaders() });
+    return res.json();
+  },
+
+  // Whitelists
+  getWhitelists: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/whitelist?${query}`, { headers: getHeaders() });
+    return res.json();
+  },
+  createWhitelist: async (data) => {
+    const res = await fetch(`${API_BASE}/whitelist`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  updateWhitelist: async (id, data) => {
+    const res = await fetch(`${API_BASE}/whitelist/${id}`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  deleteWhitelist: async (id) => {
+    const res = await fetch(`${API_BASE}/whitelist/${id}`, {
+      method: "DELETE",
+      headers: getHeaders(),
+    });
+    return res.json();
+  },
+
+  // Locations
+  getLocations: async () => {
+    const res = await fetch(`${API_BASE}/locations`, { headers: getHeaders() });
+    return res.json();
+  },
+  createLocation: async (data) => {
+    const res = await fetch(`${API_BASE}/locations`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  updateLocation: async (id, data) => {
+    const res = await fetch(`${API_BASE}/locations/${id}`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  deleteLocation: async (id) => {
+    const res = await fetch(`${API_BASE}/locations/${id}`, {
+      method: "DELETE",
+      headers: getHeaders(),
+    });
+    return res.json();
+  },
+
+  // Work From Home (WFH) Requests
+  createWfhRequest: async (data) => {
+    const res = await fetch(`${API_BASE}/wfh-request`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  getWfhRequests: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/wfh-requests?${query}`, { headers: getHeaders() });
+    return res.json();
+  },
+  approveWfhRequest: async (id, data = {}) => {
+    const res = await fetch(`${API_BASE}/wfh-requests/${id}/approve`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  rejectWfhRequest: async (id, data = {}) => {
+    const res = await fetch(`${API_BASE}/wfh-requests/${id}/reject`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+
+  // Security Audit Logs
+  getSecurityAuditLogs: async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/audit-logs?${query}`, { headers: getHeaders() });
+    return res.json();
+  },
 };

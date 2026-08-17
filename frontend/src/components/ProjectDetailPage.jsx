@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { formatWithINRConversion } from "../utils/currencyUtils";
 import {
   ChevronLeft,
   ChevronDown,
@@ -101,6 +101,7 @@ export default function ProjectDetailPage({
 
     const draftInvoice = {
       client: project.client?._id || project.client,
+      currency: project.currency || "INR (₹)",
       dueDate: milestone.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       items: [
         {
@@ -311,7 +312,7 @@ export default function ProjectDetailPage({
           {/* Project Value */}
           <div className="p-4 bg-slate-50/40 border border-slate-100 rounded-xl">
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Project Value</span>
-            <h4 className="text-lg font-black text-slate-900 mt-1">₹{projectValue.toLocaleString("en-IN")}</h4>
+            <h4 className="text-lg font-black text-slate-900 mt-1">{formatWithINRConversion(projectValue, project.currency)}</h4>
             {project.isPersonalAccount && (
               <span className="text-[8px] text-amber-500 font-bold uppercase select-none block mt-0.5">(Personal)</span>
             )}
@@ -328,13 +329,13 @@ export default function ProjectDetailPage({
           {/* Received */}
           <div className="p-4 bg-emerald-50/20 border border-emerald-100/50 rounded-xl">
             <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-650">Received</span>
-            <h4 className="text-lg font-black text-emerald-600 mt-1">₹{received.toLocaleString("en-IN")}</h4>
+            <h4 className="text-lg font-black text-emerald-600 mt-1">{formatWithINRConversion(received, project.currency)}</h4>
           </div>
 
           {/* Outstanding */}
           <div className="p-4 bg-rose-50/20 border border-rose-100/50 rounded-xl">
             <span className="text-[9px] font-bold uppercase tracking-wider text-rose-500">Outstanding</span>
-            <h4 className="text-lg font-black text-rose-600 mt-1">₹{outstanding.toLocaleString("en-IN")}</h4>
+            <h4 className="text-lg font-black text-rose-600 mt-1">{formatWithINRConversion(outstanding, project.currency)}</h4>
           </div>
 
           {/* Invoices Count */}
@@ -348,7 +349,7 @@ export default function ProjectDetailPage({
             <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700">Next Due</span>
             {nextDueMilestone ? (
               <div className="mt-0.5">
-                <h4 className="text-sm font-black text-slate-900">₹{nextDueMilestone.amount?.toLocaleString("en-IN")}</h4>
+                <h4 className="text-sm font-black text-slate-900">{formatWithINRConversion(nextDueMilestone.amount, project.currency)}</h4>
                 <p className="text-[8px] text-slate-400 font-bold uppercase">Due {new Date(nextDueMilestone.dueDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}</p>
               </div>
             ) : (
@@ -370,7 +371,7 @@ export default function ProjectDetailPage({
             />
           </div>
           <p className="text-[10px] text-slate-450 font-bold">
-            ₹{received.toLocaleString("en-IN")} received of ₹{projectValue.toLocaleString("en-IN")}
+            {formatWithINRConversion(received, project.currency)} received of {formatWithINRConversion(projectValue, project.currency)}
           </p>
         </div>
 
@@ -413,8 +414,8 @@ export default function ProjectDetailPage({
                         </span>
                         <span className="text-slate-800 font-bold truncate max-w-[180px]">{m.name}</span>
                       </td>
-                      <td className="py-3.5 text-right font-black text-slate-900">
-                        ₹{m.amount?.toLocaleString("en-IN")}
+                      <td className="py-3.5 text-right font-black text-slate-900 whitespace-nowrap">
+                        {formatWithINRConversion(m.amount, project.currency)}
                       </td>
                       <td className="py-3.5 pl-12 text-slate-500">
                         {m.dueDate ? new Date(m.dueDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }) : "N/A"}
@@ -461,6 +462,7 @@ export default function ProjectDetailPage({
                                 }
                                 const draftInvoice = {
                                   client: project.client?._id || project.client,
+                                  currency: project.currency || "INR (₹)",
                                   dueDate: m.dueDate ? new Date(m.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
                                   items: [
                                     {
@@ -547,8 +549,8 @@ export default function ProjectDetailPage({
                       <td className="py-3.5 text-slate-550">
                         {new Date(inv.invoiceDate || inv.createdAt).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
                       </td>
-                      <td className="py-3.5 text-right font-black text-slate-900">
-                        ₹{inv.totalAmount?.toLocaleString("en-IN")}
+                      <td className="py-3.5 text-right font-black text-slate-900 whitespace-nowrap">
+                        {formatWithINRConversion(inv.totalAmount, inv.currency)}
                       </td>
                       <td className="py-3.5 text-center">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${

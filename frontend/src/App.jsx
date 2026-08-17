@@ -599,6 +599,8 @@ export default function App() {
     isSavingEmployee,
     clients,
     invoices,
+    projects,
+    leads,
     activeAlerts,
     searchQuery,
     setSearchQuery,
@@ -634,6 +636,8 @@ export default function App() {
     fetchCompanyConfig,
     fetchClients,
     fetchInvoices,
+    fetchProjects,
+    fetchLeads,
     fetchActiveAlerts,
     handleDismissAlert,
     fetchEmployeesList,
@@ -710,10 +714,12 @@ export default function App() {
 
         {dashTab === "business" ? (
           <>
-            <DashboardStats clients={clients} invoices={invoices} />
+            <DashboardStats clients={clients} invoices={invoices} projects={projects} leads={leads} />
             <DashboardView
               clients={clients}
               invoices={invoices}
+              projects={projects}
+              leads={leads}
               onViewClient={(c) => {
                 setSelectedClientForView(c);
                 setIsClientProfileOpen(true);
@@ -730,6 +736,8 @@ export default function App() {
                 setSelectedClientForEdit(null);
                 setIsClientFormOpen(true);
               }}
+              onCreateProject={() => navigate("/projects/create")}
+              onAddLead={() => navigate("/leads/create")}
               processingInvoiceIds={processingInvoiceIds}
               onNavigate={(path) => navigate(`/${path}`)}
               activeAlerts={activeAlerts}

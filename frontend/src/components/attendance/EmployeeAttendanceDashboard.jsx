@@ -68,6 +68,9 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [breakReason, setBreakReason] = useState("Lunch Break");
   const [showPairingModal, setShowPairingModal] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
+  const [showWfhModal, setShowWfhModal] = useState(false);
 
   const empId = currentUser?._id || currentUser?.id;
   const selectedDateStr = getTodayDateString(selectedDate);
@@ -163,18 +166,22 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
 
   const handleCheckIn = async () => {
     setActionLoading(true);
+    setSecurityCheckMsg(null);
     try {
       const res = await attendanceService.checkIn({
         employeeId: empId,
         isRemote,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
       });
       if (res.success) {
         fetchData();
       } else {
-        alert(res.message || "Failed to check in");
+        const msg = res.message || "Failed to check in";
+        setSecurityCheckMsg(msg);
       }
     } catch (err) {
-      alert("Error checking in");
+      setSecurityCheckMsg("Error checking in");
     } finally {
       setActionLoading(false);
     }
@@ -1113,6 +1120,16 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
           }}
         />
       )}
+
+      {/* ── WFH REQUEST MODAL ────────────────────────────────────────────── */}
+      <WfhRequestModal
+        isOpen={showWfhModal}
+        onClose={() => setShowWfhModal(false)}
+        onSuccess={() => {
+          setSecurityCheckMsg(null);
+          fetchData();
+        }}
+      />
     </div>
   );
 }

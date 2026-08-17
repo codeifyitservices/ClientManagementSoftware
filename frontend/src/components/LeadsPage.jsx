@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Search, Calendar, Phone, Mail, Edit, Trash2,
-  TrendingUp, Clock, Target, Award
+  TrendingUp, Clock, Target, Award, ChevronLeft, ChevronRight
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -19,6 +19,10 @@ export default function LeadsPage({
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortField, setSortField] = useState("createdAt");
   const [sortDirection, setSortDirection] = useState("desc");
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // Selection for bulk actions
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -48,11 +52,13 @@ export default function LeadsPage({
   };
 
   useEffect(() => {
+    setCurrentPage(1);
     fetchLeads();
   }, [token, statusFilter, sortField, sortDirection]);
 
   // Handle Search Trigger
   useEffect(() => {
+    setCurrentPage(1);
     const delayDebounceFn = setTimeout(() => {
       fetchLeads();
     }, 300);
@@ -140,8 +146,11 @@ export default function LeadsPage({
   const totalLeads = leads.length;
   const activeLeads = leads.filter(l => l.currentStage !== "Won" && l.currentStage !== "Lost");
   const activeLeadsCount = activeLeads.length;
-  const pipelineValue = activeLeads.reduce((sum, l) => sum + (l.value || 0), 0);
-  const wonValue = leads.filter(l => l.currentStage === "Won").reduce((sum, l) => sum + (l.value || 0), 0);
+  // Paginate leads
+  const indexOfLastItem = currentPage * rowsPerPage;
+  const indexOfFirstItem = indexOfLastItem - rowsPerPage;
+  const paginatedLeads = leads.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
 
   const todayStr = new Date().toISOString().split("T")[0];
   const dueFollowUpsCount = leads.filter(l => {
@@ -299,8 +308,8 @@ export default function LeadsPage({
                   <th className="p-4 w-12 text-center">
                     <input
                       type="checkbox"
-                      checked={leads.length > 0 && leads.every((l) => selectedIds.has(l._id))}
-                      onChange={() => handleSelectAll(leads)}
+                      checked={paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l._id))}
+                      onChange={() => handleSelectAll(paginatedLeads)}
                       className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 cursor-pointer"
                     />
                   </th>
@@ -314,7 +323,7 @@ export default function LeadsPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-xs font-semibold text-slate-700">
-                {leads.map((lead) => {
+                {paginatedLeads.map((lead) => {
                   const isChecked = selectedIds.has(lead._id);
                   const journeyCount = lead.leadJourney?.length || 0;
                   const nextDate = lead.currentNextFollowUpDate ? new Date(lead.currentNextFollowUpDate) : null;
@@ -393,6 +402,59 @@ export default function LeadsPage({
             </table>
           )}
         </div>
+
+        {/* ── Pagination ── */}
+        {leads.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-slate-100 bg-white">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+                <span>Rows per page:</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 rounded-md border border-slate-200 bg-white text-slate-700 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              <p className="text-xs text-slate-500 font-semibold">
+                Showing {indexOfFirstItem + 1}–{Math.min(indexOfLastItem, leads.length)} of {leads.length} leads
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                <ChevronLeft size={14} />
+                Previous
+              </button>
+
+              <span className="text-xs text-slate-500 select-none font-semibold">
+                Page <span className="font-bold text-slate-800">{currentPage}</span> of{" "}
+                <span className="font-bold text-slate-800">{totalPages}</span>
+              </span>
+
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                Next
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Delete Lead Dialog */}

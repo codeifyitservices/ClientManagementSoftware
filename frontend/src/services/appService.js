@@ -82,10 +82,14 @@ export function useAppService() {
 
   const [clients, setClients] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingClients, setLoadingClients] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingLeads, setLoadingLeads] = useState(true);
   const [companyName, setCompanyName] = useState(
     localStorage.getItem("companyName") || "Codenap IT Services",
   );
@@ -238,6 +242,55 @@ export function useAppService() {
       setLoadingInvoices(false);
     }
   };
+
+  const fetchProjects = async () => {
+    if (!token) return;
+    try {
+      setLoadingProjects(true);
+      const res = await authenticatedFetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/projects`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data || []);
+      }
+    } catch (err) {
+      if (err.message !== "Unauthorized") console.error("Error fetching projects:", err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const fetchLeads = async () => {
+    if (!token) return;
+    try {
+      setLoadingLeads(true);
+      const res = await authenticatedFetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/leads`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data || []);
+      }
+    } catch (err) {
+      if (err.message !== "Unauthorized") console.error("Error fetching leads:", err);
+    } finally {
+      setLoadingLeads(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchCompanyConfig();
+      fetchClients();
+      fetchInvoices();
+      fetchActiveAlerts();
+      fetchNotifications();
+      fetchEmployeesList();
+      fetchProjects();
+      fetchLeads();
+    }
+  }, [token]);
 
   const fetchActiveAlerts = async () => {
     if (!token) return;
@@ -657,11 +710,15 @@ export function useAppService() {
     isSavingEmployee,
     clients,
     invoices,
+    projects,
+    leads,
     activeAlerts,
     searchQuery,
     setSearchQuery,
     loadingClients,
     loadingInvoices,
+    loadingProjects,
+    loadingLeads,
     companyName,
     companyLogo,
     isClientFormOpen,
@@ -692,6 +749,8 @@ export function useAppService() {
     fetchCompanyConfig,
     fetchClients,
     fetchInvoices,
+    fetchProjects,
+    fetchLeads,
     fetchActiveAlerts,
     handleDismissAlert,
     fetchEmployeesList,

@@ -92,6 +92,7 @@ export const createProject = async (req, res) => {
       milestones,
       assignedEmployees,
       projectValue,
+      currency,
       inclusiveGst,
       isPersonalAccount
     } = req.body;
@@ -112,6 +113,7 @@ export const createProject = async (req, res) => {
       assignedEmployees: assignedEmployees || [],
       status: "Ongoing",
       projectValue: projectValue !== undefined ? Number(projectValue) : 0,
+      currency: currency || "INR (₹)",
       inclusiveGst: inclusiveGst !== undefined ? inclusiveGst : true,
       isPersonalAccount: isPersonalAccount !== undefined ? isPersonalAccount : false,
     });
@@ -138,6 +140,7 @@ export const updateProject = async (req, res) => {
       status,
       assignedEmployees,
       projectValue,
+      currency,
       inclusiveGst,
       isPersonalAccount
     } = req.body;
@@ -154,6 +157,7 @@ export const updateProject = async (req, res) => {
     project.status = status ?? project.status;
     project.assignedEmployees = assignedEmployees ?? project.assignedEmployees;
     project.projectValue = projectValue !== undefined ? Number(projectValue) : project.projectValue;
+    project.currency = currency ?? project.currency;
     project.inclusiveGst = inclusiveGst !== undefined ? inclusiveGst : project.inclusiveGst;
     project.isPersonalAccount = isPersonalAccount !== undefined ? isPersonalAccount : project.isPersonalAccount;
 

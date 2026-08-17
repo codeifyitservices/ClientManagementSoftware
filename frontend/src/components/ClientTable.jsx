@@ -24,6 +24,7 @@ export default function ClientTable({
   const [sortField, setSortField] = useState("companyName");
   const [sortOrder, setSortOrder] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkDeleteIds, setBulkDeleteIds] = useState(null);
 
@@ -39,7 +40,7 @@ export default function ClientTable({
   }, [clients, sortField, sortOrder]);
 
   // ── Pagination ────────────────────────────────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / rowsPerPage));
 
   // Reset to page 1 when sort or client list changes
   useEffect(() => {
@@ -52,9 +53,9 @@ export default function ClientTable({
   }, [totalPages, currentPage]);
 
   const pageRows = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return sorted.slice(start, start + PAGE_SIZE);
-  }, [sorted, currentPage]);
+    const start = (currentPage - 1) * rowsPerPage;
+    return sorted.slice(start, start + rowsPerPage);
+  }, [sorted, currentPage, rowsPerPage]);
 
   // ── Selection helpers ─────────────────────────────────────────────────────
   const pageIds = pageRows.map((c) => c._id ?? c.id);
@@ -150,9 +151,6 @@ export default function ClientTable({
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
                 Phone
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                Website
-              </th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
                 Actions
               </th>
@@ -164,7 +162,7 @@ export default function ClientTable({
             {pageRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={6}
                   className="py-16 text-center text-gray-400 text-sm"
                 >
                   No clients found.
@@ -226,27 +224,6 @@ export default function ClientTable({
                       {client.phone || "—"}
                     </td>
 
-                    {/* Website */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {client.website ? (
-                        <a
-                          href={
-                            client.website.startsWith("http")
-                              ? client.website
-                              : `https://${client.website}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-500 transition-colors text-xs"
-                        >
-                          <Globe size={13} />
-                          {client.website}
-                        </a>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-
                     {/* Actions */}
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
@@ -288,15 +265,34 @@ export default function ClientTable({
       </div>
 
       {/* ── Pagination ── */}
-      <div className="flex items-center justify-between mt-4 px-1">
-        <p className="text-sm text-gray-500">
-          {sorted.length === 0
-            ? "No records"
-            : `Showing ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(
-                currentPage * PAGE_SIZE,
-                sorted.length
-              )} of ${sorted.length} clients`}
-        </p>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-1">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+            <span>Rows per page:</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer text-xs"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <p className="text-xs sm:text-sm text-gray-500">
+            {sorted.length === 0
+              ? "No records"
+              : `Showing ${(currentPage - 1) * rowsPerPage + 1}–${Math.min(
+                  currentPage * rowsPerPage,
+                  sorted.length
+                )} of ${sorted.length} clients`}
+          </p>
+        </div>
 
         <div className="flex items-center gap-2">
           <button

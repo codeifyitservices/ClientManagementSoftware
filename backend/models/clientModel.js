@@ -22,6 +22,7 @@ const clientSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
+      default: "",
     },
     gstRegistered: {
       type: Boolean,
@@ -35,6 +36,7 @@ const clientSchema = new mongoose.Schema(
     address: {
       type: String,
       trim: true,
+      default: "",
     },
     city: {
       type: String,

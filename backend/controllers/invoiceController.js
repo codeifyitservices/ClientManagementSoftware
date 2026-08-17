@@ -237,9 +237,7 @@ export const updateInvoice = async (req, res) => {
     }
 
     invoice.client = client ?? invoice.client;
-    if (paymentStatus === "Paid" && invoice.paymentStatus !== "Paid") {
-      invoice.invoiceDate = new Date();
-    } else if (invoiceDate) {
+    if (invoiceDate) {
       invoice.invoiceDate = invoiceDate;
     }
     invoice.dueDate = dueDate ?? invoice.dueDate;
@@ -292,7 +290,6 @@ export const markPaid = async (req, res) => {
     }
 
     invoice.paymentStatus = "Paid";
-    invoice.invoiceDate = new Date();
     await invoice.save();
 
     res.json({

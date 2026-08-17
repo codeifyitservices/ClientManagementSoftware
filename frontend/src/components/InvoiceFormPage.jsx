@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Calendar, Eye, ChevronLeft } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { SUPPORTED_CURRENCIES } from "../utils/currencyUtils";
 
 // State lookup helper for state name from GSTIN code
 const stateLookup = {
@@ -667,7 +668,7 @@ export default function InvoiceFormPage({
             Invoice Parameters
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {/* Client Select */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
@@ -682,6 +683,24 @@ export default function InvoiceFormPage({
                 {clients.map((c) => (
                   <option key={c._id} value={c._id}>
                     {c.companyName} ({c.clientName})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Currency */}
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                Currency
+              </label>
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white cursor-pointer"
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.label}>
+                    {c.label}
                   </option>
                 ))}
               </select>
@@ -762,10 +781,10 @@ export default function InvoiceFormPage({
               <span>#</span>
               <span>Service / Line Item Description</span>
               <span>SAC Code</span>
-              <span className="text-right">Amount (₹)</span>
+              <span className="text-right">Amount ({getCurrencySymbol(currency)})</span>
               <span className="text-center">Incl. GST</span>
               <span className="text-center">GST (%)</span>
-              <span className="text-right">Total (₹)</span>
+              <span className="text-right">Total ({getCurrencySymbol(currency)})</span>
               <span className="text-center">Action</span>
             </div>
 
@@ -856,7 +875,7 @@ export default function InvoiceFormPage({
                       />
                       {item.isInclusive && (
                         <span className="block mt-1 text-[9px] font-bold text-slate-400/90 text-right select-none">
-                          Base: ₹
+                          Base: {getCurrencySymbol(currency)}{" "}
                           {Math.round(
                             (Number(item.amount) || 0) /
                               (1 +
@@ -899,7 +918,7 @@ export default function InvoiceFormPage({
 
                     {/* Line total */}
                     <span className="self-start pt-2 text-right font-black text-slate-900">
-                      ₹
+                      {getCurrencySymbol(currency)}{" "}
                       {lineTotal.toLocaleString("en-IN", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -932,6 +951,38 @@ export default function InvoiceFormPage({
             <Plus className="h-3.5 w-3.5" />
             <span>Add Item</span>
           </button>
+
+          {/* Live Calculated Totals Summary Box */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900 text-white custom-shadow">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Live Calculated Summary</span>
+              <p className="text-xs text-slate-300 font-semibold mt-0.5">
+                Calculated automatically from above line items.
+              </p>
+            </div>
+            <div className="flex items-center gap-6 text-right">
+              <div>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Base Amount</span>
+                <span className="text-sm font-bold text-white">
+                  {formatWithINRConversion(subTotal, currency)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-400 block">
+                  {activeClient.isForeign ? "GST (0%)" : "GST Amount"}
+                </span>
+                <span className="text-sm font-bold text-indigo-300">
+                  {formatWithINRConversion(totalGstAmount, currency)}
+                </span>
+              </div>
+              <div className="pl-4 border-l border-white/10">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 block">Grand Total</span>
+                <span className="text-base font-black text-emerald-400">
+                  {formatWithINRConversion(grandTotal, currency)}
+                </span>
+              </div>
+            </div>
+          </div>
 
           {/* GST Auto Calculations Info Box */}
           <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100/50 text-xs text-indigo-950/80 space-y-1 select-none">

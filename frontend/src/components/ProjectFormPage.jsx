@@ -15,6 +15,14 @@ import {
   Briefcase
 } from "lucide-react";
 
+import {
+  SUPPORTED_CURRENCIES,
+  getCurrencySymbol,
+  formatWithINRConversion,
+  getCurrencyCode,
+  convertToINR,
+} from "../utils/currencyUtils";
+
 export default function ProjectFormPage({
   token,
   clients = [],
@@ -40,6 +48,7 @@ export default function ProjectFormPage({
 
   // Project value and GST fields
   const [projectValue, setProjectValue] = useState("");
+  const [currency, setCurrency] = useState("INR (₹)");
   const [inclusiveGst, setInclusiveGst] = useState(true);
   const [isPersonalAccount, setIsPersonalAccount] = useState(false);
 
@@ -144,6 +153,7 @@ export default function ProjectFormPage({
     );
     setStatus(projectData.status || "Ongoing");
     setProjectValue(projectData.projectValue || "");
+    setCurrency(projectData.currency || "INR (₹)");
     setInclusiveGst(projectData.inclusiveGst !== false);
     setIsPersonalAccount(projectData.isPersonalAccount === true);
     setMilestones(
@@ -255,7 +265,7 @@ export default function ProjectFormPage({
     const sumMilestones = milestones.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
     const finalAmountVal = getCalculatedFinalAmount();
     if (sumMilestones > finalAmountVal + 0.05) {
-      const msg = `The sum of payment milestones (₹${sumMilestones.toLocaleString("en-IN")}) cannot exceed the final project value (₹${finalAmountVal.toLocaleString("en-IN")}).`;
+      const msg = `The sum of payment milestones (${formatWithINRConversion(sumMilestones, currency)}) cannot exceed the final project value (${formatWithINRConversion(finalAmountVal, currency)}).`;
       setError(msg);
       if (showToast) showToast(msg, "error");
       return;
@@ -270,6 +280,7 @@ export default function ProjectFormPage({
       milestones,
       assignedEmployees,
       projectValue: Number(projectValue),
+      currency,
       inclusiveGst: (activeClient.isForeign || isPersonalAccount) ? false : inclusiveGst,
       isPersonalAccount,
     };
@@ -503,23 +514,51 @@ export default function ProjectFormPage({
                 </div>
               )}
 
-              {/* Project Value / Base Amount */}
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Base Amount (INR) / Project Value <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={projectValue}
-                    onChange={(e) => setProjectValue(e.target.value)}
-                    required
-                    placeholder="Enter base amount"
-                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
-                  />
-                  <span className="absolute left-3.5 top-3 text-slate-400 text-xs font-bold pointer-events-none">₹</span>
+              {/* Currency & Base Amount / Project Value */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Currency */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Currency
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white cursor-pointer"
+                  >
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.label}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Base Amount / Project Value */}
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Project Value ({currency}) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={projectValue}
+                      onChange={(e) => setProjectValue(e.target.value)}
+                      required
+                      placeholder="Enter base amount"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
+                    />
+                    <span className="absolute left-3 top-3 text-slate-400 text-xs font-bold pointer-events-none">
+                      {getCurrencySymbol(currency)}
+                    </span>
+                  </div>
+                  {projectValue && getCurrencyCode(currency) !== "INR" && (
+                    <p className="text-[11px] font-semibold text-indigo-600 mt-1">
+                      Approx. INR Value: {formatWithINRConversion(getCalculatedFinalAmount(), currency)}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -578,7 +617,7 @@ export default function ProjectFormPage({
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="p-2.5 bg-white/5 rounded-xl border border-white/5">
                 <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Final Value</p>
-                <p className="text-sm font-black mt-1">₹{calcTotalValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                <p className="text-sm font-black mt-1">{formatWithINRConversion(calcTotalValue, currency)}</p>
                 {!isPersonalAccount && !activeClient.isForeign && !inclusiveGst && projectValue && (
                   <span className="text-[8px] text-[#8e90ff] font-bold uppercase select-none block mt-0.5">(+18% GST)</span>
                 )}
@@ -591,11 +630,11 @@ export default function ProjectFormPage({
               </div>
               <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/15">
                 <p className="text-[9px] font-bold uppercase text-emerald-450 tracking-wider">Paid</p>
-                <p className="text-sm font-black text-emerald-400 mt-1">₹{calcReceived.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                <p className="text-sm font-black text-emerald-400 mt-1">{formatWithINRConversion(calcReceived, currency)}</p>
               </div>
               <div className="p-2.5 bg-rose-500/10 rounded-xl border border-rose-500/15">
                 <p className="text-[9px] font-bold uppercase text-rose-400 tracking-wider">Outstanding</p>
-                <p className="text-sm font-black text-rose-455 mt-1">₹{calcOutstanding.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                <p className="text-sm font-black text-rose-455 mt-1">{formatWithINRConversion(calcOutstanding, currency)}</p>
               </div>
             </div>
 
@@ -757,7 +796,7 @@ export default function ProjectFormPage({
                     {/* Amount */}
                     <div>
                       <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                        Billing Amount (₹)
+                        Billing Amount ({currency})
                       </label>
                       <div className="relative">
                         <input
@@ -768,7 +807,9 @@ export default function ProjectFormPage({
                           placeholder="e.g. 50000"
                           className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60 disabled:bg-slate-100"
                         />
-                        <IndianRupee className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                        <span className="absolute left-3 top-2.5 text-slate-400 text-xs font-bold pointer-events-none">
+                          {getCurrencySymbol(currency)}
+                        </span>
                       </div>
                       
                       {/* Milestone-level tax checkboxes */}
@@ -806,11 +847,11 @@ export default function ProjectFormPage({
 
                       {m.isInclusive && !m.isPersonal && !activeClient.isForeign ? (
                         <span className="block mt-1 text-[9px] font-bold text-slate-400/90 text-right select-none pr-1 animate-fade-in">
-                          Base: ₹{Math.round((Number(m.amount) || 0) / 1.18)}
+                          Base: {formatWithINRConversion(Math.round((Number(m.amount) || 0) / 1.18), currency)}
                         </span>
                       ) : (!m.isInclusive && !m.isPersonal && !activeClient.isForeign) ? (
                         <span className="block mt-1 text-[9px] font-bold text-[#5D5FEF] text-right select-none pr-1 animate-fade-in">
-                          Total (with GST): ₹{Math.round((Number(m.amount) || 0) * 1.18)}
+                          Total (with GST): {formatWithINRConversion(Math.round((Number(m.amount) || 0) * 1.18), currency)}
                         </span>
                       ) : null}
                     </div>

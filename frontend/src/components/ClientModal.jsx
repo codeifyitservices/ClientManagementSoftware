@@ -57,6 +57,7 @@ export default function ClientModal({
     handleSubmit,
     reset,
     setValue,
+    trigger,
     control,
     formState: { errors },
   } = useForm({
@@ -289,7 +290,7 @@ export default function ClientModal({
               {/* Phone Number */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Phone Number <span className="text-red-500">*</span>
+                  Phone Number {!isForeign ? <span className="text-red-500">*</span> : <span className="text-slate-400 font-normal lowercase">(optional)</span>}
                 </label>
                 <input
                   type="text"
@@ -317,6 +318,7 @@ export default function ClientModal({
                           setValue("gstRegistered", false);
                           setValue("gstNumber", "");
                         }
+                        trigger();
                       }
                     })}
                   />
@@ -436,7 +438,7 @@ export default function ClientModal({
               {/* Address */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Address <span className="text-red-500">*</span>
+                  Address {!isForeign ? <span className="text-red-500">*</span> : <span className="text-slate-400 font-normal lowercase">(optional)</span>}
                 </label>
                 <textarea
                   rows="3"
@@ -456,7 +458,7 @@ export default function ClientModal({
                 {/* City */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                    City <span className="text-red-500">*</span>
+                    City {!isForeign ? <span className="text-red-500">*</span> : <span className="text-slate-400 font-normal lowercase">(optional)</span>}
                   </label>
                   <input
                     type="text"
@@ -474,11 +476,11 @@ export default function ClientModal({
                 {/* Pincode */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                    Pincode <span className="text-red-500">*</span>
+                    {isForeign ? "Postal / Zip Code" : "Pincode"} {!isForeign ? <span className="text-red-500">*</span> : <span className="text-slate-400 font-normal lowercase">(optional)</span>}
                   </label>
                   <input
                     type="text"
-                    placeholder="Enter pincode"
+                    placeholder={isForeign ? "Enter zip / postal code" : "Enter pincode"}
                     className={`w-full px-3 py-2 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white ${
                       errors.pincode ? "border-red-500 bg-red-50/10" : "border-slate-200 bg-slate-50/30"
                     }`}
