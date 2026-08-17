@@ -6,6 +6,7 @@ import {
   Clock, Plus, ShieldAlert, Award, FileText, Download, Activity, AlertCircle, Save, Paperclip, X
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol } from "../utils/currencyUtils";
 
 export default function LeadDetailPage({
   token,
@@ -28,6 +29,7 @@ export default function LeadDetailPage({
   const [showDeleteLeadConfirm, setShowDeleteLeadConfirm] = useState(false);
   const [isDeletingLead, setIsDeletingLead] = useState(false);
   const [isSavingStage, setIsSavingStage] = useState(false);
+  const [stageCurrency, setStageCurrency] = useState("INR (₹)");
 
   // Stage Form States
   const [stageName, setStageName] = useState("New Lead");
@@ -783,19 +785,42 @@ export default function LeadDetailPage({
                   />
                 </div>
 
-                {/* Deal Value (Optional updates) */}
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-slate-455 font-black mb-1">
-                    Update Deal Value (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={stageDealValue}
-                    onChange={(e) => setStageDealValue(e.target.value)}
-                    placeholder={lead.value ? `Current: ₹${lead.value}` : "e.g. 150000"}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
+                {/* Deal Value (Optional updates) & Currency */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 col-span-2">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-black mb-1">
+                      Currency
+                    </label>
+                    <select
+                      value={stageCurrency}
+                      onChange={(e) => setStageCurrency(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none bg-white focus:ring-1 focus:ring-indigo-500"
+                    >
+                      {SUPPORTED_CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.label}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-black mb-1">
+                      Update Deal Value ({getCurrencySymbol(stageCurrency)})
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs pointer-events-none">
+                        {getCurrencySymbol(stageCurrency)}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={stageDealValue}
+                        onChange={(e) => setStageDealValue(e.target.value)}
+                        placeholder={lead.value ? `Current: ${getCurrencySymbol(stageCurrency)}${lead.value}` : "e.g. 150000"}
+                        className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Notes (MANDATORY) */}

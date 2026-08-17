@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   Edit2,
   Trash2,
@@ -6,38 +7,95 @@ import {
   ChevronLeft,
   ChevronRight,
   Trash,
+  Eye,
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
+import { formatWithINRConversion, getSubscriptionCode } from "../utils/currencyUtils";
 
 const PAGE_SIZE = 10;
 
 // Compute status object from subscription
-function getSubscriptionStatus(sub) {
+// Compute status object from subscription with explicit reminder tiers:
+// 1 Month, 15 Days, 7 Days, 3 Days, and Tomorrow
+export function getSubscriptionStatus(sub) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const endDate = new Date(sub.endDate);
-  endDate.setHours(0, 0, 0, 0);
+  const endMidnight = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
 
-  if (today >= endDate) {
-    return { label: "Expired", color: "bg-rose-50 text-rose-700 border-rose-100", type: "expired" };
+  const diffMs = endMidnight.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return {
+      label: "Expired",
+      color: "bg-rose-50 border-rose-200 text-rose-700 font-bold",
+      type: "expired",
+      diffDays,
+    };
   }
 
-  const fifteenDays = new Date(sub.endDate);
-  fifteenDays.setDate(fifteenDays.getDate() - 15);
-  fifteenDays.setHours(0, 0, 0, 0);
-  if (today >= fifteenDays) {
-    return { label: "Expiring < 15 Days", color: "bg-red-50 text-red-700 border-red-200 animate-pulse font-bold", type: "expiring15" };
+  if (diffDays === 0) {
+    return {
+      label: "Due Today",
+      color: "bg-rose-100 border-rose-300 text-rose-800 font-black animate-pulse",
+      type: "today",
+      diffDays,
+    };
   }
 
-  const oneMonth = new Date(sub.endDate);
-  oneMonth.setMonth(oneMonth.getMonth() - 1);
-  oneMonth.setHours(0, 0, 0, 0);
-  if (today >= oneMonth) {
-    return { label: "Expiring < 1 Month", color: "bg-amber-50 text-amber-700 border-amber-200 font-semibold", type: "expiringMonth" };
+  if (diffDays === 1) {
+    return {
+      label: "Tomorrow",
+      color: "bg-rose-100 border-rose-200 text-rose-700 font-extrabold animate-pulse",
+      type: "tomorrow",
+      diffDays,
+    };
   }
 
-  return { label: "Active", color: "bg-emerald-50 text-emerald-700 border-emerald-100", type: "active" };
+  if (diffDays <= 3) {
+    return {
+      label: "3 Days Left",
+      color: "bg-rose-50 border-rose-200 text-rose-600 font-extrabold",
+      type: "3days",
+      diffDays,
+    };
+  }
+
+  if (diffDays <= 7) {
+    return {
+      label: "7 Days Left",
+      color: "bg-amber-100 border-amber-300 text-amber-800 font-bold",
+      type: "7days",
+      diffDays,
+    };
+  }
+
+  if (diffDays <= 15) {
+    return {
+      label: "15 Days Left",
+      color: "bg-amber-50 border-amber-200 text-amber-700 font-bold",
+      type: "15days",
+      diffDays,
+    };
+  }
+
+  if (diffDays <= 30) {
+    return {
+      label: "1 Month Left",
+      color: "bg-indigo-50 border-indigo-200 text-indigo-700 font-bold",
+      type: "1month",
+      diffDays,
+    };
+  }
+
+  return {
+    label: "Active",
+    color: "bg-emerald-50 border-emerald-200 text-emerald-700 font-semibold",
+    type: "active",
+    diffDays,
+  };
 }
 
 export default function SubscriptionTable({
@@ -121,14 +179,14 @@ export default function SubscriptionTable({
 
   return (
     <div className="font-sans relative">
-      {/* ── Table wrapper ── */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
+      {/* ── Table wrapper with smooth horizontal scroll ── */}
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm custom-scrollbar">
+        <table className="w-full min-w-[900px] divide-y divide-gray-200 text-xs">
           {/* ── Head ── */}
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50/80">
             <tr>
               {/* Checkbox column */}
-              <th className="w-10 px-4 py-3">
+              <th className="w-8 px-2.5 py-2.5 text-center">
                 <input
                   type="checkbox"
                   aria-label="Select all on this page"
@@ -137,17 +195,18 @@ export default function SubscriptionTable({
                     if (el) el.indeterminate = somePageSelected && !allPageSelected;
                   }}
                   onChange={toggleSelectAll}
-                  className="h-4 w-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
+                  className="h-3.5 w-3.5 rounded border-gray-300 accent-indigo-600 cursor-pointer"
                 />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Client</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Start Date</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Duration</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Expiry Date</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Amount</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Status</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Actions</th>
+              <th className="px-3 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Client / Sub ID</th>
+              <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Type</th>
+              <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Payment Method</th>
+              <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Start Date</th>
+              <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Duration</th>
+              <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Expiry Date</th>
+              <th className="px-3 py-2.5 text-right text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Amount</th>
+              <th className="px-2.5 py-2.5 text-center text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Status</th>
+              <th className="px-2.5 py-2.5 text-center text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
 
@@ -157,79 +216,114 @@ export default function SubscriptionTable({
               const id = sub._id;
               const isSelected = selectedIds.has(id);
               const status = getSubscriptionStatus(sub);
+              const subCode = getSubscriptionCode(sub);
 
               return (
                 <tr
                   key={id}
                   className={`transition-colors duration-150 ${
-                    isSelected ? "bg-indigo-50" : "hover:bg-gray-50"
+                    isSelected ? "bg-indigo-50/70" : "hover:bg-gray-50/80"
                   }`}
                 >
                   {/* Checkbox */}
-                  <td className="px-4 py-3">
+                  <td className="px-2.5 py-2.5 text-center">
                     <input
                       type="checkbox"
                       aria-label={`Select ${sub.client?.companyName}`}
                       checked={isSelected}
                       onChange={() => toggleRow(id)}
-                      className="h-4 w-4 rounded border-gray-300 accent-indigo-600 cursor-pointer"
+                      className="h-3.5 w-3.5 rounded border-gray-300 accent-indigo-600 cursor-pointer"
                     />
                   </td>
 
-                  {/* Client */}
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-800 whitespace-nowrap">
+                  {/* Client & Sub ID */}
+                  <td className="px-3 py-2.5">
+                    <Link
+                      to={`/subscriptions/${sub._id}`}
+                      className="font-bold text-slate-800 hover:text-indigo-600 transition-colors hover:underline text-xs block leading-tight"
+                    >
                       {sub.client?.companyName || "Unknown Client"}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-0.5">
-                      {sub.client?.clientName} &bull; {sub.client?.email || "No Email"}
+                    </Link>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded font-mono font-bold text-slate-600 border border-slate-200/60">
+                        {subCode}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        &bull; {sub.client?.clientName}
+                      </span>
                     </div>
                   </td>
 
                   {/* Type */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`inline-block px-2.5 py-1 rounded-lg font-bold text-[10px] ${
-                      sub.type === "hosting" ? "bg-indigo-50 text-indigo-700" : "bg-purple-50 text-purple-700"
+                  <td className="px-2.5 py-2.5 whitespace-nowrap">
+                    <span className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] capitalize ${
+                      sub.type === "hosting"
+                        ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                        : sub.type === "maintenance"
+                        ? "bg-purple-50 text-purple-700 border border-purple-100"
+                        : sub.type === "digital_marketing"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                        : "bg-amber-50 text-amber-700 border border-amber-100"
                     }`}>
-                      {sub.type}
+                      {sub.type === "custom"
+                        ? sub.customType || "Custom"
+                        : sub.type.replace(/_/g, " ")}
+                    </span>
+                  </td>
+
+                  {/* Payment Method */}
+                  <td className="px-2.5 py-2.5 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold text-[10px] border border-slate-200/50">
+                      {sub.paymentMethod === "credit_debit_card"
+                        ? "Card"
+                        : sub.paymentMethod === "upi"
+                        ? "UPI"
+                        : "Bank Transfer"}
                     </span>
                   </td>
 
                   {/* Start Date */}
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  <td className="px-2.5 py-2.5 text-slate-600 whitespace-nowrap font-medium text-[11px]">
                     {new Date(sub.startDate).toLocaleDateString("en-IN")}
                   </td>
 
                   {/* Duration */}
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-semibold">
+                  <td className="px-2.5 py-2.5 text-slate-700 whitespace-nowrap font-semibold text-[11px]">
                     {sub.durationValue} {sub.durationUnit}
                   </td>
 
                   {/* Expiry Date */}
-                  <td className="px-4 py-3 text-gray-800 whitespace-nowrap font-bold">
+                  <td className="px-2.5 py-2.5 text-slate-800 whitespace-nowrap font-bold text-[11px]">
                     {new Date(sub.endDate).toLocaleDateString("en-IN")}
                   </td>
 
                   {/* Amount */}
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <div className="font-black text-gray-900">
-                      ₹{Number(sub.finalAmount || sub.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    <div className="font-extrabold text-slate-900 text-xs">
+                      {formatWithINRConversion(sub.finalAmount || sub.amount, sub.currency || "INR (₹)")}
                     </div>
-                    <div className="text-[9px] text-gray-400 font-bold mt-0.5 uppercase tracking-wider">
+                    <div className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase tracking-wider">
                       {sub.client?.isForeign ? "No GST" : sub.isPersonalAccount ? "Personal" : (sub.inclusiveGst !== false ? "GST Inc" : "+18% GST")}
                     </div>
                   </td>
 
                   {/* Status */}
-                  <td className="px-4 py-3 text-center whitespace-nowrap">
+                  <td className="px-2.5 py-2.5 text-center whitespace-nowrap">
                     <span className={`inline-block px-2 py-0.5 rounded-md border text-[9px] uppercase tracking-wider font-extrabold ${status.color}`}>
                       {status.label}
                     </span>
                   </td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-1.5">
+                  <td className="px-2.5 py-2.5">
+                    <div className="flex items-center justify-center gap-1">
+                      <Link
+                        to={`/subscriptions/${sub._id}`}
+                        title="View Subscription Details"
+                        className="p-1.5 rounded-md text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                      >
+                        <Eye size={15} />
+                      </Link>
                       {onSendEmail && (
                         <button
                           type="button"

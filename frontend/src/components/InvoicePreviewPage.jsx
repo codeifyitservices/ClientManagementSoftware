@@ -617,16 +617,21 @@ export default function InvoicePreviewPage({
           </div>
 
           {/* 6. Amount in words & footer footnotes */}
-          <div className="pt-8 border-t border-slate-200">
+          <div className="pt-8 border-t border-slate-200 space-y-2">
             <p className="text-[10px] font-bold text-slate-900">
               Amount in Words:{" "}
               <span className="text-slate-700 font-normal">
                 {numberToWords(grandTotal)}
               </span>
             </p>
-            <p className="text-[10px] font-normal text-slate-500 mt-2 italic">
-              {config.invoiceTerms}
-            </p>
+            {(invoiceData.notes || config.invoiceTerms) && (
+              <div className="mt-2 text-[10px] text-slate-600">
+                <span className="font-bold text-slate-700 block">Terms & Footnotes:</span>
+                <p className="font-normal italic whitespace-pre-line text-slate-500 mt-0.5">
+                  {invoiceData.notes || config.invoiceTerms}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

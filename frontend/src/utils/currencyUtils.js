@@ -2,7 +2,7 @@
 
 export const SUPPORTED_CURRENCIES = [
   { code: "INR", label: "INR (₹)", symbol: "₹" },
-  { code: "AED", label: "AED (AED)", symbol: "AED" },
+  { code: "AED", label: "AED (د.إ)", symbol: "د.إ" },
   { code: "USD", label: "USD ($)", symbol: "$" },
   { code: "GBP", label: "GBP (£)", symbol: "£" },
   { code: "EUR", label: "EUR (€)", symbol: "€" },
@@ -12,11 +12,11 @@ export const SUPPORTED_CURRENCIES = [
 // Fallback rates relative to 1 INR if API is offline
 const FALLBACK_RATES_FROM_INR = {
   INR: 1,
-  USD: 0.0116,  // ~86.5 INR per USD
-  AED: 0.0426,  // ~23.5 INR per AED
-  GBP: 0.0092,  // ~108.5 INR per GBP
-  EUR: 0.0108,  // ~92.5 INR per EUR
-  AUD: 0.0178,  // ~56.0 INR per AUD
+  USD: 0.0116, // ~86.5 INR per USD
+  AED: 0.0426, // ~23.5 INR per AED
+  GBP: 0.0092, // ~108.5 INR per GBP
+  EUR: 0.0108, // ~92.5 INR per EUR
+  AUD: 0.0178, // ~56.0 INR per AUD
 };
 
 let cachedRates = { ...FALLBACK_RATES_FROM_INR };
@@ -47,13 +47,19 @@ export const fetchLiveRates = async () => {
         };
         lastFetchTime = now;
         try {
-          localStorage.setItem("crm_exchange_rates", JSON.stringify({ rates: cachedRates, time: now }));
+          localStorage.setItem(
+            "crm_exchange_rates",
+            JSON.stringify({ rates: cachedRates, time: now }),
+          );
         } catch (e) {}
         return cachedRates;
       }
     }
   } catch (err) {
-    console.warn("Could not fetch live exchange rates, using cached/fallback rates:", err.message);
+    console.warn(
+      "Could not fetch live exchange rates, using cached/fallback rates:",
+      err.message,
+    );
   }
 
   // Try loading from localStorage
@@ -142,4 +148,38 @@ export const formatWithINRConversion = (amount, currencyStr) => {
     maximumFractionDigits: 0,
   });
   return `${primary} (~₹${formattedINR})`;
+};
+
+/**
+ * Format Subscription ID as SUB-COD-[M/H/D/C]-YYYY
+ * M - Maintenance, H - Hosting, D - Digital Marketing, C - Custom
+ */
+export const getSubscriptionCode = (sub) => {
+  if (!sub) return "SUB-COD-C-2026";
+  if (sub.subscriptionCode) return sub.subscriptionCode;
+  if (sub.customSubscriptionId) return sub.customSubscriptionId;
+
+  let typeCode = "C";
+  const typeStr = String(sub.type || "").toLowerCase();
+  
+  if (typeStr.includes("maintenance")) {
+    typeCode = "M";
+  } else if (typeStr.includes("hosting")) {
+    typeCode = "H";
+  } else if (typeStr.includes("digital_marketing") || typeStr.includes("digital")) {
+    typeCode = "D";
+  } else if (typeStr.includes("custom")) {
+    typeCode = "C";
+  } else if (typeStr) {
+    typeCode = typeStr.charAt(0).toUpperCase();
+  }
+
+  const dateObj = sub.startDate
+    ? new Date(sub.startDate)
+    : sub.createdAt
+    ? new Date(sub.createdAt)
+    : new Date();
+  const year = isNaN(dateObj.getFullYear()) ? new Date().getFullYear() : dateObj.getFullYear();
+
+  return `SUB-COD-${typeCode}-${year}`;
 };

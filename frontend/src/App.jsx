@@ -25,6 +25,7 @@ import DataBackupPage from "./components/DataBackupPage";
 import LoginPage from "./components/LoginPage";
 import PasswordModal from "./components/PasswordModal";
 import SubscriptionsPage from "./components/SubscriptionsPage";
+import SubscriptionDetailPage from "./components/SubscriptionDetailPage";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectFormPage from "./components/ProjectFormPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
@@ -1055,19 +1056,34 @@ export default function App() {
               </AdminRoute>
             }
           />
-          <Route
-            path="subscriptions"
-            element={
-              <AdminRoute currentUser={currentUser}>
-                <SubscriptionsPage
-                  token={token}
-                  clients={clients}
-                  showToast={showToast}
-                  authenticatedFetch={authenticatedFetch}
-                />
-              </AdminRoute>
-            }
-          />
+          <Route path="subscriptions">
+            <Route
+              index
+              element={
+                <AdminRoute currentUser={currentUser}>
+                  <SubscriptionsPage
+                    token={token}
+                    clients={clients}
+                    showToast={showToast}
+                    authenticatedFetch={authenticatedFetch}
+                  />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path=":id"
+              element={
+                <AdminRoute currentUser={currentUser}>
+                  <SubscriptionDetailPage
+                    token={token}
+                    clients={clients}
+                    showToast={showToast}
+                    authenticatedFetch={authenticatedFetch}
+                  />
+                </AdminRoute>
+              }
+            />
+          </Route>
           <Route path="leads">
             <Route
               index

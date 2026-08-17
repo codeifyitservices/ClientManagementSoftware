@@ -83,7 +83,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   const companyPhone = config.companyPhone || "+91 97175 70933";
   const companyEmail = config.companyEmail || "info@codenap.in";
   const companyGst = config.companyGst || "06AABCT1234Q1Z5";
-  const invoiceTerms = config.invoiceTerms || "Thank you for your business!";
+  const invoiceTerms = invoice.notes || config.invoiceTerms || "Thank you for your business!";
 
   let hasLogo = false;
   let logoPath = "";

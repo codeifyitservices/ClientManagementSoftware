@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, User, Phone, Mail, TrendingUp, Save, Briefcase, FileText } from "lucide-react";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol } from "../utils/currencyUtils";
 
 export default function LeadFormPage({
   token,
@@ -16,6 +17,7 @@ export default function LeadFormPage({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState("Website");
+  const [currency, setCurrency] = useState("INR (₹)");
   const [value, setValue] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [notes, setNotes] = useState("");
@@ -293,19 +295,42 @@ export default function LeadFormPage({
                 </select>
               </div>
 
-              {/* Deal Value */}
-              <div>
-                <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Prospective Deal Value (₹)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder="e.g. 150000"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                />
+              {/* Deal Value & Currency */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Currency *
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-800 text-xs font-semibold focus:outline-none bg-white focus:ring-2 focus:ring-indigo-500/20"
+                  >
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.label}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Prospective Deal Value ({getCurrencySymbol(currency)}) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs pointer-events-none">
+                      {getCurrencySymbol(currency)}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      placeholder="e.g. 150000"
+                      className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Assigned To Owner */}

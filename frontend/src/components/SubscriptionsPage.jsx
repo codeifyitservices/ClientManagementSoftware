@@ -4,7 +4,8 @@ import {
   Check, CheckCircle, Clock, Search, X, ShieldAlert
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
-import SubscriptionTable from "./SubscriptionTable";
+import SubscriptionTable, { getSubscriptionStatus } from "./SubscriptionTable";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol, formatWithINRConversion } from "../utils/currencyUtils";
 
 export default function SubscriptionsPage({
   token,
@@ -30,6 +31,14 @@ export default function SubscriptionsPage({
   // Form Field States
   const [clientId, setClientId] = useState("");
   const [type, setType] = useState("hosting");
+  const [customType, setCustomType] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("bank_transfer");
+  const [currency, setCurrency] = useState("INR (₹)");
+  const [billingCycle, setBillingCycle] = useState("monthly");
+  const [autoRenew, setAutoRenew] = useState(true);
+  const [renewalType, setRenewalType] = useState("automatic");
+  const [planDetails, setPlanDetails] = useState("");
+  const [notes, setNotes] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [durationValue, setDurationValue] = useState(1);
   const [durationUnit, setDurationUnit] = useState("months");
@@ -74,9 +83,18 @@ export default function SubscriptionsPage({
   }, [token]);
 
   const handleOpenAddForm = () => {
+    const defaultClient = clients[0];
     setSelectedSub(null);
-    setClientId(clients[0]?._id || "");
+    setClientId(defaultClient?._id || "");
     setType("hosting");
+    setCustomType("");
+    setPaymentMethod("bank_transfer");
+    setCurrency(defaultClient?.isForeign ? "USD ($)" : "INR (₹)");
+    setBillingCycle("monthly");
+    setAutoRenew(true);
+    setRenewalType("automatic");
+    setPlanDetails("");
+    setNotes("");
     setStartDate(new Date().toISOString().split("T")[0]);
     setDurationValue(12);
     setDurationUnit("months");
@@ -89,7 +107,15 @@ export default function SubscriptionsPage({
   const handleOpenEditForm = (sub) => {
     setSelectedSub(sub);
     setClientId(sub.client?._id || "");
-    setType(sub.type);
+    setType(sub.type || "hosting");
+    setCustomType(sub.customType || "");
+    setPaymentMethod(sub.paymentMethod || "bank_transfer");
+    setCurrency(sub.currency || "INR (₹)");
+    setBillingCycle(sub.billingCycle || "monthly");
+    setAutoRenew(sub.autoRenew !== false);
+    setRenewalType(sub.renewalType || "automatic");
+    setPlanDetails(sub.planDetails || "");
+    setNotes(sub.notes || "");
     setStartDate(new Date(sub.startDate).toISOString().split("T")[0]);
     setDurationValue(sub.durationValue);
     setDurationUnit(sub.durationUnit);
@@ -105,6 +131,10 @@ export default function SubscriptionsPage({
       showToast("Please select a client", "error");
       return;
     }
+    if (type === "custom" && !customType.trim()) {
+      showToast("Please enter a custom subscription name", "error");
+      return;
+    }
     if (!amount || isNaN(amount) || Number(amount) < 0) {
       showToast("Please enter a valid amount", "error");
       return;
@@ -115,6 +145,14 @@ export default function SubscriptionsPage({
     const subData = {
       client: clientId,
       type,
+      customType: type === "custom" ? customType.trim() : "",
+      paymentMethod,
+      currency,
+      billingCycle,
+      autoRenew,
+      renewalType,
+      planDetails: planDetails.trim(),
+      notes: notes.trim(),
       startDate,
       durationValue: Number(durationValue),
       durationUnit,
@@ -288,12 +326,14 @@ export default function SubscriptionsPage({
       sub.type?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "all" || sub.type === typeFilter;
     const statusObj = getSubscriptionStatus(sub);
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "expired" && statusObj.type === "expired") ||
-      (statusFilter === "expiring15" && statusObj.type === "expiring15") ||
-      (statusFilter === "expiringMonth" && statusObj.type === "expiringMonth") ||
-      (statusFilter === "active" && statusObj.type === "active");
+    let matchesStatus = statusFilter === "all";
+    if (statusFilter === "active") matchesStatus = statusObj.type === "active";
+    else if (statusFilter === "1month") matchesStatus = statusObj.diffDays <= 30 && statusObj.diffDays > 15;
+    else if (statusFilter === "15days") matchesStatus = statusObj.diffDays <= 15 && statusObj.diffDays > 7;
+    else if (statusFilter === "7days") matchesStatus = statusObj.diffDays <= 7 && statusObj.diffDays > 3;
+    else if (statusFilter === "3days") matchesStatus = statusObj.diffDays <= 3 && statusObj.diffDays > 1;
+    else if (statusFilter === "tomorrow") matchesStatus = statusObj.diffDays === 1;
+    else if (statusFilter === "expired") matchesStatus = statusObj.diffDays <= 0;
     return matchesSearch && matchesType && matchesStatus;
   });
 
@@ -333,7 +373,29 @@ export default function SubscriptionsPage({
     }
     return d.toLocaleDateString("en-IN", {
       day: "numeric",
-      month: "long",
+      month: "short",
+      year: "numeric"
+    });
+  };
+
+  const getCalculatedNextPaymentDate = () => {
+    if (!startDate) return "";
+    const d = new Date(startDate);
+    if (isNaN(d.getTime())) return "";
+
+    if (billingCycle === "weekly") {
+      d.setDate(d.getDate() + 7);
+    } else if (billingCycle === "monthly") {
+      d.setMonth(d.getMonth() + 1);
+    } else if (billingCycle === "quarterly") {
+      d.setMonth(d.getMonth() + 3);
+    } else if (billingCycle === "yearly") {
+      d.setFullYear(d.getFullYear() + 1);
+    }
+
+    return d.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
       year: "numeric"
     });
   };
@@ -453,6 +515,8 @@ export default function SubscriptionsPage({
               <option value="all">All Types</option>
               <option value="hosting">Hosting</option>
               <option value="maintenance">Maintenance</option>
+              <option value="digital_marketing">Digital Marketing</option>
+              <option value="custom">Custom</option>
             </select>
 
             <select
@@ -461,10 +525,13 @@ export default function SubscriptionsPage({
               className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
             >
               <option value="all">All Statuses</option>
-              <option value="active">Active Only</option>
-              <option value="expiringMonth">Expiring &lt; 1 Month</option>
-              <option value="expiring15">Expiring &lt; 15 Days</option>
-              <option value="expired">Expired Only</option>
+              <option value="active">Active Only (&gt;30d)</option>
+              <option value="1month">1 Month Left</option>
+              <option value="15days">15 Days Left</option>
+              <option value="7days">7 Days Left</option>
+              <option value="3days">3 Days Left</option>
+              <option value="tomorrow">Tomorrow (1d)</option>
+              <option value="expired">Expired / Due Today</option>
             </select>
           </div>
         </div>
@@ -490,8 +557,8 @@ export default function SubscriptionsPage({
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs"
             onClick={() => setIsFormOpen(false)}
           />
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
               <h3 className="text-sm font-extrabold text-slate-900">
                 {selectedSub ? "Edit Subscription" : "New Subscription Details"}
               </h3>
@@ -503,175 +570,273 @@ export default function SubscriptionsPage({
               </button>
             </div>
             
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4 text-xs font-semibold text-slate-700">
-              {/* Select Client */}
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
-                  Select Client *
-                </label>
-                <select
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
-                  required
-                >
-                  <option value="" disabled>-- Select a Client Profile --</option>
-                  {clients.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.companyName} ({c.clientName})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Type selection */}
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
-                  Subscription Type *
-                </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-800">
-                    <input
-                      type="radio"
-                      name="subType"
-                      value="hosting"
-                      checked={type === "hosting"}
-                      onChange={() => setType("hosting")}
-                      className="h-4 w-4 text-[#5D5FEF] focus:ring-indigo-500"
-                    />
-                    <span>Hosting</span>
+            <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="p-6 space-y-4 text-xs font-semibold text-slate-700 overflow-y-auto flex-1">
+                {/* Select Client */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                    Select Client *
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-800">
-                    <input
-                      type="radio"
-                      name="subType"
-                      value="maintenance"
-                      checked={type === "maintenance"}
-                      onChange={() => setType("maintenance")}
-                      className="h-4 w-4 text-[#5D5FEF] focus:ring-indigo-500"
-                    />
-                    <span>Maintenance</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Start Date */}
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
-                  Start Date *
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Calendar className="h-4 w-4" />
-                  </span>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Duration and unit */}
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
-                  Duration *
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="number"
-                    min="1"
-                    value={durationValue}
-                    onChange={(e) => setDurationValue(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    required
-                  />
                   <select
-                    value={durationUnit}
-                    onChange={(e) => setDurationUnit(e.target.value)}
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                    required
                   >
-                    <option value="months">Month(s)</option>
-                    <option value="years">Year(s)</option>
+                    <option value="" disabled>-- Select a Client Profile --</option>
+                    {clients.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.companyName} ({c.clientName})
+                      </option>
+                    ))}
                   </select>
                 </div>
-                {startDate && durationValue && Number(durationValue) > 0 && (
-                  <p className="text-[10px] text-indigo-600 font-extrabold mt-2 flex items-center gap-1.5 select-none">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0" />
-                    <span>Calculated Expiry Date: <strong className="text-slate-800">{getCalculatedEndDate()}</strong></span>
-                  </p>
+
+                {/* Type selection */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                    Subscription Type *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "hosting", label: "Hosting" },
+                      { id: "maintenance", label: "Maintenance" },
+                      { id: "digital_marketing", label: "Digital Marketing" },
+                      { id: "custom", label: "Custom" },
+                    ].map((option) => (
+                      <label
+                        key={option.id}
+                        className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
+                          type === option.id
+                            ? "border-[#5D5FEF] bg-indigo-50/50 text-[#5D5FEF] font-bold"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 font-semibold"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="subType"
+                          value={option.id}
+                          checked={type === option.id}
+                          onChange={() => setType(option.id)}
+                          className="h-4 w-4 text-[#5D5FEF] focus:ring-indigo-500"
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {type === "custom" && (
+                    <div className="mt-3">
+                      <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1">
+                        Custom Service Name *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter custom service name (e.g. SEO, Domain, Cloud)"
+                        value={customType}
+                        onChange={(e) => setCustomType(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        required
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Method selection */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                    Payment Method *
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                    required
+                  >
+                    <option value="credit_debit_card">Credit/Debit Card</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="upi">UPI</option>
+                  </select>
+                </div>
+
+                {/* Plan Specs / Description */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                    Plan Specifications / Details
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. 10 GB SSD Storage, 100 GB Bandwidth, SSL Certificate included..."
+                    value={planDetails}
+                    onChange={(e) => setPlanDetails(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Start Date & Payment Interval */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                      Start Date *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <Calendar className="h-4 w-4" />
+                      </span>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-semibold"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                      Payment Interval *
+                    </label>
+                    <select
+                      value={billingCycle}
+                      onChange={(e) => setBillingCycle(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                      required
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="quarterly">Quarterly</option>
+                      <option value="yearly">Yearly</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Next Payment Date Badge */}
+                {startDate && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 text-[10px] text-indigo-700 font-bold bg-indigo-50/70 p-3 rounded-xl border border-indigo-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+                      <span>Next Payment Date: <strong className="text-slate-900 font-black text-xs">{getCalculatedNextPaymentDate()}</strong></span>
+                    </div>
+                    {durationValue && Number(durationValue) > 0 && (
+                      <span className="text-slate-500 font-medium">Contract Expiry: <strong className="text-slate-800 font-bold">{getCalculatedEndDate()}</strong></span>
+                    )}
+                  </div>
                 )}
-              </div>
 
-              {/* Personal Account Checkbox */}
-              <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 p-3 rounded-xl">
-                <input
-                  type="checkbox"
-                  id="isPersonalAccount"
-                  checked={isPersonalAccount}
-                  disabled={activeClient.isForeign}
-                  onChange={(e) => setIsPersonalAccount(e.target.checked)}
-                  className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
-                />
-                <label htmlFor="isPersonalAccount" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
-                  <span>Personal Account</span>
-                  <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
-                    {activeClient.isForeign ? "Disabled - foreign client." : "If checked, no GST will be applied (personal/individual billing)."}
-                  </span>
-                </label>
-              </div>
+                {/* Duration and unit */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                    Contract Duration *
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="number"
+                      min="1"
+                      value={durationValue}
+                      onChange={(e) => setDurationValue(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-semibold"
+                      required
+                    />
+                    <select
+                      value={durationUnit}
+                      onChange={(e) => setDurationUnit(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
+                    >
+                      <option value="months">Month(s)</option>
+                      <option value="years">Year(s)</option>
+                    </select>
+                  </div>
+                </div>
 
-              {/* GST Inclusive Checkbox — hidden for personal account and foreign clients */}
-              {!isPersonalAccount && !activeClient.isForeign && (
-                <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                {/* Personal Account Checkbox */}
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 p-3 rounded-xl">
                   <input
                     type="checkbox"
-                    id="inclusiveGst"
-                    checked={inclusiveGst}
-                    onChange={(e) => setInclusiveGst(e.target.checked)}
-                    className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                    id="isPersonalAccount"
+                    checked={isPersonalAccount}
+                    disabled={activeClient.isForeign}
+                    onChange={(e) => setIsPersonalAccount(e.target.checked)}
+                    className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
                   />
-                  <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
-                    <span>Inclusive GST (18%)</span>
+                  <label htmlFor="isPersonalAccount" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
+                    <span>Personal Account</span>
                     <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
-                      If unchecked, 18% tax will automatically be added to obtain the final billing amount.
+                      {activeClient.isForeign ? "Disabled - foreign client." : "If checked, no GST will be applied (personal/individual billing)."}
                     </span>
                   </label>
                 </div>
-              )}
 
-              {/* Amount */}
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
-                  Base Amount (INR) *
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-450 font-bold">
-                    ₹
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Enter base amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    required
-                  />
+                {/* GST Inclusive Checkbox — hidden for personal account and foreign clients */}
+                {!isPersonalAccount && !activeClient.isForeign && (
+                  <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                    <input
+                      type="checkbox"
+                      id="inclusiveGst"
+                      checked={inclusiveGst}
+                      onChange={(e) => setInclusiveGst(e.target.checked)}
+                      className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                    />
+                    <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                      <span>Inclusive GST (18%)</span>
+                      <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
+                        If unchecked, 18% tax will automatically be added to obtain the final billing amount.
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                {/* Currency & Base Amount */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-1">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                      Currency *
+                    </label>
+                    <select
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white font-bold"
+                    >
+                      {SUPPORTED_CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.label}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
+                      Base Amount ({getCurrencySymbol(currency)}) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-450 font-bold text-xs">
+                        {getCurrencySymbol(currency)}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Enter base amount"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-semibold"
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Submit Buttons */}
-              <div className="pt-4 flex items-center justify-between border-t border-slate-100 mt-6 gap-4">
+              {/* Fixed Modal Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-4 shrink-0">
                 <div className="text-left shrink-0">
                   <span className="text-[9px] uppercase tracking-wider text-slate-450 font-bold block select-none">
                     Total Final Amount
                   </span>
                   <span className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    ₹{getCalculatedFinalAmount().toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    {formatWithINRConversion(getCalculatedFinalAmount(), currency)}
                     {!isPersonalAccount && !activeClient.isForeign && !inclusiveGst && amount && (
                       <span className="text-[9px] text-[#5D5FEF] font-bold uppercase select-none">(+18% GST)</span>
                     )}

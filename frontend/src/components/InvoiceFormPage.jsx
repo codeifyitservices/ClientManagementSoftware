@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Calendar, Eye, ChevronLeft } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { SUPPORTED_CURRENCIES } from "../utils/currencyUtils";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol, formatWithINRConversion } from "../utils/currencyUtils";
 
 // State lookup helper for state name from GSTIN code
 const stateLookup = {
@@ -93,6 +93,9 @@ export default function InvoiceFormPage({
           setConfig({
             companyGst: data.companyGst || "06AABCT1234Q1Z5",
           });
+          if (data.invoiceTerms && !invoice) {
+            setNotes((prev) => (prev ? prev : data.invoiceTerms));
+          }
         }
       } catch (err) {
         // Fallback
@@ -229,8 +232,33 @@ export default function InvoiceFormPage({
           },
         ]);
       }
+    } else if (location.state?.client) {
+      const targetClientId =
+        typeof location.state.client === "object"
+          ? location.state.client._id
+          : location.state.client;
+      if (targetClientId) setSelectedClientId(targetClientId);
+      if (location.state?.currency) setCurrency(location.state.currency);
+
+      if (Array.isArray(location.state?.items) && location.state.items.length > 0) {
+        setItems(location.state.items);
+      } else if (location.state?.amount !== undefined) {
+        const itemAmt = Number(location.state.amount) || 0;
+        setItems([
+          {
+            serviceName: location.state?.serviceName || "Subscription Renewal",
+            description:
+              location.state?.description || "Subscription Renewal Service Fee",
+            sacCode: "998314",
+            amount: itemAmt,
+            rate: itemAmt,
+            qty: 1,
+            gstRate: 18,
+          },
+        ]);
+      }
     }
-  }, [invoice, draftInvoice]);
+  }, [invoice, draftInvoice, location.state]);
 
   const handleAddItem = () => {
     setItems((prev) => [
@@ -1007,6 +1035,20 @@ export default function InvoiceFormPage({
                 </p>
               </>
             )}
+          </div>
+
+          {/* Invoice Footnotes & Terms Input */}
+          <div className="space-y-1.5 pt-2">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Invoice Footnotes & Terms / Bank Payment Details
+            </label>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Enter custom invoice footnotes, payment terms, or bank transfer details (e.g. Bank Account: XYZ, IFSC: ABC0123)..."
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500"
+            />
           </div>
         </div>
       </div>
