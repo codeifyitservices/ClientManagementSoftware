@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { formatWithINRConversion } from "../utils/currencyUtils";
 import {
@@ -182,10 +183,29 @@ export default function ProjectDetailPage({
     );
   }
 
-  // Calculate project financial stats
-  const projectValue = project.finalAmount !== undefined ? project.finalAmount : (project.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0);
+  // Calculate project financial stats & 2-Progress Bar Breakdown (Base Amount vs Tax)
+  const isForeignClient = project.client?.isForeign === true;
+  const isPersonalAcc = project.isPersonalAccount === true;
+  const hasGst = !isForeignClient && !isPersonalAcc;
+
+  const projectValue = (project.finalAmount && project.finalAmount > 0)
+    ? project.finalAmount
+    : (project.projectValue || (project.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0));
+
+  let totalBaseValue = projectValue;
+  let totalTaxValue = 0;
+
+  if (hasGst) {
+    if (project.inclusiveGst !== false) {
+      totalBaseValue = Math.round((projectValue / 1.18) * 100) / 100;
+      totalTaxValue = Math.round((projectValue - totalBaseValue) * 100) / 100;
+    } else {
+      totalBaseValue = project.projectValue || Math.round((projectValue / 1.18) * 100) / 100;
+      totalTaxValue = Math.round((totalBaseValue * 0.18) * 100) / 100;
+    }
+  }
+
   let received = 0;
-  let outstanding = 0;
   let invoicesCount = 0;
   let nextDueMilestone = null;
 
@@ -193,8 +213,6 @@ export default function ProjectDetailPage({
     if (m.status === "Paid") {
       received += m.amount || 0;
     } else {
-      outstanding += m.amount || 0;
-      // Find earliest unpaid milestone for "Next Due"
       if (!nextDueMilestone || new Date(m.dueDate) < new Date(nextDueMilestone.dueDate)) {
         nextDueMilestone = m;
       }
@@ -202,7 +220,18 @@ export default function ProjectDetailPage({
     if (m.invoice) invoicesCount++;
   });
 
-  const billingProgressPercent = projectValue > 0 ? Math.round((received / projectValue) * 100) : 0;
+  const outstanding = Math.max(0, projectValue - received);
+
+  let baseReceived = received;
+  let taxReceived = 0;
+
+  if (hasGst && projectValue > 0) {
+    baseReceived = Math.round((received / 1.18) * 100) / 100;
+    taxReceived = Math.round((received - baseReceived) * 100) / 100;
+  }
+
+  const baseProgressPercent = totalBaseValue > 0 ? Math.min(100, Math.round((baseReceived / totalBaseValue) * 100)) : 0;
+  const taxProgressPercent = (hasGst && totalTaxValue > 0) ? Math.min(100, Math.round((taxReceived / totalTaxValue) * 100)) : 0;
 
   // Filter invoices linked to this project
   const projectInvoices = invoices.filter((inv) =>
@@ -358,21 +387,57 @@ export default function ProjectDetailPage({
           </div>
         </div>
 
-        {/* Payment Progress Bar */}
-        <div className="space-y-1.5 pt-2">
-          <div className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-            <span>Payment Progress</span>
-            <span className="text-[#5D5FEF] font-bold">{billingProgressPercent}%</span>
+        {/* 2 Payment Progress Bars: Base Amount & Tax */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          {/* Progress Bar 1: Base Amount (Exclusive GST) */}
+          <div className="bg-slate-50/70 border border-slate-100 p-4 rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                Base Amount Progress (Excl. GST)
+              </span>
+              <span className="text-emerald-600 font-extrabold text-xs">{baseProgressPercent}%</span>
+            </div>
+            <div className="w-full bg-slate-200/70 h-2.5 rounded-full overflow-hidden">
+              <div
+                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${baseProgressPercent}%` }}
+              />
+            </div>
+            <div className="text-[10px] text-slate-600 font-bold flex items-center justify-between pt-0.5">
+              <span>{formatWithINRConversion(baseReceived, project.currency)} received</span>
+              <span className="text-slate-400 font-medium">of {formatWithINRConversion(totalBaseValue, project.currency)}</span>
+            </div>
           </div>
-          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-            <div
-              className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-              style={{ width: `${billingProgressPercent}%` }}
-            />
+
+          {/* Progress Bar 2: Tax (GST) Progress */}
+          <div className="bg-slate-50/70 border border-slate-100 p-4 rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
+                Tax (GST 18%) Progress
+              </span>
+              <span className="text-indigo-600 font-extrabold text-xs">
+                {hasGst ? `${taxProgressPercent}%` : "0% (No Tax)"}
+              </span>
+            </div>
+            <div className="w-full bg-slate-200/70 h-2.5 rounded-full overflow-hidden">
+              <div
+                className="bg-indigo-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${hasGst ? taxProgressPercent : 0}%` }}
+              />
+            </div>
+            <div className="text-[10px] text-slate-600 font-bold flex items-center justify-between pt-0.5">
+              {hasGst ? (
+                <>
+                  <span>{formatWithINRConversion(taxReceived, project.currency)} tax received</span>
+                  <span className="text-slate-400 font-medium">of {formatWithINRConversion(totalTaxValue, project.currency)}</span>
+                </>
+              ) : (
+                <span className="text-slate-400 font-medium italic">No Tax applicable (Personal / Foreign Account)</span>
+              )}
+            </div>
           </div>
-          <p className="text-[10px] text-slate-450 font-bold">
-            {formatWithINRConversion(received, project.currency)} received of {formatWithINRConversion(projectValue, project.currency)}
-          </p>
         </div>
 
         {/* Payment Milestones & Installments Table */}

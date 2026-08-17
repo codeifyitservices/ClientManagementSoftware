@@ -272,33 +272,35 @@ export default function ProjectsPage({
   let totalOutstanding = 0;
 
   projects.forEach((proj) => {
-    const val = proj.finalAmount !== undefined ? proj.finalAmount : (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0);
-    totalProjectsValue += convertToINR(val, proj.currency);
+    const val = (proj.finalAmount && proj.finalAmount > 0)
+      ? proj.finalAmount
+      : (proj.projectValue || (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0));
+    let rec = 0;
     proj.milestones?.forEach((m) => {
-      if (m.status !== "Paid") {
-        totalOutstanding += convertToINR(m.amount || 0, proj.currency);
-      }
+      if (m.status === "Paid") rec += m.amount || 0;
     });
+    totalProjectsValue += convertToINR(val, proj.currency);
+    totalOutstanding += convertToINR(Math.max(0, val - rec), proj.currency);
   });
 
   // Calculate values for individual project helper
   const getProjectFinancials = (proj) => {
     if (!proj) return { value: 0, received: 0, pending: 0, invoicesCount: 0, percent: 0 };
-    const value = proj.finalAmount !== undefined ? proj.finalAmount : (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0);
+    const value = (proj.finalAmount && proj.finalAmount > 0)
+      ? proj.finalAmount
+      : (proj.projectValue || (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0));
     let received = 0;
-    let pending = 0;
     let invoicesCount = 0;
 
     proj.milestones?.forEach((m) => {
       if (m.status === "Paid") {
         received += m.amount || 0;
-      } else {
-        pending += m.amount || 0;
       }
       if (m.invoice) invoicesCount++;
     });
 
-    const percent = value > 0 ? Math.round((received / value) * 100) : 0;
+    const pending = Math.max(0, value - received);
+    const percent = value > 0 ? Math.min(100, Math.round((received / value) * 100)) : 0;
     return { value, received, pending, invoicesCount, percent };
   };
 
