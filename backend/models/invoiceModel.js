@@ -201,13 +201,18 @@ invoiceSchema.post("save", async function (doc) {
     const Project = mongoose.model("Project");
     const milestoneStatus = doc.paymentStatus === "Paid" ? "Paid" : "Invoiced";
     console.log(`[Invoice Post-Save Hook] Invoice ${doc.invoiceNumber} (${doc._id}) saved. Status: ${doc.paymentStatus}. Updating linked milestones to: ${milestoneStatus}`);
-    
+
+    // Use arrayFilters to update ALL matching milestones (not just the first one)
+    // The positional $ operator only updates the first match per document
     const updateResult = await Project.updateMany(
       { "milestones.invoice": doc._id },
       {
         $set: {
-          "milestones.$.status": milestoneStatus
+          "milestones.$[m].status": milestoneStatus
         }
+      },
+      {
+        arrayFilters: [{ "m.invoice": doc._id }]
       }
     );
     console.log(`[Invoice Post-Save Hook] Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);

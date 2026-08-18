@@ -28,7 +28,7 @@ const DUMMY_PREVIEW_INVOICE = {
   invoiceDate: new Date().toISOString().split("T")[0],
   dueDate: getPreviewDueDate(),
   billingPeriod: "July 2026",
-  status: "Unpaid",
+  paymentStatus: "Pending",
   items: [
     {
       serviceName: "Web Development Services",
@@ -425,7 +425,6 @@ export function useAppService() {
     if (isAuthenticated) {
       fetchCompanyConfig();
       fetchClients();
-      fetchInvoices();
       fetchActiveAlerts();
       fetchEmployeesList();
       fetchNotifications();

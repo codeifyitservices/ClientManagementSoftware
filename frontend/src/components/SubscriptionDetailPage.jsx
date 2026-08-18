@@ -61,7 +61,7 @@ export default function SubscriptionDetailPage({
   const [invoiceNo, setInvoiceNo] = useState("");
   const [billingPeriodStart, setBillingPeriodStart] = useState("");
   const [billingPeriodEnd, setBillingPeriodEnd] = useState("");
-  const [autoGenerateInvoice, setAutoGenerateInvoice] = useState(true);
+  const [autoGenerateInvoice, setAutoGenerateInvoice] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState("Paid");
   const [isSavingPayment, setIsSavingPayment] = useState(false);
 
@@ -172,7 +172,7 @@ export default function SubscriptionDetailPage({
 
     setBillingPeriodStart(startDateObj.toISOString().split("T")[0]);
     setBillingPeriodEnd(endDateObj.toISOString().split("T")[0]);
-    setAutoGenerateInvoice(true);
+    setAutoGenerateInvoice(false);
     setInvoiceNo("");
 
     setIsRecordPaymentOpen(true);
@@ -998,7 +998,7 @@ export default function SubscriptionDetailPage({
                                           : "bg-rose-50 text-rose-700"
                                     }`}
                                   >
-                                    {p.status || "Paid"}
+                                    {p.status || "Unknown"}
                                   </span>
                                 </td>
                                 <td className="px-5 py-4 text-right whitespace-nowrap">
@@ -2071,20 +2071,37 @@ export default function SubscriptionDetailPage({
                 </div>
 
                 {/* Auto Generate & Link Invoice Toggle */}
-                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-3 cursor-pointer select-none">
+                <div
+                  className={`p-3 rounded-xl flex items-start gap-3 cursor-pointer select-none border transition-colors ${
+                    autoGenerateInvoice
+                      ? "bg-amber-50 border-amber-300"
+                      : "bg-slate-50 border-slate-200/80"
+                  }`}
+                  onClick={() => setAutoGenerateInvoice((v) => !v)}
+                >
                   <input
                     type="checkbox"
                     id="autoGenerateInvoiceCheckbox"
                     checked={autoGenerateInvoice}
                     onChange={(e) => setAutoGenerateInvoice(e.target.checked)}
-                    className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-[#5D5FEF] border-slate-300 cursor-pointer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 mt-0.5 rounded text-amber-500 focus:ring-amber-400 border-slate-300 cursor-pointer shrink-0"
                   />
-                  <label
-                    htmlFor="autoGenerateInvoiceCheckbox"
-                    className="text-xs font-bold text-slate-800 cursor-pointer"
-                  >
-                    Auto-create official Invoice in system for this payment
-                  </label>
+                  <div>
+                    <label
+                      htmlFor="autoGenerateInvoiceCheckbox"
+                      className={`text-xs font-bold cursor-pointer ${
+                        autoGenerateInvoice ? "text-amber-800" : "text-slate-700"
+                      }`}
+                    >
+                      Also create an Invoice record for this payment
+                    </label>
+                    <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                      {autoGenerateInvoice
+                        ? "⚠️ An invoice will be created in the Invoices module. Uncheck if you already have one."
+                        : "Enable to auto-create a matching invoice in the Invoices module."}
+                    </p>
+                  </div>
                 </div>
               </div>
 

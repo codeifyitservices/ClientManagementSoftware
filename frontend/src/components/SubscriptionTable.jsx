@@ -203,7 +203,7 @@ export default function SubscriptionTable({
               <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Payment Method</th>
               <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Start Date</th>
               <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Duration</th>
-              <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Expiry Date</th>
+              <th className="px-2.5 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Next Due Date</th>
               <th className="px-3 py-2.5 text-right text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Amount</th>
               <th className="px-2.5 py-2.5 text-center text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Status</th>
               <th className="px-2.5 py-2.5 text-center text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap">Actions</th>
@@ -292,9 +292,13 @@ export default function SubscriptionTable({
                     {sub.durationValue} {sub.durationUnit}
                   </td>
 
-                  {/* Expiry Date */}
-                  <td className="px-2.5 py-2.5 text-slate-800 whitespace-nowrap font-bold text-[11px]">
-                    {new Date(sub.endDate).toLocaleDateString("en-IN")}
+                  {/* Next Due Date */}
+                  <td className={`px-2.5 py-2.5 whitespace-nowrap font-bold text-[11px] ${
+                    ["expired", "today", "tomorrow", "3days"].includes(status.type)
+                      ? "text-rose-600"
+                      : "text-slate-800"
+                  }`}>
+                    {new Date(sub.endDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                   </td>
 
                   {/* Amount */}

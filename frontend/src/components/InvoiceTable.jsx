@@ -79,7 +79,7 @@ export default function InvoiceTable({
       // 1. Status filter
       if (activeTab !== "all") {
         const status = inv.paymentStatus?.toLowerCase() || "pending";
-        if (activeTab === "pending" && status !== "pending" && status !== "unpaid") return false;
+        if (activeTab === "pending" && status !== "pending") return false;
         if (activeTab === "paid" && status !== "paid") return false;
       }
 
