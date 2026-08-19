@@ -14,6 +14,7 @@ import {
   dismissAlert,
   runCheck,
   sendEmail,
+  renewSubscription,
 } from "../controllers/subscriptionController.js";
 
 const router = express.Router();
@@ -38,6 +39,9 @@ router.post("/run-check", runCheck);
 
 // PUT /api/subscriptions/:id - Update subscription
 router.put("/:id", updateSubscription);
+
+// POST /api/subscriptions/:id/renew - Renew subscription
+router.post("/:id/renew", renewSubscription);
 
 // POST /api/subscriptions/:id/payments - Add payment record
 router.post("/:id/payments", addSubscriptionPayment);

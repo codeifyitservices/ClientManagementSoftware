@@ -20,7 +20,7 @@ const getActiveConfig = async () => {
   return config;
 };
 
-const getNextInvoiceNumber = async () => {
+export const getNextInvoiceNumber = async () => {
   const now = new Date();
   const yy = now.getFullYear().toString().slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, "0");

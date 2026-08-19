@@ -1,6 +1,8 @@
 import Subscription from "../models/subscriptionModel.js";
 import Client from "../models/clientModel.js";
 import Config from "../models/configModel.js";
+import Invoice from "../models/invoiceModel.js";
+import { getNextInvoiceNumber } from "./invoiceController.js";
 import { sendSubscriptionReminderEmail } from "../services/emailService.js";
 import { checkAndSendReminders } from "../services/subscriptionScheduler.js";
 
@@ -14,6 +16,44 @@ export const getSubscriptions = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Error fetching subscriptions", error: error.message });
   }
+};
+
+const computeNextDueDate = (sub) => {
+  if (!sub || !sub.startDate) return new Date();
+
+  const startDate = new Date(sub.startDate);
+  const endDate = sub.endDate ? new Date(sub.endDate) : startDate;
+  const cycle = (sub.billingCycle || (sub.durationUnit === "years" ? "yearly" : "monthly")).toLowerCase();
+
+  if (
+    cycle === "one_time" ||
+    (cycle === "yearly" && sub.durationUnit === "years" && sub.durationValue === 1) ||
+    (cycle === "monthly" && sub.durationUnit === "months" && sub.durationValue === 1)
+  ) {
+    return endDate;
+  }
+
+  const addInterval = (d, c) => {
+    const next = new Date(d);
+    if (c === "weekly") next.setDate(next.getDate() + 7);
+    else if (c === "quarterly") next.setMonth(next.getMonth() + 3);
+    else if (c === "yearly") next.setFullYear(next.getFullYear() + 1);
+    else next.setMonth(next.getMonth() + 1);
+    return next;
+  };
+
+  const paidPayments = (sub.payments || []).filter((p) => p.status === "Paid");
+
+  let nextDue;
+  if (paidPayments.length > 0) {
+    const lastP = paidPayments[paidPayments.length - 1];
+    const lastDate = lastP.paymentDate ? new Date(lastP.paymentDate) : startDate;
+    nextDue = addInterval(lastDate, cycle);
+  } else {
+    nextDue = addInterval(startDate, cycle);
+  }
+
+  return nextDue > endDate ? endDate : nextDue;
 };
 
 // GET /api/subscriptions/alerts - Get all active undismissed alerts
@@ -439,3 +479,171 @@ export const sendEmail = async (req, res) => {
     res.status(500).json({ message: "Error manually sending subscription email", error: error.message });
   }
 };
+
+// POST /api/subscriptions/:id/renew - Renew subscription, extend dates, add payment record & optionally generate tax invoice
+export const renewSubscription = async (req, res) => {
+  try {
+    const sub = await Subscription.findById(req.params.id).populate("client");
+    if (!sub) {
+      return res.status(404).json({ message: "Subscription not found" });
+    }
+
+    const {
+      durationValue = sub.durationValue || 1,
+      durationUnit = sub.durationUnit || "years",
+      startDate: customStartDate,
+      baseAmount: customBaseAmount,
+      createInvoice = true,
+      paymentStatus = "Paid",
+      paymentMethod = sub.paymentMethod || "bank_transfer",
+      referenceNo = "",
+      notes = "",
+    } = req.body;
+
+    const now = new Date();
+    // Determine new start date: custom, current endDate if in future, or now
+    let newStartDate;
+    if (customStartDate) {
+      newStartDate = new Date(customStartDate);
+    } else if (sub.endDate && new Date(sub.endDate) > now) {
+      newStartDate = new Date(sub.endDate);
+    } else {
+      newStartDate = now;
+    }
+
+    // Calculate new end date based on term duration
+    const newEndDate = new Date(newStartDate);
+    const durVal = Number(durationValue);
+    if (durationUnit === "months") {
+      newEndDate.setMonth(newEndDate.getMonth() + durVal);
+    } else if (durationUnit === "years") {
+      newEndDate.setFullYear(newEndDate.getFullYear() + durVal);
+    }
+
+    // Format readable billing period string
+    const formatDateStr = (d) =>
+      d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    const billingPeriod = `${formatDateStr(newStartDate)} - ${formatDateStr(newEndDate)}`;
+
+    // Update subscription pricing if custom value passed
+    const effectiveBase = customBaseAmount !== undefined && customBaseAmount !== "" ? Number(customBaseAmount) : (sub.baseAmount ?? sub.amount ?? 0);
+    sub.baseAmount = effectiveBase;
+    sub.amount = effectiveBase;
+    sub.durationValue = durVal;
+    sub.durationUnit = durationUnit;
+    sub.startDate = newStartDate;
+    sub.endDate = newEndDate;
+
+    // Reset reminder flags for the new term
+    sub.emailSent1Month = false;
+    sub.emailSent15Days = false;
+    sub.alertDismissed1Month = false;
+    sub.alertDismissed15Days = false;
+
+    // Calculate add-on total
+    const activeAddonsTotal = (sub.services || [])
+      .filter((s) => s.status === "active" && s.billingCycle === "monthly")
+      .reduce((sum, s) => sum + (s.price || 0), 0);
+
+    const renewalSubtotal = effectiveBase + activeAddonsTotal;
+
+    // Determine GST rate
+    const isForeign = sub.client?.isForeign || false;
+    const isPersonal = sub.isPersonalAccount || false;
+    const gstRate = (isForeign || isPersonal) ? 0 : 18;
+
+    let finalRenewalAmount = renewalSubtotal;
+    if (!isForeign && !isPersonal && !sub.inclusiveGst) {
+      finalRenewalAmount = Math.round(renewalSubtotal * 1.18 * 100) / 100;
+    }
+
+    let generatedInvoiceNumber = "";
+
+    // 1. Auto-generate Tax Invoice if requested
+    if (createInvoice && sub.client) {
+      try {
+        const nextInvNum = await getNextInvoiceNumber();
+        const subTypeName = sub.type === "custom" ? (sub.customType || "Custom Service") : sub.type.replace(/_/g, " ").toUpperCase();
+        
+        const invoiceItems = [
+          {
+            serviceName: subTypeName,
+            description: `Subscription Renewal - ${subTypeName} (${billingPeriod})`,
+            sacCode: "9983",
+            qty: 1,
+            rate: effectiveBase,
+            amount: effectiveBase,
+            gstRate: gstRate,
+            isInclusive: sub.inclusiveGst,
+            originalAmount: effectiveBase,
+          },
+        ];
+
+        // Include active add-on services as line items
+        (sub.services || [])
+          .filter((s) => s.status === "active")
+          .forEach((addon) => {
+            invoiceItems.push({
+              serviceName: addon.name,
+              description: `Add-on: ${addon.name} (${billingPeriod})`,
+              sacCode: "9983",
+              qty: 1,
+              rate: addon.price,
+              amount: addon.price,
+              gstRate: gstRate,
+              isInclusive: sub.inclusiveGst,
+              originalAmount: addon.price,
+            });
+          });
+
+        const invoiceDueDate = req.body.dueDate
+          ? new Date(req.body.dueDate)
+          : (paymentStatus === "Paid" ? now : newEndDate);
+
+        const newInvoice = new Invoice({
+          invoiceNumber: nextInvNum,
+          client: sub.client._id || sub.client,
+          invoiceDate: now,
+          dueDate: invoiceDueDate,
+          invoiceType: "Tax Invoice",
+          currency: sub.currency || "INR (₹)",
+          items: invoiceItems,
+          paymentStatus: paymentStatus,
+          notes: notes ? `Subscription Renewal (${billingPeriod}): ${notes}` : `Auto-generated renewal invoice for ${subTypeName} (${billingPeriod})`,
+        });
+
+        await newInvoice.save();
+        generatedInvoiceNumber = nextInvNum;
+      } catch (invErr) {
+        console.error("Error auto-generating renewal invoice:", invErr);
+      }
+    }
+
+    // 2. Add Payment History record to subscription
+    sub.payments.push({
+      paymentDate: now,
+      invoiceNumber: generatedInvoiceNumber || req.body.invoiceNumber || "",
+      billingPeriod: billingPeriod,
+      amount: finalRenewalAmount,
+      paymentMethod: paymentMethod,
+      referenceNo: referenceNo,
+      status: paymentStatus,
+      notes: notes || `Subscription renewed for ${durVal} ${durationUnit} (${billingPeriod})`,
+    });
+
+    await sub.save();
+    
+    // Return re-populated subscription
+    const updatedSub = await Subscription.findById(sub._id).populate("client");
+
+    res.json({
+      message: `Subscription successfully renewed until ${formatDateStr(newEndDate)}!`,
+      subscription: updatedSub,
+      invoiceNumber: generatedInvoiceNumber,
+    });
+  } catch (error) {
+    console.error("[Backend] Error renewing subscription:", error);
+    res.status(500).json({ message: "Error renewing subscription", error: error.message });
+  }
+};
+

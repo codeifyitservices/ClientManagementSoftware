@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { 
   Plus, Calendar, DollarSign, AlertCircle, 
-  Check, CheckCircle, Clock, Search, X, ShieldAlert
+  Check, CheckCircle, Clock, Search, X, ShieldAlert, RefreshCw
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
 import SubscriptionTable, { getSubscriptionStatus } from "./SubscriptionTable";
+import RenewSubscriptionModal from "./RenewSubscriptionModal";
 import { SUPPORTED_CURRENCIES, getCurrencySymbol, formatWithINRConversion } from "../utils/currencyUtils";
 
 export default function SubscriptionsPage({
@@ -24,6 +25,7 @@ export default function SubscriptionsPage({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedSub, setSelectedSub] = useState(null);
   const [subToDelete, setSubToDelete] = useState(null);
+  const [renewingSub, setRenewingSub] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sendingEmailIds, setSendingEmailIds] = useState({});
@@ -468,13 +470,26 @@ export default function SubscriptionsPage({
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDismissAlert(alert)}
-                  className="bg-slate-50 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 p-1.5 rounded-lg border border-slate-100 transition-all cursor-pointer flex items-center justify-center shrink-0"
-                  title="Dismiss Alert in App"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      const target = subscriptions.find((s) => s._id === alert.subscriptionId) || alert;
+                      setRenewingSub(target);
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                    title="Renew Subscription"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    <span>Renew</span>
+                  </button>
+                  <button
+                    onClick={() => handleDismissAlert(alert)}
+                    className="bg-slate-50 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 p-1.5 rounded-lg border border-slate-100 transition-all cursor-pointer flex items-center justify-center"
+                    title="Dismiss Alert in App"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -545,6 +560,7 @@ export default function SubscriptionsPage({
             onEdit={handleOpenEditForm}
             onDelete={setSubToDelete}
             onSendEmail={handleSendEmailManually}
+            onRenew={setRenewingSub}
             onDeleteSelected={handleBulkDeleteSelected}
           />
         </div>
@@ -879,6 +895,20 @@ export default function SubscriptionsPage({
         message={`Delete subscription contract for ${subToDelete?.client?.companyName}? This action is permanent and cannot be undone.`}
         confirmText="Delete Contract"
         isDeleting={isDeleting}
+      />
+
+      {/* Renew Subscription Modal */}
+      <RenewSubscriptionModal
+        isOpen={!!renewingSub}
+        onClose={() => setRenewingSub(null)}
+        subscription={renewingSub}
+        authenticatedFetch={authenticatedFetch}
+        onRenewalSuccess={() => {
+          fetchSubscriptions();
+          fetchActiveAlerts();
+          window.dispatchEvent(new Event("subscriptionAlertsUpdated"));
+        }}
+        showToast={showToast}
       />
     </div>
   );

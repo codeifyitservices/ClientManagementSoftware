@@ -34,6 +34,7 @@ import {
   SUPPORTED_CURRENCIES,
   getSubscriptionCode,
 } from "../utils/currencyUtils";
+import RenewSubscriptionModal from "./RenewSubscriptionModal";
 
 export default function SubscriptionDetailPage({
   token,
@@ -48,6 +49,7 @@ export default function SubscriptionDetailPage({
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("paymentHistory");
   const [invoices, setInvoices] = useState([]);
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
 
   // Record Payment Modal State
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
@@ -527,14 +529,17 @@ export default function SubscriptionDetailPage({
   const addBillingCycleInterval = (date, cycle) => {
     const next = new Date(date);
     const c = (cycle || "").toLowerCase();
+    const durVal = Number(subscription?.durationValue) || 1;
+    const durUnit = subscription?.durationUnit || "months";
+
     if (c === "weekly") {
-      next.setDate(next.getDate() + 7);
+      next.setDate(next.getDate() + 7 * durVal);
     } else if (c === "quarterly") {
-      next.setMonth(next.getMonth() + 3);
-    } else if (c === "yearly") {
-      next.setFullYear(next.getFullYear() + 1);
+      next.setMonth(next.getMonth() + 3 * durVal);
+    } else if (c === "yearly" || durUnit === "years") {
+      next.setFullYear(next.getFullYear() + durVal);
     } else {
-      next.setMonth(next.getMonth() + 1);
+      next.setMonth(next.getMonth() + durVal);
     }
     return next;
   };
@@ -711,6 +716,13 @@ export default function SubscriptionDetailPage({
 
               {/* Top Header Buttons */}
               <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => setIsRenewModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl border border-indigo-600 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-sm shadow-indigo-500/20"
+                >
+                  <RefreshCw className="h-4 w-4 text-white" />
+                  <span>Renew Subscription</span>
+                </button>
                 <button
                   onClick={handleOpenRecordPaymentModal}
                   className="px-4 py-2.5 rounded-xl border border-indigo-200 text-indigo-600 bg-white hover:bg-indigo-50 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-xs"
@@ -1405,12 +1417,11 @@ export default function SubscriptionDetailPage({
                       </p>
                     </div>
                     <button
-                      onClick={() =>
-                        showToast("Manual renewal triggered", "success")
-                      }
-                      className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl text-xs hover:bg-indigo-500 transition-colors cursor-pointer shrink-0"
+                      onClick={() => setIsRenewModalOpen(true)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer shrink-0 flex items-center gap-1.5 shadow-sm shadow-indigo-500/20"
                     >
-                      Trigger Manual Renewal
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Trigger Manual Renewal</span>
                     </button>
                   </div>
                 </div>
@@ -2240,6 +2251,21 @@ export default function SubscriptionDetailPage({
           </div>
         </div>
       )}
+
+      {/* Renew Subscription Modal */}
+      <RenewSubscriptionModal
+        isOpen={isRenewModalOpen}
+        onClose={() => setIsRenewModalOpen(false)}
+        subscription={subscription}
+        authenticatedFetch={authenticatedFetch}
+        onRenewalSuccess={(updatedSub) => {
+          setSubscription(updatedSub);
+          fetchSubscriptionDetails();
+          fetchInvoices();
+          window.dispatchEvent(new Event("subscriptionAlertsUpdated"));
+        }}
+        showToast={showToast}
+      />
     </>
   );
 }

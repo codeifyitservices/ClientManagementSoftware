@@ -8,15 +8,59 @@ import {
   ChevronRight,
   Trash,
   Eye,
+  RefreshCw,
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
 import { formatWithINRConversion, getSubscriptionCode } from "../utils/currencyUtils";
 
 const PAGE_SIZE = 10;
 
-// Compute status object from subscription
-// Compute status object from subscription with explicit reminder tiers:
-// 1 Month, 15 Days, 7 Days, 3 Days, and Tomorrow
+// Compute accurate Next Due Date according to payment interval (billingCycle)
+export function getSubscriptionNextDueDate(sub) {
+  if (!sub || !sub.startDate) return new Date();
+
+  const startDate = new Date(sub.startDate);
+  const endDate = sub.endDate ? new Date(sub.endDate) : startDate;
+  const cycle = (sub.billingCycle || (sub.durationUnit === "years" ? "yearly" : "monthly")).toLowerCase();
+
+  // If one_time or full contract term is 1 year / 1 interval equal to duration
+  if (
+    cycle === "one_time" ||
+    (cycle === "yearly" && sub.durationUnit === "years" && sub.durationValue === 1) ||
+    (cycle === "monthly" && sub.durationUnit === "months" && sub.durationValue === 1)
+  ) {
+    return endDate;
+  }
+
+  const addInterval = (d, c) => {
+    const next = new Date(d);
+    if (c === "weekly") next.setDate(next.getDate() + 7);
+    else if (c === "quarterly") next.setMonth(next.getMonth() + 3);
+    else if (c === "yearly") next.setFullYear(next.getFullYear() + 1);
+    else next.setMonth(next.getMonth() + 1); // default monthly
+    return next;
+  };
+
+  const paidPayments = (sub.payments || []).filter((p) => p.status === "Paid");
+
+  let nextDue;
+  if (paidPayments.length > 0) {
+    const lastP = paidPayments[paidPayments.length - 1];
+    const lastDate = lastP.paymentDate ? new Date(lastP.paymentDate) : startDate;
+    nextDue = addInterval(lastDate, cycle);
+  } else {
+    // If no paid payment recorded yet, next payment is due on the 1st interval end
+    nextDue = addInterval(startDate, cycle);
+  }
+
+  if (nextDue > endDate) {
+    nextDue = endDate;
+  }
+
+  return nextDue;
+}
+
+// Compute status object from subscription based on contract expiration (sub.endDate)
 export function getSubscriptionStatus(sub) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -38,7 +82,7 @@ export function getSubscriptionStatus(sub) {
 
   if (diffDays === 0) {
     return {
-      label: "Due Today",
+      label: "Expires Today",
       color: "bg-rose-100 border-rose-300 text-rose-800 font-black animate-pulse",
       type: "today",
       diffDays,
@@ -105,6 +149,7 @@ export default function SubscriptionTable({
   onEdit,
   onDelete,
   onSendEmail,
+  onRenew,
   onDeleteSelected,
 }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -294,11 +339,16 @@ export default function SubscriptionTable({
 
                   {/* Next Due Date */}
                   <td className={`px-2.5 py-2.5 whitespace-nowrap font-bold text-[11px] ${
-                    ["expired", "today", "tomorrow", "3days"].includes(status.type)
+                    ["expired", "overdue", "today", "tomorrow", "3days"].includes(status.type)
                       ? "text-rose-600"
                       : "text-slate-800"
                   }`}>
-                    {new Date(sub.endDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                    <div>
+                      {getSubscriptionNextDueDate(sub).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                    <div className="text-[9px] font-normal text-slate-400">
+                      Contract Ends: {new Date(sub.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
                   </td>
 
                   {/* Amount */}
@@ -337,6 +387,16 @@ export default function SubscriptionTable({
                           className="p-1.5 rounded-md text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40"
                         >
                           <Mail size={15} />
+                        </button>
+                      )}
+                      {onRenew && (
+                        <button
+                          type="button"
+                          onClick={() => onRenew(sub)}
+                          title="Renew Subscription"
+                          className="p-1.5 rounded-md text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <RefreshCw size={15} />
                         </button>
                       )}
                       {onEdit && (
