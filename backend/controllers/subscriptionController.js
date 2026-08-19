@@ -493,6 +493,8 @@ export const renewSubscription = async (req, res) => {
       durationUnit = sub.durationUnit || "years",
       startDate: customStartDate,
       baseAmount: customBaseAmount,
+      isPersonalAccount,
+      inclusiveGst,
       createInvoice = true,
       paymentStatus = "Paid",
       paymentMethod = sub.paymentMethod || "bank_transfer",
@@ -525,7 +527,7 @@ export const renewSubscription = async (req, res) => {
       d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
     const billingPeriod = `${formatDateStr(newStartDate)} - ${formatDateStr(newEndDate)}`;
 
-    // Update subscription pricing if custom value passed
+    // Update subscription pricing and options if passed
     const effectiveBase = customBaseAmount !== undefined && customBaseAmount !== "" ? Number(customBaseAmount) : (sub.baseAmount ?? sub.amount ?? 0);
     sub.baseAmount = effectiveBase;
     sub.amount = effectiveBase;
@@ -533,6 +535,13 @@ export const renewSubscription = async (req, res) => {
     sub.durationUnit = durationUnit;
     sub.startDate = newStartDate;
     sub.endDate = newEndDate;
+
+    if (isPersonalAccount !== undefined) {
+      sub.isPersonalAccount = Boolean(isPersonalAccount);
+    }
+    if (inclusiveGst !== undefined) {
+      sub.inclusiveGst = Boolean(inclusiveGst);
+    }
 
     // Reset reminder flags for the new term
     sub.emailSent1Month = false;
@@ -547,13 +556,14 @@ export const renewSubscription = async (req, res) => {
 
     const renewalSubtotal = effectiveBase + activeAddonsTotal;
 
-    // Determine GST rate
+    // Determine GST rate and final renewal amount
     const isForeign = sub.client?.isForeign || false;
     const isPersonal = sub.isPersonalAccount || false;
+    const isInclusive = sub.inclusiveGst !== false;
     const gstRate = (isForeign || isPersonal) ? 0 : 18;
 
     let finalRenewalAmount = renewalSubtotal;
-    if (!isForeign && !isPersonal && !sub.inclusiveGst) {
+    if (!isForeign && !isPersonal && !isInclusive) {
       finalRenewalAmount = Math.round(renewalSubtotal * 1.18 * 100) / 100;
     }
 
@@ -574,7 +584,7 @@ export const renewSubscription = async (req, res) => {
             rate: effectiveBase,
             amount: effectiveBase,
             gstRate: gstRate,
-            isInclusive: sub.inclusiveGst,
+            isInclusive: isInclusive,
             originalAmount: effectiveBase,
           },
         ];
@@ -591,7 +601,7 @@ export const renewSubscription = async (req, res) => {
               rate: addon.price,
               amount: addon.price,
               gstRate: gstRate,
-              isInclusive: sub.inclusiveGst,
+              isInclusive: isInclusive,
               originalAmount: addon.price,
             });
           });

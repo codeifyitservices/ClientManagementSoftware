@@ -32,6 +32,8 @@ export default function RenewSubscriptionModal({
   const [customStartDate, setCustomStartDate] = useState("");
   
   const [baseAmount, setBaseAmount] = useState(subscription.baseAmount ?? subscription.amount ?? 0);
+  const [isPersonalAccount, setIsPersonalAccount] = useState(subscription.isPersonalAccount || false);
+  const [inclusiveGst, setInclusiveGst] = useState(subscription.inclusiveGst !== false);
   const [createInvoice, setCreateInvoice] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState("Paid");
   const [paymentMethod, setPaymentMethod] = useState(subscription.paymentMethod || "bank_transfer");
@@ -47,6 +49,8 @@ export default function RenewSubscriptionModal({
       setDurationValue(subscription.durationValue || 1);
       setDurationUnit(subscription.durationUnit || "years");
       setBaseAmount(subscription.baseAmount ?? subscription.amount ?? 0);
+      setIsPersonalAccount(subscription.isPersonalAccount === true);
+      setInclusiveGst(subscription.inclusiveGst !== false);
       setPaymentMethod(subscription.paymentMethod || "bank_transfer");
       setStartMode("continue");
       setIsDueDateCustom(false);
@@ -97,14 +101,13 @@ export default function RenewSubscriptionModal({
   
   // Tax calculation
   const isForeign = subscription.client?.isForeign || false;
-  const isPersonal = subscription.isPersonalAccount || false;
-  const gstRate = (isForeign || isPersonal) ? 0 : 18;
+  const gstRate = (isForeign || isPersonalAccount) ? 0 : 18;
 
   let taxAmount = 0;
   let totalAmount = subtotal;
 
   if (gstRate > 0) {
-    if (subscription.inclusiveGst) {
+    if (inclusiveGst) {
       taxAmount = Math.round((subtotal - subtotal / 1.18) * 100) / 100;
       totalAmount = subtotal;
     } else {
@@ -138,6 +141,8 @@ export default function RenewSubscriptionModal({
         durationUnit,
         startDate: startMode === "custom" ? customStartDate : (startMode === "today" ? new Date().toISOString() : undefined),
         baseAmount: Number(baseAmount),
+        isPersonalAccount,
+        inclusiveGst,
         createInvoice,
         paymentStatus,
         paymentMethod,
@@ -378,6 +383,52 @@ export default function RenewSubscriptionModal({
               )}
             </div>
 
+            {/* Personal Account & GST Options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Personal Account Checkbox */}
+              <div className="flex items-start gap-2 bg-amber-50/70 border border-amber-100 p-3 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="renewIsPersonalAccount"
+                  checked={isPersonalAccount}
+                  disabled={isForeign}
+                  onChange={(e) => setIsPersonalAccount(e.target.checked)}
+                  className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
+                />
+                <label htmlFor="renewIsPersonalAccount" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${isForeign ? "opacity-50" : ""}`}>
+                  <span>Personal Account</span>
+                  <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
+                    {isForeign ? "Disabled - foreign client." : "If checked, no GST will be applied (personal billing)."}
+                  </span>
+                </label>
+              </div>
+
+              {/* GST Inclusive Checkbox */}
+              {!isPersonalAccount && !isForeign ? (
+                <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="renewInclusiveGst"
+                    checked={inclusiveGst}
+                    onChange={(e) => setInclusiveGst(e.target.checked)}
+                    className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                  />
+                  <label htmlFor="renewInclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                    <span>Inclusive GST (18%)</span>
+                    <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal">
+                      If unchecked, 18% GST is added to the base plan amount.
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl opacity-70">
+                  <span className="text-[11px] font-semibold text-slate-500 italic">
+                    {isForeign ? "GST Not Applicable (Foreign Client)" : "GST Not Applicable (Personal Account)"}
+                  </span>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-semibold text-slate-500 mb-1 block">
@@ -398,13 +449,17 @@ export default function RenewSubscriptionModal({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-500 mb-1 block">
-                  Calculated Total {subscription.inclusiveGst ? "(GST Inclusive)" : "(+18% GST)"}
+                  Calculated Total {
+                    isPersonalAccount ? "(Personal - No GST)" :
+                    isForeign ? "(Foreign - No GST)" :
+                    inclusiveGst ? "(GST Inclusive)" : "(+18% GST)"
+                  }
                 </label>
                 <div className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 flex items-center justify-between">
                   <span>₹{totalAmount.toLocaleString("en-IN")}</span>
                   {gstRate > 0 && (
                     <span className="text-[10px] font-normal text-slate-500">
-                      Tax: ₹{taxAmount.toLocaleString("en-IN")}
+                      {inclusiveGst ? "Tax included: " : "Tax (+18%): "}₹{taxAmount.toLocaleString("en-IN")}
                     </span>
                   )}
                 </div>

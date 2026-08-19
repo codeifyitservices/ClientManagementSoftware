@@ -35,17 +35,19 @@ export default function LeadsPage({
     try {
       setLoading(true);
       const url = `${import.meta.env.VITE_BACKEND_URL}/api/leads?status=${statusFilter}&search=${encodeURIComponent(searchQuery)}&sortField=${sortField}&sortDirection=${sortDirection}`;
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token || localStorage.getItem("token")}`
-        }
-      });
+      const res = authenticatedFetch
+        ? await authenticatedFetch(url)
+        : await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${token || localStorage.getItem("token")}`
+            }
+          });
       if (res.ok) {
         const data = await res.json();
         setLeads(data);
       }
     } catch (err) {
-      if (showToast) showToast("Failed to fetch leads", "error");
+      if (showToast && err.message !== "Unauthorized") showToast("Failed to fetch leads", "error");
     } finally {
       setLoading(false);
     }
@@ -146,6 +148,9 @@ export default function LeadsPage({
   const totalLeads = leads.length;
   const activeLeads = leads.filter(l => l.currentStage !== "Won" && l.currentStage !== "Lost");
   const activeLeadsCount = activeLeads.length;
+  const pipelineValue = activeLeads.reduce((acc, l) => acc + (l.value || 0), 0);
+  const wonValue = leads.filter(l => l.currentStage === "Won").reduce((acc, l) => acc + (l.value || 0), 0);
+
   // Paginate leads
   const indexOfLastItem = currentPage * rowsPerPage;
   const indexOfFirstItem = indexOfLastItem - rowsPerPage;
