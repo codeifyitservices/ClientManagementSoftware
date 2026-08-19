@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Edit,
   Trash2,
@@ -40,6 +41,7 @@ export default function InvoiceTable({
   onDownloadSelectedZip,
   processingIds = {},
 }) {
+  const navigate = useNavigate();
   // ── Filters ─────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("all");
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -406,7 +408,26 @@ export default function InvoiceTable({
 
                     {/* Invoice No */}
                     <td className="px-3 py-2.5 font-bold text-indigo-600 whitespace-nowrap">
-                      {invoice.invoiceNumber ?? "—"}
+                      {invoice.invoiceNumber ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate("/invoices/preview", {
+                              state: {
+                                invoiceData: invoice,
+                                readOnly: true,
+                                returnTo: "/invoices",
+                              },
+                            })
+                          }
+                          className="hover:underline hover:text-indigo-800 cursor-pointer font-extrabold text-left"
+                          title={`Click to preview invoice ${invoice.invoiceNumber}`}
+                        >
+                          {invoice.invoiceNumber}
+                        </button>
+                      ) : (
+                        "—"
+                      )}
                     </td>
 
                     {/* Date */}

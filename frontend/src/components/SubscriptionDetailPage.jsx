@@ -180,6 +180,42 @@ export default function SubscriptionDetailPage({
     setIsRecordPaymentOpen(true);
   };
 
+  const handlePreviewInvoiceNumber = async (invNum) => {
+    if (!invNum || invNum === "-") return;
+
+    let targetInv = invoices.find(
+      (inv) => inv.invoiceNumber === invNum || inv._id === invNum
+    );
+
+    if (!targetInv) {
+      try {
+        const res = await authenticatedFetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/invoices`
+        );
+        if (res.ok) {
+          const allInvoices = await res.json();
+          targetInv = allInvoices.find(
+            (inv) => inv.invoiceNumber === invNum || inv._id === invNum
+          );
+        }
+      } catch (err) {
+        console.error("Error fetching invoice for preview:", err);
+      }
+    }
+
+    if (targetInv) {
+      navigate("/invoices/preview", {
+        state: {
+          invoiceData: targetInv,
+          readOnly: true,
+          returnTo: `/subscriptions/${subscription._id}`,
+        },
+      });
+    } else {
+      showToast?.(`Invoice #${invNum} record not found in system.`, "error");
+    }
+  };
+
   const handleBillingPeriodStartChange = (newStartStr) => {
     setBillingPeriodStart(newStartStr);
     if (newStartStr) {
@@ -522,6 +558,11 @@ export default function SubscriptionDetailPage({
     (acc, p) => acc + (p.amount || 0),
     0,
   );
+
+  const totalAmountSum = totalPaidAmount + totalPendingAmount + totalFailedAmount;
+  const paidPct = totalAmountSum > 0 ? Math.round((totalPaidAmount / totalAmountSum) * 100) : 0;
+  const pendingPct = totalAmountSum > 0 ? Math.round((totalPendingAmount / totalAmountSum) * 100) : 0;
+  const failedPct = totalAmountSum > 0 ? Math.max(0, 100 - paidPct - pendingPct) : 0;
 
   const lastPayment =
     paymentsList.length > 0 ? paymentsList[paymentsList.length - 1] : null;
@@ -982,9 +1023,20 @@ export default function SubscriptionDetailPage({
                                     },
                                   )}
                                 </td>
-                                <td className="px-5 py-4 font-bold text-indigo-600 whitespace-nowrap">
-                                  {p.invoiceNumber || "-"}
-                                </td>
+                                 <td className="px-5 py-4 font-bold text-indigo-600 whitespace-nowrap">
+                                   {p.invoiceNumber ? (
+                                     <button
+                                       type="button"
+                                       onClick={() => handlePreviewInvoiceNumber(p.invoiceNumber)}
+                                       className="text-[#5D5FEF] hover:text-indigo-800 hover:underline font-extrabold transition-colors cursor-pointer text-left inline-flex items-center gap-1"
+                                       title={`Click to preview invoice ${p.invoiceNumber}`}
+                                     >
+                                       <span>{p.invoiceNumber}</span>
+                                     </button>
+                                   ) : (
+                                     "-"
+                                   )}
+                                 </td>
                                 <td className="px-5 py-4 text-slate-500 whitespace-nowrap">
                                   {p.billingPeriod || "-"}
                                 </td>
@@ -1649,6 +1701,7 @@ export default function SubscriptionDetailPage({
                       className="w-full h-full transform -rotate-90"
                       viewBox="0 0 36 36"
                     >
+                      {/* Background Circle */}
                       <path
                         className="text-slate-100"
                         strokeWidth="3.8"
@@ -1656,22 +1709,52 @@ export default function SubscriptionDetailPage({
                         fill="none"
                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       />
-                      <path
-                        className="text-emerald-500"
-                        strokeDasharray={`${paymentsList.length > 0 ? 100 : 0}, 100`}
-                        strokeWidth="3.8"
-                        strokeLinecap="round"
-                        stroke="currentColor"
-                        fill="none"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      />
+                      {/* Paid Segment (Emerald) */}
+                      {paidPct > 0 && (
+                        <path
+                          className="text-emerald-500 transition-all duration-500"
+                          strokeDasharray={`${paidPct}, 100`}
+                          strokeDashoffset="0"
+                          strokeWidth="3.8"
+                          strokeLinecap="round"
+                          stroke="currentColor"
+                          fill="none"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                      )}
+                      {/* Pending Segment (Indigo/Violet) */}
+                      {pendingPct > 0 && (
+                        <path
+                          className="text-indigo-500 transition-all duration-500"
+                          strokeDasharray={`${pendingPct}, 100`}
+                          strokeDashoffset={`${-paidPct}`}
+                          strokeWidth="3.8"
+                          strokeLinecap="round"
+                          stroke="currentColor"
+                          fill="none"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                      )}
+                      {/* Failed Segment (Rose) */}
+                      {failedPct > 0 && (
+                        <path
+                          className="text-rose-500 transition-all duration-500"
+                          strokeDasharray={`${failedPct}, 100`}
+                          strokeDashoffset={`${-(paidPct + pendingPct)}`}
+                          strokeWidth="3.8"
+                          strokeLinecap="round"
+                          stroke="currentColor"
+                          fill="none"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                      )}
                     </svg>
-                    <div className="absolute flex flex-col items-center">
+                    <div className="absolute flex flex-col items-center text-center">
                       <span className="text-[10px] font-bold text-slate-400 uppercase">
                         Paid
                       </span>
                       <span className="text-xs font-black text-emerald-600">
-                        {paymentsList.length > 0 ? "100%" : "0%"}
+                        {paidPct}%
                       </span>
                     </div>
                   </div>
@@ -1735,14 +1818,22 @@ export default function SubscriptionDetailPage({
                 </div>
 
                 {/* Status Banner */}
-                <div className="bg-emerald-50/80 border border-emerald-100 rounded-xl p-3.5 text-center text-xs font-bold text-emerald-800 flex items-center justify-center gap-2">
-                  <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>
-                    {paymentsList.length > 0
-                      ? "Everything is up to date! 🎉 All payments are cleared."
-                      : "No payments recorded yet."}
-                  </span>
-                </div>
+                {totalPendingAmount > 0 ? (
+                  <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3.5 text-center text-xs font-bold text-amber-800 flex items-center justify-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>{currencySym}{totalPendingAmount.toLocaleString("en-IN")} pending payment outstanding.</span>
+                  </div>
+                ) : paymentsList.length > 0 ? (
+                  <div className="bg-emerald-50/80 border border-emerald-100 rounded-xl p-3.5 text-center text-xs font-bold text-emerald-800 flex items-center justify-center gap-2">
+                    <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>Everything is up to date! 🎉 All payments are cleared.</span>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-center text-xs font-bold text-slate-500 flex items-center justify-center gap-2">
+                    <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+                    <span>No payments recorded yet.</span>
+                  </div>
+                )}
               </div>
 
               {/* Card 2: Upcoming Renewals */}

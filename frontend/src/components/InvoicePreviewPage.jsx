@@ -388,6 +388,14 @@ export default function InvoicePreviewPage({
       navigate("/invoices");
       return;
     }
+    if (location.state?.returnTo) {
+      navigate(location.state.returnTo);
+      return;
+    }
+    if (location.state?.readOnly) {
+      navigate(-1);
+      return;
+    }
     navigate(returnTo, {
       state: {
         draftInvoice: invoiceData,
@@ -661,7 +669,7 @@ export default function InvoicePreviewPage({
           onClick={handleBack}
           className="px-6 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-650 hover:bg-slate-50 text-xs font-bold transition-all cursor-pointer shadow-sm"
         >
-          {isDummyPreview ? "Back to Invoices" : "Back to Edit"}
+          {isDummyPreview ? "Back to Invoices" : (location.state?.readOnly || location.state?.returnTo ? "Back" : "Back to Edit")}
         </button>
         <button
           type="button"
