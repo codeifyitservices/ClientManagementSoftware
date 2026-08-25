@@ -88,6 +88,8 @@ export const createLead = async (req, res) => {
       phone,
       source,
       value,
+      inclusiveGst,
+      isPersonalAccount,
       assignedTo,
       notes,
     } = req.body;
@@ -103,6 +105,8 @@ export const createLead = async (req, res) => {
       phone: phone || "",
       source: source || "Website",
       value: value !== undefined ? Number(value) : 0,
+      inclusiveGst: inclusiveGst !== undefined ? Boolean(inclusiveGst) : true,
+      isPersonalAccount: isPersonalAccount !== undefined ? Boolean(isPersonalAccount) : false,
       assignedTo: assignedTo || null,
       notes: notes || "",
       leadJourney: [],
@@ -164,6 +168,8 @@ export const updateLead = async (req, res) => {
       phone,
       source,
       value,
+      inclusiveGst,
+      isPersonalAccount,
       assignedTo,
       notes,
     } = req.body;
@@ -199,6 +205,8 @@ export const updateLead = async (req, res) => {
     lead.phone = phone ?? lead.phone;
     lead.source = source ?? lead.source;
     lead.value = value !== undefined ? Number(value) : lead.value;
+    if (inclusiveGst !== undefined) lead.inclusiveGst = Boolean(inclusiveGst);
+    if (isPersonalAccount !== undefined) lead.isPersonalAccount = Boolean(isPersonalAccount);
     lead.assignedTo = assignedTo !== undefined ? assignedTo : lead.assignedTo;
     lead.notes = notes ?? lead.notes;
 

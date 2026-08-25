@@ -7,11 +7,13 @@ import {
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
 import { SUPPORTED_CURRENCIES, getCurrencySymbol } from "../utils/currencyUtils";
+import { getLeadFinalValue } from "../utils/leadUtils";
 
 export default function LeadDetailPage({
   token,
   showToast,
-  authenticatedFetch
+  authenticatedFetch,
+  fetchLeads,
 }) {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -234,6 +236,7 @@ export default function LeadDetailPage({
         }
       });
       if (res.ok) {
+        if (fetchLeads) fetchLeads();
         if (showToast) showToast("Lead deleted successfully.", "success");
         navigate("/leads");
       } else {
@@ -355,7 +358,27 @@ export default function LeadDetailPage({
           <span>Current Lead Status Summary</span>
         </h3>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-xl space-y-1">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Prospective Deal Value</span>
+            <p className="text-sm font-black text-slate-900">₹{getLeadFinalValue(lead).toLocaleString("en-IN")}</p>
+            <div className="mt-0.5">
+              {lead.isPersonalAccount ? (
+                <span className="inline-block text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.2 rounded">
+                  Personal (No GST)
+                </span>
+              ) : lead.inclusiveGst !== false ? (
+                <span className="inline-block text-[9px] font-semibold text-slate-500">
+                  GST Inc (18%)
+                </span>
+              ) : (
+                <span className="inline-block text-[9px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.2 rounded">
+                  +18% GST Excl
+                </span>
+              )}
+            </div>
+          </div>
+
           <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-xl space-y-1">
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Current Stage</span>
             <p className="text-sm font-black text-slate-900">{currentStage}</p>

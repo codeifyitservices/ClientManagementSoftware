@@ -121,6 +121,14 @@ const leadSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    inclusiveGst: {
+      type: Boolean,
+      default: true,
+    },
+    isPersonalAccount: {
+      type: Boolean,
+      default: false,
+    },
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employee",

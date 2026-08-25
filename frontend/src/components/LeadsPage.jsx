@@ -5,11 +5,13 @@ import {
   TrendingUp, Clock, Target, Award, ChevronLeft, ChevronRight
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
+import { isLeadActiveInPipeline, calculatePipelineValue, getLeadFinalValue } from "../utils/leadUtils";
 
 export default function LeadsPage({
   token,
   showToast,
-  authenticatedFetch
+  authenticatedFetch,
+  fetchLeads: fetchGlobalLeads,
 }) {
   const navigate = useNavigate();
 
@@ -81,6 +83,7 @@ export default function LeadsPage({
         if (showToast) showToast("Lead deleted successfully.", "success");
         setLeadToDelete(null);
         fetchLeads();
+        if (fetchGlobalLeads) fetchGlobalLeads();
       } else {
         if (showToast) showToast("Failed to delete lead.", "error");
       }
@@ -134,6 +137,7 @@ export default function LeadsPage({
         setSelectedIds(new Set());
         setLeadsToDeleteBulk(null);
         fetchLeads();
+        if (fetchGlobalLeads) fetchGlobalLeads();
       } else {
         if (showToast) showToast("Failed to delete leads.", "error");
       }
@@ -146,10 +150,10 @@ export default function LeadsPage({
 
   // Pipeline Metrics Calculation (based on cached root states)
   const totalLeads = leads.length;
-  const activeLeads = leads.filter(l => l.currentStage !== "Won" && l.currentStage !== "Lost");
+  const activeLeads = leads.filter(isLeadActiveInPipeline);
   const activeLeadsCount = activeLeads.length;
-  const pipelineValue = activeLeads.reduce((acc, l) => acc + (l.value || 0), 0);
-  const wonValue = leads.filter(l => l.currentStage === "Won").reduce((acc, l) => acc + (l.value || 0), 0);
+  const pipelineValue = calculatePipelineValue(leads);
+  const wonValue = leads.filter(l => l.currentStage === "Won").reduce((acc, l) => acc + (Number(l.value) || 0), 0);
 
   // Paginate leads
   const indexOfLastItem = currentPage * rowsPerPage;
@@ -362,8 +366,25 @@ export default function LeadsPage({
                           {lead.currentStage}
                         </span>
                       </td>
-                      <td className="p-4 text-slate-900 font-extrabold">
-                        ₹{(lead.value || 0).toLocaleString("en-IN")}
+                      <td className="p-4">
+                        <p className="text-slate-900 font-extrabold text-xs">
+                          ₹{getLeadFinalValue(lead).toLocaleString("en-IN")}
+                        </p>
+                        <div className="mt-0.5">
+                          {lead.isPersonalAccount ? (
+                            <span className="inline-block text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.2 rounded">
+                              Personal
+                            </span>
+                          ) : lead.inclusiveGst !== false ? (
+                            <span className="inline-block text-[9px] font-semibold text-slate-400">
+                              GST Inc
+                            </span>
+                          ) : (
+                            <span className="inline-block text-[9px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.2 rounded">
+                              +18% GST
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-4 text-center">
                         <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${journeyCount > 0 ? "bg-indigo-50 text-indigo-700 animate-none" : "bg-slate-100 text-slate-400"}`}>

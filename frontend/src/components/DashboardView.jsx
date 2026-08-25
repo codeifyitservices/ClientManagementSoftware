@@ -1,5 +1,6 @@
 import React from "react";
 import { convertToINR } from "../utils/currencyUtils";
+import { isLeadActiveInPipeline, calculatePipelineValue, getLeadFinalValue } from "../utils/leadUtils";
 import {
   Eye,
   Download,
@@ -77,18 +78,9 @@ export default function DashboardView({
     )
     .slice(0, 4);
 
-  const activeLeads = leads.filter(
-    (l) =>
-      l.currentStage !== "Won" &&
-      l.currentStage !== "Lost" &&
-      l.currentStatus !== "Completed" &&
-      l.currentStatus !== "Cancelled",
-  );
+  const activeLeads = leads.filter(isLeadActiveInPipeline);
   const wonLeads = leads.filter((l) => l.currentStage === "Won");
-  const totalPipelineValue = activeLeads.reduce(
-    (sum, l) => sum + (Number(l.value) || 0),
-    0,
-  );
+  const totalPipelineValue = calculatePipelineValue(leads);
 
   const recentLeads = [...activeLeads]
     .sort(
@@ -620,7 +612,7 @@ export default function DashboardView({
                     </div>
                     <div className="text-right shrink-0">
                       <span className="text-xs font-black text-slate-950 block">
-                        ₹{(l.value || 0).toLocaleString("en-IN")}
+                        ₹{getLeadFinalValue(l).toLocaleString("en-IN")}
                       </span>
                       <span className="text-[9px] text-slate-400 font-semibold">
                         Follow-up:{" "}

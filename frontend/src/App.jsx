@@ -1093,6 +1093,7 @@ export default function App() {
                     token={token}
                     showToast={showToast}
                     authenticatedFetch={authenticatedFetch}
+                    fetchLeads={fetchLeads}
                   />
                 </AdminRoute>
               }
@@ -1105,6 +1106,7 @@ export default function App() {
                     token={token}
                     showToast={showToast}
                     authenticatedFetch={authenticatedFetch}
+                    fetchLeads={fetchLeads}
                   />
                 </AdminRoute>
               }
@@ -1117,6 +1119,7 @@ export default function App() {
                     token={token}
                     showToast={showToast}
                     authenticatedFetch={authenticatedFetch}
+                    fetchLeads={fetchLeads}
                   />
                 </AdminRoute>
               }
@@ -1129,6 +1132,7 @@ export default function App() {
                     token={token}
                     showToast={showToast}
                     authenticatedFetch={authenticatedFetch}
+                    fetchLeads={fetchLeads}
                   />
                 </AdminRoute>
               }

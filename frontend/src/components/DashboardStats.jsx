@@ -1,5 +1,6 @@
 import React from "react";
 import { convertToINR } from "../utils/currencyUtils";
+import { isLeadActiveInPipeline, calculatePipelineValue } from "../utils/leadUtils";
 import {
   Users,
   FileText,
@@ -88,18 +89,10 @@ export default function DashboardStats({
   );
 
   // Leads calculations
-  const activeLeads = leads.filter(
-    (l) =>
-      l.currentStage !== "Won" &&
-      l.currentStage !== "Lost" &&
-      l.currentStatus !== "Completed" &&
-      l.currentStatus !== "Cancelled",
-  ).length;
+  const activeLeads = leads.filter(isLeadActiveInPipeline).length;
   const wonLeads = leads.filter((l) => l.currentStage === "Won").length;
   const lostLeads = leads.filter((l) => l.currentStage === "Lost").length;
-  const pipelineValue = leads
-    .filter((l) => l.currentStage !== "Won" && l.currentStage !== "Lost")
-    .reduce((sum, l) => sum + (Number(l.value) || 0), 0);
+  const pipelineValue = calculatePipelineValue(leads);
 
   // Total Revenue is the featured stat — rendered first, spans 2 card-widths.
   const revenueStat = {

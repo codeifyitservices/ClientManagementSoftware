@@ -6,7 +6,8 @@ import { SUPPORTED_CURRENCIES, getCurrencySymbol } from "../utils/currencyUtils"
 export default function LeadFormPage({
   token,
   showToast,
-  authenticatedFetch
+  authenticatedFetch,
+  fetchLeads,
 }) {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -19,6 +20,8 @@ export default function LeadFormPage({
   const [source, setSource] = useState("Website");
   const [currency, setCurrency] = useState("INR (₹)");
   const [value, setValue] = useState("");
+  const [inclusiveGst, setInclusiveGst] = useState(true);
+  const [isPersonalAccount, setIsPersonalAccount] = useState(false);
   const [assignedTo, setAssignedTo] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -57,6 +60,8 @@ export default function LeadFormPage({
           setPhone(lead.phone || "");
           setSource(lead.source || "Website");
           setValue(lead.value !== undefined ? String(lead.value) : "");
+          setInclusiveGst(lead.inclusiveGst !== false);
+          setIsPersonalAccount(lead.isPersonalAccount === true);
           setAssignedTo(lead.assignedTo?._id || lead.assignedTo || "");
           setNotes(lead.notes || "");
         } else {
@@ -95,6 +100,8 @@ export default function LeadFormPage({
       phone,
       source,
       value: value ? Number(value) : 0,
+      inclusiveGst: isPersonalAccount ? false : inclusiveGst,
+      isPersonalAccount,
       assignedTo: assignedTo || null,
       notes,
     };
@@ -115,6 +122,7 @@ export default function LeadFormPage({
       });
 
       if (res.ok) {
+        if (fetchLeads) fetchLeads();
         if (showToast) showToast(isEdit ? "Lead updated successfully." : "Lead created successfully.", "success");
         navigate(isEdit ? `/leads/${id}` : "/leads");
       } else {
@@ -330,7 +338,75 @@ export default function LeadFormPage({
                       className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
+                  {value && !isNaN(Number(value)) && Number(value) > 0 && (
+                    <div className="mt-1.5 text-[10px] font-semibold">
+                      {isPersonalAccount ? (
+                        <span className="text-amber-700 font-bold">
+                          Final Amount: {getCurrencySymbol(currency)}{Number(value).toLocaleString("en-IN")}
+                        </span>
+                      ) : inclusiveGst ? (
+                        <span className="text-slate-600 font-bold">
+                          Base Amount: {getCurrencySymbol(currency)}{Math.round(Number(value) / 1.18).toLocaleString("en-IN")}
+                        </span>
+                      ) : (
+                        <span className="text-indigo-600 font-bold">
+                          Final Amount: {getCurrencySymbol(currency)}{Math.round(Number(value) * 1.18).toLocaleString("en-IN")}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              {/* Personal Account & GST Inclusive Checkboxes */}
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {/* Personal Account Checkbox */}
+                <div className="flex items-start gap-2 bg-amber-50/50 border border-amber-100 p-3 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="isPersonalAccount"
+                    checked={isPersonalAccount}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsPersonalAccount(checked);
+                      if (checked) {
+                        setInclusiveGst(false);
+                      } else {
+                        setInclusiveGst(true);
+                      }
+                    }}
+                    className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer"
+                  />
+                  <label htmlFor="isPersonalAccount" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                    <span>Personal Account</span>
+                    <span className="text-[10px] text-slate-450 font-semibold normal-case leading-normal font-sans">
+                      If checked, no GST will be applied (personal/individual billing).
+                    </span>
+                  </label>
+                </div>
+
+                {/* GST Inclusive Checkbox — hidden for personal account */}
+                {!isPersonalAccount ? (
+                  <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                    <input
+                      type="checkbox"
+                      id="inclusiveGst"
+                      checked={inclusiveGst}
+                      onChange={(e) => setInclusiveGst(e.target.checked)}
+                      className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                    />
+                    <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                      <span>Inclusive GST (18%)</span>
+                      <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal font-sans">
+                        If unchecked, 18% tax will automatically be added to obtain the final deal amount.
+                      </span>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="flex items-center p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-450 font-semibold">
+                    Personal Account active: GST exempt (0% tax)
+                  </div>
+                )}
               </div>
 
               {/* Assigned To Owner */}
