@@ -20,10 +20,11 @@ const getActiveConfig = async () => {
   return config;
 };
 
-export const getNextInvoiceNumber = async () => {
-  const now = new Date();
-  const yy = now.getFullYear().toString().slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
+export const getNextInvoiceNumber = async (date) => {
+  const now = date ? new Date(date) : new Date();
+  const validDate = isNaN(now.getTime()) ? new Date() : now;
+  const yy = validDate.getFullYear().toString().slice(-2);
+  const mm = String(validDate.getMonth() + 1).padStart(2, "0");
   const prefix = `CN${yy}${mm}`;
 
   const regex = new RegExp(`^${prefix}(\\d{4})$`);
@@ -53,10 +54,51 @@ export const getNextInvoiceNumber = async () => {
   return `${prefix}${Date.now().toString().slice(-4)}`;
 };
 
+// Helper to update only the date (YYMM) part of an existing invoice number
+export const updateInvoiceNumberDatePart = (currentInvoiceNumber, newDate) => {
+  if (!currentInvoiceNumber || !newDate) return currentInvoiceNumber;
+  const d = new Date(newDate);
+  if (isNaN(d.getTime())) return currentInvoiceNumber;
+
+  const yy = d.getFullYear().toString().slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const fullYear = d.getFullYear().toString();
+
+  // Pattern 1: Standard prefix (e.g. CN) followed by 2-digit YY, 2-digit MM, and serial suffix (e.g. CN26030010 -> CN26040010)
+  const stdMatch = currentInvoiceNumber.match(/^([A-Za-z]+)(\d{2})(\d{2})(.*)$/);
+  if (stdMatch) {
+    const [, prefix, , , suffix] = stdMatch;
+    return `${prefix}${yy}${mm}${suffix}`;
+  }
+
+  // Pattern 2: Hyphenated with 4-digit year (e.g. CN-2026-03-001 or CN-202603-001)
+  const hyphen4Match = currentInvoiceNumber.match(/^([A-Za-z]+[-_])(\d{4})[-_]?(\d{2})([-_].*)$/);
+  if (hyphen4Match) {
+    const [, prefix, , , suffix] = hyphen4Match;
+    return `${prefix}${fullYear}-${mm}${suffix.startsWith("-") || suffix.startsWith("_") ? suffix : "-" + suffix}`;
+  }
+
+  // Pattern 3: Hyphenated with 2-digit year (e.g. CN-26-03-001)
+  const hyphen2Match = currentInvoiceNumber.match(/^([A-Za-z]+[-_])(\d{2})[-_]?(\d{2})([-_].*)$/);
+  if (hyphen2Match) {
+    const [, prefix, , , suffix] = hyphen2Match;
+    return `${prefix}${yy}-${mm}${suffix.startsWith("-") || suffix.startsWith("_") ? suffix : "-" + suffix}`;
+  }
+
+  // Pattern 4: Fallback for any alpha prefix + 4-digit date part + rest
+  const generalMatch = currentInvoiceNumber.match(/^([A-Za-z]+)(\d{4})(.*)$/);
+  if (generalMatch) {
+    const [, prefix, , suffix] = generalMatch;
+    return `${prefix}${yy}${mm}${suffix}`;
+  }
+
+  return currentInvoiceNumber;
+};
+
 // GET /api/invoices/next-number - Fetch next sequential invoice number
 export const getNextNumber = async (req, res) => {
   try {
-    const nextInvoiceNumber = await getNextInvoiceNumber();
+    const nextInvoiceNumber = await getNextInvoiceNumber(req.query.date);
     res.json({ invoiceNumber: nextInvoiceNumber });
   } catch (error) {
     res.status(500).json({ message: "Error generating next invoice number", error: error.message });
@@ -181,7 +223,7 @@ export const createInvoice = async (req, res) => {
       return res.status(400).json({ message: "Please provide Client Profile, Due Date, and at least one Invoice Item." });
     }
 
-    const invoiceNumber = await getNextInvoiceNumber();
+    const invoiceNumber = await getNextInvoiceNumber(invoiceDate);
 
     const newInvoice = new Invoice({
       invoiceNumber,
@@ -236,9 +278,29 @@ export const updateInvoice = async (req, res) => {
       return res.status(404).json({ message: "Invoice not found." });
     }
 
+    const oldInvoiceNumber = invoice.invoiceNumber;
+
     invoice.client = client ?? invoice.client;
     if (invoiceDate) {
+      const newD = new Date(invoiceDate);
       invoice.invoiceDate = invoiceDate;
+
+      if (!isNaN(newD.getTime())) {
+        const updatedInvoiceNumber = updateInvoiceNumberDatePart(invoice.invoiceNumber, newD);
+        if (updatedInvoiceNumber && updatedInvoiceNumber !== invoice.invoiceNumber) {
+          // Check if candidate invoice number already belongs to a different invoice
+          const existing = await Invoice.findOne({
+            invoiceNumber: updatedInvoiceNumber,
+            _id: { $ne: invoice._id },
+          });
+          if (!existing) {
+            invoice.invoiceNumber = updatedInvoiceNumber;
+          } else {
+            // Allocate next available sequence for that month/year
+            invoice.invoiceNumber = await getNextInvoiceNumber(newD);
+          }
+        }
+      }
     }
     invoice.dueDate = dueDate ?? invoice.dueDate;
     invoice.invoiceType = invoiceType ?? invoice.invoiceType;
@@ -248,6 +310,21 @@ export const updateInvoice = async (req, res) => {
     invoice.paymentStatus = paymentStatus ?? invoice.paymentStatus;
 
     const updatedInvoice = await invoice.save();
+
+    // If invoiceNumber updated, keep subscription payments in sync
+    if (oldInvoiceNumber && updatedInvoice.invoiceNumber !== oldInvoiceNumber) {
+      try {
+        const Subscription = mongoose.model("Subscription");
+        await Subscription.updateMany(
+          { "payments.invoiceNumber": oldInvoiceNumber },
+          { $set: { "payments.$[p].invoiceNumber": updatedInvoice.invoiceNumber } },
+          { arrayFilters: [{ "p.invoiceNumber": oldInvoiceNumber }] }
+        );
+      } catch (subErr) {
+        console.error("Error updating subscription payments with new invoiceNumber:", subErr);
+      }
+    }
+
     const populated = await updatedInvoice.populate("client");
 
     res.json(populated);

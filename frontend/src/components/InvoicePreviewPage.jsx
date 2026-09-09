@@ -172,8 +172,9 @@ export default function InvoicePreviewPage({
     ) {
       const fetchNextNum = async () => {
         try {
+          const dateParam = invoiceData?.invoiceDate ? `?date=${encodeURIComponent(invoiceData.invoiceDate)}` : "";
           const res = await fetch(
-            `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/invoices/next-number`,
+            `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/invoices/next-number${dateParam}`,
             {
               headers: {
                 Authorization: `Bearer ${token || localStorage.getItem("token")}`,
@@ -188,7 +189,7 @@ export default function InvoicePreviewPage({
       };
       fetchNextNum();
     }
-  }, [invoiceData.invoiceNumber, token]);
+  }, [invoiceData.invoiceNumber, invoiceData.invoiceDate, token]);
 
   const displayInvoiceNum =
     invoiceData.invoiceNumber &&

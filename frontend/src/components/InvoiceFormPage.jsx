@@ -49,6 +49,47 @@ const getDefaultDueDate = () => {
   return date.toISOString().split("T")[0];
 };
 
+// Helper to update only the date (YYMM) part of an existing invoice number
+export const updateInvoiceNumberDatePart = (currentInvoiceNumber, newDate) => {
+  if (!currentInvoiceNumber || !newDate) return currentInvoiceNumber;
+  const d = new Date(newDate);
+  if (isNaN(d.getTime())) return currentInvoiceNumber;
+
+  const yy = d.getFullYear().toString().slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const fullYear = d.getFullYear().toString();
+
+  // Pattern 1: Standard prefix (e.g. CN) followed by 2-digit YY, 2-digit MM, and serial suffix (e.g. CN26030010 -> CN26040010)
+  const stdMatch = currentInvoiceNumber.match(/^([A-Za-z]+)(\d{2})(\d{2})(.*)$/);
+  if (stdMatch) {
+    const [, prefix, , , suffix] = stdMatch;
+    return `${prefix}${yy}${mm}${suffix}`;
+  }
+
+  // Pattern 2: Hyphenated with 4-digit year (e.g. CN-2026-03-001 or CN-202603-001)
+  const hyphen4Match = currentInvoiceNumber.match(/^([A-Za-z]+[-_])(\d{4})[-_]?(\d{2})([-_].*)$/);
+  if (hyphen4Match) {
+    const [, prefix, , , suffix] = hyphen4Match;
+    return `${prefix}${fullYear}-${mm}${suffix.startsWith("-") || suffix.startsWith("_") ? suffix : "-" + suffix}`;
+  }
+
+  // Pattern 3: Hyphenated with 2-digit year (e.g. CN-26-03-001)
+  const hyphen2Match = currentInvoiceNumber.match(/^([A-Za-z]+[-_])(\d{2})[-_]?(\d{2})([-_].*)$/);
+  if (hyphen2Match) {
+    const [, prefix, , , suffix] = hyphen2Match;
+    return `${prefix}${yy}-${mm}${suffix.startsWith("-") || suffix.startsWith("_") ? suffix : "-" + suffix}`;
+  }
+
+  // Pattern 4: Fallback for any alpha prefix + 4-digit date part + rest
+  const generalMatch = currentInvoiceNumber.match(/^([A-Za-z]+)(\d{4})(.*)$/);
+  if (generalMatch) {
+    const [, prefix, , suffix] = generalMatch;
+    return `${prefix}${yy}${mm}${suffix}`;
+  }
+
+  return currentInvoiceNumber;
+};
+
 // Grid template shared by the header row and every item row so columns
 // always line up, regardless of how tall each cell's content is.
 const ITEMS_GRID_COLS =
@@ -138,6 +179,9 @@ export default function InvoiceFormPage({
   // Invoice form states
   const [selectedClientId, setSelectedClientId] = useState("");
   const [nextInvoiceNumber, setNextInvoiceNumber] = useState("");
+  const [currentInvoiceNumber, setCurrentInvoiceNumber] = useState(
+    invoice?.invoiceNumber || draftInvoice?.invoiceNumber || "",
+  );
   const [invoiceDate, setInvoiceDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -168,6 +212,9 @@ export default function InvoiceFormPage({
   useEffect(() => {
     const sourceInvoice = invoice || draftInvoice;
     if (sourceInvoice) {
+      if (sourceInvoice.invoiceNumber) {
+        setCurrentInvoiceNumber(sourceInvoice.invoiceNumber);
+      }
       setSelectedClientId(
         sourceInvoice.client?._id || sourceInvoice.client || "",
       );
@@ -597,6 +644,41 @@ export default function InvoiceFormPage({
     onSubmit(payload);
   };
 
+  const handleInvoiceDateChange = async (newDate) => {
+    setInvoiceDate(newDate);
+    if (newDate) {
+      const dateObj = new Date(newDate);
+      dateObj.setDate(dateObj.getDate() + 15);
+      setDueDate(dateObj.toISOString().split("T")[0]);
+
+      if (isEdit) {
+        const baseNum = currentInvoiceNumber || invoice?.invoiceNumber || draftInvoice?.invoiceNumber;
+        if (baseNum) {
+          const updatedNum = updateInvoiceNumberDatePart(baseNum, newDate);
+          setCurrentInvoiceNumber(updatedNum);
+        }
+      } else {
+        try {
+          const res = await fetch(
+            `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/invoices/next-number?date=${newDate}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+              },
+            },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.invoiceNumber) {
+              setNextInvoiceNumber(data.invoiceNumber);
+              setCurrentInvoiceNumber(data.invoiceNumber);
+            }
+          }
+        } catch (err) {}
+      }
+    }
+  };
+
   const handlePreviewTrigger = () => {
     if (!selectedClientId) {
       alert("Please select a client to preview.");
@@ -648,6 +730,7 @@ export default function InvoiceFormPage({
           items: payloadItems,
           paymentStatus,
           invoiceNumber:
+            currentInvoiceNumber ||
             invoice?.invoiceNumber ||
             draftInvoice?.invoiceNumber ||
             nextInvoiceNumber ||
@@ -675,7 +758,7 @@ export default function InvoiceFormPage({
             </button>
             <span>
               {isEdit
-                ? `Edit Invoice (${invoice.invoiceNumber})`
+                ? `Edit Invoice (${currentInvoiceNumber || invoice?.invoiceNumber || ""})`
                 : "Create Invoice"}
             </span>
           </h2>
@@ -743,15 +826,7 @@ export default function InvoiceFormPage({
                 <input
                   type="date"
                   value={invoiceDate}
-                  onChange={(e) => {
-                    const newDate = e.target.value;
-                    setInvoiceDate(newDate);
-                    if (newDate) {
-                      const dateObj = new Date(newDate);
-                      dateObj.setDate(dateObj.getDate() + 15);
-                      setDueDate(dateObj.toISOString().split("T")[0]);
-                    }
-                  }}
+                  onChange={(e) => handleInvoiceDateChange(e.target.value)}
                   className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white"
                 />
                 <Calendar className="absolute right-3.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
