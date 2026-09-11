@@ -15,6 +15,13 @@ import {
   ChevronLeft,
   IdCard,
   Home,
+  Lock,
+  KeyRound,
+  Shield,
+  Eye,
+  EyeOff,
+  Sparkles,
+  Check,
 } from "lucide-react";
 
 export default function EmployeeProfile({
@@ -29,6 +36,15 @@ export default function EmployeeProfile({
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [activeTab, setActiveTab] = useState("personal");
+
+  // Password / Security state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [passLoading, setPassLoading] = useState(false);
+  const [passError, setPassError] = useState("");
 
   // Editable fields
   const [form, setForm] = useState({
@@ -45,6 +61,8 @@ export default function EmployeeProfile({
   });
 
   const isEmployee = currentUser?.role === "Employee";
+  const isEditingOwnProfile = !employeeId || (currentUser?._id && employee?._id === currentUser?._id);
+  const isAdmin = currentUser?.role === "Admin";
 
   const fetchEmployee = async () => {
     setLoading(true);
@@ -117,6 +135,21 @@ export default function EmployeeProfile({
   };
 
   const handleSave = async () => {
+    if (form.phone && form.phone.trim()) {
+      const cleanPhone = form.phone.replace(/\D/g, "");
+      if (cleanPhone.length !== 10) {
+        showToast("Phone number must be exactly 10 digits.", "error");
+        return;
+      }
+    }
+    if (form.personalEmail && form.personalEmail.trim()) {
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(form.personalEmail.trim()) || form.personalEmail.includes(",")) {
+        showToast("Please enter a valid personal email address.", "error");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const address =
@@ -125,8 +158,8 @@ export default function EmployeeProfile({
           : form.street;
 
       const payload = {
-        phoneNumber: form.phone,
-        personalEmail: form.personalEmail,
+        phoneNumber: form.phone ? form.phone.replace(/\D/g, "").slice(0, 10) : "",
+        personalEmail: form.personalEmail ? form.personalEmail.trim().toLowerCase() : "",
         dob: form.dob || undefined,
         gender: form.gender,
         bloodGroup: form.bloodGroup,
@@ -157,6 +190,80 @@ export default function EmployeeProfile({
       showToast("Network error.", "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPassError("");
+
+    if (!newPassword || newPassword.length < 6) {
+      setPassError("New password must be at least 6 characters.");
+      return;
+    }
+
+    if (isEditingOwnProfile && !isAdmin) {
+      if (!currentPassword) {
+        setPassError("Please enter your current password.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setPassError("New passwords do not match.");
+        return;
+      }
+    }
+
+    setPassLoading(true);
+    try {
+      if (isAdmin && !isEditingOwnProfile) {
+        // Admin resetting employee password
+        const res = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/employees/${employee._id}/reset-password`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ newPassword }),
+          }
+        );
+        const data = await res.json();
+        if (res.ok) {
+          showToast(data.message || "Password updated successfully!", "success");
+          setNewPassword("");
+          setConfirmPassword("");
+          setCurrentPassword("");
+        } else {
+          setPassError(data.message || "Failed to update password.");
+        }
+      } else {
+        // User changing own password
+        const res = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/auth/update-password`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ currentPassword, newPassword }),
+          }
+        );
+        const data = await res.json();
+        if (res.ok) {
+          showToast("Password updated successfully!", "success");
+          setNewPassword("");
+          setConfirmPassword("");
+          setCurrentPassword("");
+        } else {
+          setPassError(data.message || "Failed to update password.");
+        }
+      }
+    } catch {
+      setPassError("Network error updating password.");
+    } finally {
+      setPassLoading(false);
     }
   };
 
@@ -247,6 +354,7 @@ export default function EmployeeProfile({
   const tabs = [
     { id: "personal", label: "Personal", icon: User },
     { id: "address", label: "Address", icon: Home },
+    { id: "security", label: "Security & Password", icon: Lock },
   ];
 
   return (
@@ -350,12 +458,13 @@ export default function EmployeeProfile({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <Field label="Phone Number" icon={Phone}>
+                <Field label="Phone Number (10 Digits)" icon={Phone}>
                   <input
                     type="tel"
+                    maxLength={10}
                     value={form.phone}
-                    onChange={(e) => updateForm({ phone: e.target.value })}
-                    placeholder="+91 99999 99999"
+                    onChange={(e) => updateForm({ phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                    placeholder="9876543210"
                     className={inputCls}
                   />
                 </Field>
@@ -481,6 +590,150 @@ export default function EmployeeProfile({
                     className={readonlyCls}
                   />
                 </Field>
+              </div>
+            </div>
+          )}
+
+          {/* Security & Password Tab */}
+          {activeTab === "security" && (
+            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-6">
+              <div>
+                <h2 className="text-sm font-black text-slate-800">
+                  {isAdmin && !isEditingOwnProfile
+                    ? `Manage Password for ${employee.fullName}`
+                    : "Security & Login Credentials"}
+                </h2>
+                <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                  {isAdmin && !isEditingOwnProfile
+                    ? "Set a new password or generate credentials for this employee account."
+                    : "Keep your account secure by choosing a strong password with at least 6 characters."}
+                </p>
+              </div>
+
+              {passError && (
+                <div className="p-3.5 rounded-xl bg-red-50 border border-red-100 text-red-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                  <span>{passError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handlePasswordChange} className="space-y-4 max-w-lg">
+                {isEditingOwnProfile && !isAdmin && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Current Password <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showCurrentPass ? "text" : "password"}
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        className={inputCls}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPass(!showCurrentPass)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer bg-transparent border-0"
+                      >
+                        {showCurrentPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      {isAdmin && !isEditingOwnProfile ? "New Password" : "New Password"}{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const pass = "Pass@" + Math.floor(100000 + Math.random() * 900000);
+                        setNewPassword(pass);
+                        setConfirmPassword(pass);
+                        setShowNewPass(true);
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-transparent border-0"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Generate Strong Password
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showNewPass ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      required
+                      className={inputCls}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPass(!showNewPass)}
+                      className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer bg-transparent border-0"
+                    >
+                      {showNewPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {(isEditingOwnProfile && !isAdmin) && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Confirm New Password <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type={showNewPass ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      required
+                      className={inputCls}
+                    />
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={passLoading || !newPassword}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-sm shadow-indigo-500/20 transition-all cursor-pointer"
+                  >
+                    {passLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-3.5 w-3.5" />
+                    )}
+                    <span>{isAdmin && !isEditingOwnProfile ? "Reset Employee Password" : "Update Password"}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Security info card */}
+              <div className="pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                  <Shield className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-slate-800">Login Identifier</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">
+                      Employee can log in using Company Email (<span className="font-medium text-slate-700">{employee.companyEmail}</span>) or Employee ID (<span className="font-medium text-slate-700">{employee.employeeId}</span>).
+                    </p>
+                  </div>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                  <Lock className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-slate-800">Account Access</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">
+                      Account status is currently <span className={`font-bold ${employee.status === "Active" ? "text-emerald-600" : "text-red-500"}`}>{employee.status}</span>.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}

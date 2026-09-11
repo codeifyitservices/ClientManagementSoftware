@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check } from "lucide-react";
+import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check, AlertTriangle } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
 import WfhRequestModal from "./WfhRequestModal";
@@ -11,27 +11,27 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [breakReason, setBreakReason] = useState("Lunch Break");
-  const [coords, setCoords] = useState(null);
   const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
   const [showWfhModal, setShowWfhModal] = useState(false);
 
   const empId = currentUser?._id || currentUser?.id;
 
-  useEffect(() => {
-    // Attempt browser GPS detection
-    if (navigator.geolocation) {
+  const getPositionAsync = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        return resolve(null);
+      }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setCoords({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          });
+          const lat = parseFloat(pos.coords.latitude.toFixed(6));
+          const lng = parseFloat(pos.coords.longitude.toFixed(6));
+          resolve({ latitude: lat, longitude: lng });
         },
-        (err) => console.log("GPS position not available", err),
-        { timeout: 8000 }
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
-    }
-  }, []);
+    });
+  };
 
   const fetchCurrentSession = async () => {
     try {
@@ -74,11 +74,17 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
     setLoading(true);
     setSecurityCheckMsg(null);
     try {
+      const [currentCoords, currentWifiIp] = await Promise.all([
+        getPositionAsync().catch(() => null),
+        attendanceService.detectNetworkInfo().catch(() => null),
+      ]);
+
       const payload = {
         employeeId: empId,
         isRemote,
-        latitude: coords?.latitude,
-        longitude: coords?.longitude,
+        latitude: currentCoords?.latitude,
+        longitude: currentCoords?.longitude,
+        clientIp: currentWifiIp,
       };
       const res = await attendanceService.checkIn(payload);
       if (res.success) {
@@ -89,7 +95,7 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
         setSecurityCheckMsg(msg);
       }
     } catch (err) {
-      setSecurityCheckMsg("Error checking in");
+      setSecurityCheckMsg(err?.response?.data?.message || err?.message || "Error checking in");
     } finally {
       setLoading(false);
     }
@@ -272,6 +278,45 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
           </button>
         </div>
       </div>
+
+      {/* Security Check Failure Banner */}
+      {securityCheckMsg && (
+        <div className="mt-4 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start justify-between gap-3 text-rose-900 shadow-sm animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-rose-100 text-rose-600 rounded-xl shrink-0 mt-0.5">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-xs font-black uppercase tracking-wider text-rose-800">
+                Check-in Verification Notice
+              </h4>
+              <p className="text-xs font-medium text-rose-700 whitespace-pre-line leading-relaxed">
+                {securityCheckMsg}
+              </p>
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSecurityCheckMsg(null);
+                    setShowWfhModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span>Submit Work From Home (WFH) Request</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSecurityCheckMsg(null)}
+            className="text-rose-400 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-100/60 transition cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Break Type Selection Modal */}
       {showBreakModal && (

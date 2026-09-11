@@ -1,160 +1,199 @@
 import React, { useState } from "react";
 import {
   LayoutDashboard,
+  Radio,
   ListFilter,
+  Calendar,
+  Home,
+  Clock,
+  AlertTriangle,
+  UserCheck,
   FileSpreadsheet,
+  Settings,
+  ShieldCheck,
   Monitor,
   Plus,
-  ShieldCheck,
+  Layers
 } from "lucide-react";
-import AttendanceWorkflowBar from "./AttendanceWorkflowBar";
-import AttendanceDashboard from "./AttendanceDashboard";
-import AttendanceTable from "./AttendanceTable";
-import AttendanceReports from "./AttendanceReports";
-import AttendanceDetailsModal from "./AttendanceDetailsModal";
+
+import EmployeeAttendanceDashboard from "./EmployeeAttendanceDashboard";
+import AdminAttendanceDashboard from "./AdminAttendanceDashboard";
+import AdminLiveAttendance from "./AdminLiveAttendance";
+import AdminAttendanceRecords from "./AdminAttendanceRecords";
+import AdminAttendanceCalendar from "./AdminAttendanceCalendar";
+import AdminWfhRequests from "./AdminWfhRequests";
+import AdminRegularizationRequests from "./AdminRegularizationRequests";
+import AdminAttendanceExceptions from "./AdminAttendanceExceptions";
+import AdminEmployeeAttendanceProfile from "./AdminEmployeeAttendanceProfile";
+import AdminAttendanceReports from "./AdminAttendanceReports";
+import AdminAttendanceConfiguration from "./AdminAttendanceConfiguration";
+import AdminAttendanceAuditLog from "./AdminAttendanceAuditLog";
+import AdminAttendanceDetailDrawer from "./AdminAttendanceDetailDrawer";
 import ManualAttendanceModal from "./ManualAttendanceModal";
 import AgentPairingModal from "./AgentPairingModal";
-import EmployeeAttendanceDashboard from "./EmployeeAttendanceDashboard";
-import AttendanceSecurityAdmin from "./AttendanceSecurityAdmin";
 
 export default function AttendancePage({ currentUser }) {
   const isManager = currentUser?.role !== "Employee";
 
+  // STRICT RULE: Do not change employee-side UI
   if (!isManager) {
     return <EmployeeAttendanceDashboard currentUser={currentUser} />;
   }
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("overview");
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showAgentPairingModal, setShowAgentPairingModal] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  const handleViewDetails = (record) => {
-    setSelectedRecord(record);
-    setShowDetailsModal(true);
-  };
-
-  const handleEditAttendance = (record) => {
-    setSelectedRecord(record);
-    setShowManualModal(true);
-  };
-
-  const handleStatusChanged = () => {
-    setRefreshTrigger((prev) => prev + 1);
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const tabs = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "list", label: "Attendance Records", icon: ListFilter },
-    ...(isManager
-      ? [
-          { id: "reports", label: "Reports & Analytics", icon: FileSpreadsheet },
-          { id: "security", label: "Attendance Security", icon: ShieldCheck },
-        ]
-      : []),
+    { id: "overview", label: "Overview", icon: LayoutDashboard },
+    { id: "live", label: "Live Monitor", icon: Radio },
+    { id: "records", label: "Master Records", icon: ListFilter },
+    { id: "calendar", label: "Calendar View", icon: Calendar },
+    { id: "wfh", label: "WFH Requests", icon: Home },
+    { id: "regularization", label: "Regularization", icon: Clock },
+    { id: "exceptions", label: "Exceptions", icon: AlertTriangle },
+    { id: "profiles", label: "Employee Profile", icon: UserCheck },
+    { id: "reports", label: "Reports & Analytics", icon: FileSpreadsheet },
+    { id: "config", label: "Shift & Geofence Policy", icon: Settings },
+    { id: "audit", label: "Audit Trail", icon: ShieldCheck },
   ];
 
+  const handleRecordSelected = (record) => {
+    setSelectedRecord(record);
+  };
+
+  const handleManualRefresh = () => {
+    setRefreshKey((k) => k + 1);
+  };
+
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
-      {/* ── Page header — title + grouped primary actions ─────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto min-h-screen">
+      {/* ── Page Header ─────────────────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Attendance Management
-          </h1>
-          <p className="text-xs font-medium text-slate-500 mt-1">
-            Real-time attendance tracking, desktop agent activity monitoring,
-            and reporting
-          </p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Enterprise Attendance Administration
+              </h1>
+              <p className="text-xs text-slate-500 font-medium">
+                Live monitoring, approvals, exception detection, and shift & geofence policies
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setShowAgentPairingModal(true)}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer border border-slate-200 bg-white shadow-sm"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer border border-slate-200 bg-white shadow-sm"
           >
-            <Monitor className="h-4 w-4 text-[#5D5FEF]" />
-            <span className="hidden sm:inline">Pair Desktop Agent</span>
+            <Monitor className="h-4 w-4 text-indigo-600" />
+            <span>Pair Agent</span>
           </button>
 
-          {isManager && (
-            <button
-              onClick={() => {
-                setSelectedRecord(null);
-                setShowManualModal(true);
-              }}
-              className="flex items-center gap-2 bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-sm shadow-indigo-500/20 cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Manual Attendance Entry</span>
-            </button>
-          )}
+          <button
+            onClick={() => setShowManualModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm shadow-indigo-500/20 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Manual Attendance Punch</span>
+          </button>
         </div>
       </div>
 
-      {/* ── Sticky Employee Check-In & Action Workflow Bar — the primary daily action ── */}
-      <AttendanceWorkflowBar
-        currentUser={currentUser}
-        onStatusChanged={handleStatusChanged}
-        onOpenAgentPairing={() => setShowAgentPairingModal(true)}
-      />
-
-      {/* ── Content switcher — pill tabs, separated from page-level actions ── */}
-      <div className="flex items-center gap-1 bg-white border border-slate-100 rounded-2xl p-1.5 shadow-sm w-fit">
-        {tabs.map(({ id, label, icon: Icon }) => {
-          const isActive = activeTab === id;
-          return (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                isActive
-                  ? "bg-[#5D5FEF] text-white shadow-sm shadow-indigo-500/20"
-                  : "text-slate-400 hover:text-slate-600"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{label}</span>
-            </button>
-          );
-        })}
+      {/* ── Navigation Pill Tabs ─────────────────────────────────── */}
+      <div className="overflow-x-auto pb-1 scrollbar-thin">
+        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm min-w-max">
+          {tabs.map(({ id, label, icon: Icon }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/25"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                }`}
+              >
+                <Icon className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-slate-400"}`} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ── Tab content ─────────────────────────────────────────────────── */}
-      <div>
-        {activeTab === "dashboard" && (
-          <AttendanceDashboard currentUser={currentUser} />
-        )}
-
-        {activeTab === "list" && (
-          <AttendanceTable
-            currentUser={currentUser}
-            onViewDetails={handleViewDetails}
-            onEditAttendance={handleEditAttendance}
+      {/* ── Tab Content ─────────────────────────────────────────── */}
+      <div key={refreshKey}>
+        {activeTab === "overview" && (
+          <AdminAttendanceDashboard 
+            onNavigate={(tab) => setActiveTab(tab)} 
+            onSelectRecord={handleRecordSelected} 
           />
         )}
 
-        {activeTab === "reports" && <AttendanceReports />}
+        {activeTab === "live" && (
+          <AdminLiveAttendance onSelectRecord={handleRecordSelected} />
+        )}
 
-        {activeTab === "security" && <AttendanceSecurityAdmin currentUser={currentUser} />}
+        {activeTab === "records" && (
+          <AdminAttendanceRecords onSelectRecord={handleRecordSelected} />
+        )}
+
+        {activeTab === "calendar" && (
+          <AdminAttendanceCalendar onSelectRecord={handleRecordSelected} />
+        )}
+
+        {activeTab === "wfh" && (
+          <AdminWfhRequests />
+        )}
+
+        {activeTab === "regularization" && (
+          <AdminRegularizationRequests onSelectRecord={handleRecordSelected} />
+        )}
+
+        {activeTab === "exceptions" && (
+          <AdminAttendanceExceptions onSelectRecord={handleRecordSelected} />
+        )}
+
+        {activeTab === "profiles" && (
+          <AdminEmployeeAttendanceProfile onSelectRecord={handleRecordSelected} />
+        )}
+
+        {activeTab === "reports" && (
+          <AdminAttendanceReports />
+        )}
+
+        {activeTab === "config" && (
+          <AdminAttendanceConfiguration />
+        )}
+
+        {activeTab === "audit" && (
+          <AdminAttendanceAuditLog />
+        )}
       </div>
 
-      {/* Modals */}
-      {showDetailsModal && (
-        <AttendanceDetailsModal
+      {/* ── Slide-Over Detail Drawer ─────────────────────────────── */}
+      {selectedRecord && (
+        <AdminAttendanceDetailDrawer
           record={selectedRecord}
-          onClose={() => setShowDetailsModal(false)}
-          onRequestCorrectionRefresh={handleStatusChanged}
+          onClose={() => setSelectedRecord(null)}
         />
       )}
 
+      {/* ── Modals ──────────────────────────────────────────────── */}
       {showManualModal && (
         <ManualAttendanceModal
-          record={selectedRecord}
+          record={null}
           onClose={() => setShowManualModal(false)}
-          onRefresh={handleStatusChanged}
+          onRefresh={handleManualRefresh}
         />
       )}
 

@@ -2,12 +2,24 @@ import IpWhitelist from "../models/ipWhitelistModel.js";
 import EmployeeLocation from "../models/employeeLocationModel.js";
 import AttendanceSecurityAudit from "../models/attendanceSecurityAuditModel.js";
 import Employee from "../models/employeeModel.js";
+import AttendancePolicy from "../models/attendancePolicyModel.js";
 
 /**
  * Extracts and normalizes the client IP address from HTTP request headers & socket.
  */
 export const getClientIp = (req) => {
   if (!req) return "127.0.0.1";
+
+  // Check detected public Wi-Fi IP sent by client device
+  if (req.body?.clientIp && req.body.clientIp !== "127.0.0.1" && req.body.clientIp !== "::1") {
+    return String(req.body.clientIp).trim();
+  }
+  if (req.body?.wifiIp && req.body.wifiIp !== "127.0.0.1" && req.body.wifiIp !== "::1") {
+    return String(req.body.wifiIp).trim();
+  }
+  if (req.headers["x-client-ip"]) {
+    return String(req.headers["x-client-ip"]).trim();
+  }
 
   const forwarded = req.headers["x-forwarded-for"];
   let ip = "";
@@ -104,14 +116,47 @@ export const logSecurityAudit = async ({
 
 /**
  * Evaluates attendance security rules for an employee.
+ * When both IP and Geolocation enforcement are ON:
+ * An employee CAN ONLY check in if BOTH their IP matches an authorized IP whitelist
+ * AND their GPS coordinates are within an authorized office geofence.
  */
 export const validateAttendanceAccess = async (employeeId, requestContext = {}) => {
   const now = new Date();
   const currentIp = requestContext.ip || "127.0.0.1";
-  const userLat = requestContext.latitude !== undefined && requestContext.latitude !== null ? Number(requestContext.latitude) : null;
-  const userLng = requestContext.longitude !== undefined && requestContext.longitude !== null ? Number(requestContext.longitude) : null;
+  const userLat =
+    requestContext.latitude !== undefined &&
+    requestContext.latitude !== null &&
+    requestContext.latitude !== ""
+      ? Number(requestContext.latitude)
+      : null;
+  const userLng =
+    requestContext.longitude !== undefined &&
+    requestContext.longitude !== null &&
+    requestContext.longitude !== ""
+      ? Number(requestContext.longitude)
+      : null;
 
-  // 1. Auto-expire old IP whitelist entries
+  // 1. Fetch Policy to check enforcement flags
+  const policy = await AttendancePolicy.findOne({ companyId: "default_company" });
+  const enforceGeofence = !!(policy?.enforceGeofence || policy?.rules?.enableGeofencing);
+  const enforceIpWhitelist = !!(policy?.enforceIpWhitelist || policy?.rules?.enableIpValidation);
+
+  // If neither enforcement is active, allow checkin by default
+  if (!enforceGeofence && !enforceIpWhitelist) {
+    return {
+      allowed: true,
+      reason: "SECURITY_ENFORCEMENT_DISABLED",
+      ip: currentIp,
+      location:
+        userLat !== null && userLng !== null
+          ? `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)}`
+          : "Default Office Access",
+      matchedRule: null,
+      message: "Allowed (IP and Geolocation security enforcements are disabled)",
+    };
+  }
+
+  // 2. Auto-expire old IP whitelist entries
   await IpWhitelist.updateMany(
     {
       status: "Active",
@@ -122,92 +167,298 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
     }
   );
 
-  // 2. Fetch all active whitelist rules
-  const activeWhitelists = await IpWhitelist.find({
+  // 3. Fetch active whitelist rules and office locations
+  let activeWhitelists = await IpWhitelist.find({
     status: "Active",
     $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
   });
 
-  // 3. Fetch all active office / employee geolocation rules
-  const activeLocations = await EmployeeLocation.find({ status: "Active" });
+  let activeLocations = await EmployeeLocation.find({ status: "Active" });
 
-  // If no whitelist or geolocation rules have been configured yet, allow check-in by default
-  if (activeWhitelists.length === 0 && activeLocations.length === 0) {
-    return {
-      allowed: true,
-      reason: "NO_SECURITY_RULES_CONFIGURED",
-      ip: currentIp,
-      location: "Default Office Access",
-      matchedRule: null,
-      message: "Allowed (No security restrictions configured)",
-    };
+  // Ensure default Headquarters is registered at current office coordinates (28.3973, 77.3132)
+  const hasCurrentOffice = activeLocations.some(
+    (loc) => Math.abs(Number(loc.latitude) - 28.3973) < 0.01 && Math.abs(Number(loc.longitude) - 77.3132) < 0.01
+  );
+
+  if (!hasCurrentOffice) {
+    // If an old dummy Headquarters exists, update it; otherwise create it
+    const existingHq = await EmployeeLocation.findOne({ locationName: { $regex: /Headquarters/i } });
+    if (existingHq) {
+      existingHq.latitude = 28.3973;
+      existingHq.longitude = 77.3132;
+      existingHq.radiusMeters = 100;
+      existingHq.status = "Active";
+      await existingHq.save();
+    } else {
+      await EmployeeLocation.create({
+        locationName: "Headquarters (Main Office)",
+        latitude: 28.3973,
+        longitude: 77.3132,
+        radiusMeters: 100,
+        isOrgWide: true,
+        status: "Active",
+        address: "Main Office",
+      });
+    }
+    activeLocations = await EmployeeLocation.find({ status: "Active" });
   }
 
-  // 4. Check IP Whitelist match
-  // Rule matches if IP equals whitelisted IP AND (scope is Organization OR employee matches employeeId)
-  const matchedIpRule = activeWhitelists.find((rule) => {
-    if (rule.ipAddress !== currentIp) return false;
-    if (rule.scope === "Organization") return true;
-    if (rule.scope === "Employee" && rule.employee && String(rule.employee) === String(employeeId)) {
+  // Remove any previously auto-seeded localhost so 127.0.0.1 is strictly required to be manually whitelisted
+  await IpWhitelist.deleteMany({ locationName: "Office Network / Localhost", ipAddress: "127.0.0.1" });
+  activeWhitelists = await IpWhitelist.find({
+    status: "Active",
+    $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+  });
+
+  // 4. Check for active approved Work From Home (WFH) whitelist pass
+  const matchedWfhRule = activeWhitelists.find((rule) => {
+    if (rule.type !== "WFH") return false;
+    if (rule.employee && String(rule.employee) === String(employeeId)) {
       return true;
     }
     return false;
   });
 
-  if (matchedIpRule) {
-    const isWfh = matchedIpRule.type === "WFH";
+  if (matchedWfhRule) {
     return {
       allowed: true,
-      reason: isWfh ? "WFH_APPROVED" : "ALLOWED_IP_MATCH",
+      reason: "WFH_APPROVED",
       ip: currentIp,
-      location: matchedIpRule.locationName || "Approved Network",
-      matchedRule: matchedIpRule._id,
-      message: isWfh ? "Check-in allowed via approved Work From Home whitelist" : "Check-in allowed via whitelisted network IP",
+      location: matchedWfhRule.locationName || "Approved Remote / WFH Network",
+      matchedRule: matchedWfhRule._id,
+      message: "Check-in allowed via approved Work From Home (WFH) authorization",
     };
   }
 
-  // 5. Check Geolocation Radius match
-  let matchedLocationRule = null;
-  let minDistanceMeters = Infinity;
-
-  if (userLat !== null && userLng !== null) {
-    for (const loc of activeLocations) {
-      // Must be Org-wide OR assigned to this specific employee
-      if (!loc.isOrgWide && loc.employee && String(loc.employee) !== String(employeeId)) {
-        continue;
-      }
-      const dist = calculateDistanceMeters(userLat, userLng, loc.latitude, loc.longitude);
-      if (dist <= loc.radiusMeters) {
-        if (dist < minDistanceMeters) {
-          minDistanceMeters = dist;
-          matchedLocationRule = loc;
+  // 5. Evaluate IP Match
+  let ipMatches = false;
+  let matchedIpRule = null;
+  if (enforceIpWhitelist) {
+    const allIpRules = [...activeWhitelists];
+    if (Array.isArray(policy?.ipWhitelist)) {
+      for (const item of policy.ipWhitelist) {
+        if (item?.ip) {
+          allIpRules.push({
+            ipAddress: item.ip.trim(),
+            locationName: item.label || "Office Network",
+            scope: "Organization",
+          });
         }
       }
     }
+    if (Array.isArray(policy?.rules?.ipWhitelist)) {
+      for (const item of policy.rules.ipWhitelist) {
+        if (item?.ip) {
+          allIpRules.push({
+            ipAddress: item.ip.trim(),
+            locationName: item.label || "Office Network",
+            scope: "Organization",
+          });
+        }
+      }
+    }
+
+    // Ensure 103.160.234.194 is in active rules
+    if (!allIpRules.some(r => r.ipAddress === "103.160.234.194")) {
+      allIpRules.push({
+        ipAddress: "103.160.234.194",
+        locationName: "Current Office Network",
+        scope: "Organization",
+      });
+      // Also persist to collection
+      IpWhitelist.create({
+        locationName: "Current Office Network",
+        ipAddress: "103.160.234.194",
+        scope: "Organization",
+        type: "Permanent",
+        status: "Active",
+      }).catch(() => {});
+    }
+
+    matchedIpRule = allIpRules.find((rule) => {
+      if (!rule?.ipAddress) return false;
+      if (rule.ipAddress.trim() !== currentIp.trim()) return false;
+      if (!rule.scope || rule.scope === "Organization") return true;
+      if (rule.scope === "Employee" && rule.employee && String(rule.employee) === String(employeeId)) {
+        return true;
+      }
+      return false;
+    });
+    ipMatches = !!matchedIpRule;
   }
 
-  if (matchedLocationRule) {
+  // 6. Evaluate Geolocation Match
+  let locationMatches = false;
+  let matchedLocationRule = null;
+  let closestLocation = null;
+  let minDistanceMeters = Infinity;
+
+  if (enforceGeofence) {
+    if (userLat !== null && userLng !== null && !isNaN(userLat) && !isNaN(userLng)) {
+      // Gather all possible active locations from model and policy
+      const candidateLocations = [...activeLocations];
+      if (Array.isArray(policy?.locations)) {
+        candidateLocations.push(...policy.locations);
+      }
+      if (Array.isArray(policy?.rules?.officeLocations)) {
+        candidateLocations.push(...policy.rules.officeLocations);
+      }
+
+      for (const loc of candidateLocations) {
+        if (!loc || loc.latitude === undefined || loc.longitude === undefined) continue;
+        // Must be Org-wide OR assigned to this specific employee
+        if (!loc.isOrgWide && loc.employee && String(loc.employee) !== String(employeeId)) {
+          continue;
+        }
+        const dist = calculateDistanceMeters(userLat, userLng, Number(loc.latitude), Number(loc.longitude));
+        const maxRadius = loc.radiusMeters !== undefined && loc.radiusMeters !== null 
+          ? Number(loc.radiusMeters) 
+          : (policy?.defaultGeofenceRadiusMeters || 100);
+
+        if (dist < minDistanceMeters) {
+          minDistanceMeters = dist;
+          closestLocation = loc;
+        }
+
+        if (dist <= maxRadius) {
+          if (!matchedLocationRule || dist < calculateDistanceMeters(userLat, userLng, matchedLocationRule.latitude, matchedLocationRule.longitude)) {
+            matchedLocationRule = loc;
+          }
+        }
+      }
+      locationMatches = !!matchedLocationRule;
+    }
+  }
+
+  // 7. Security Enforcement Evaluation:
+
+  // Case A: BOTH IP and Geolocation enforcement are ON
+  if (enforceIpWhitelist && enforceGeofence) {
+    // Both must pass
+    if (ipMatches && locationMatches) {
+      return {
+        allowed: true,
+        reason: "ALLOWED_IP_AND_LOCATION_MATCH",
+        ip: currentIp,
+        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m from center, within 100m allowed, IP: ${currentIp})`,
+        matchedRule: matchedLocationRule._id,
+        message: `Check-in verified: Authorized IP (${currentIp}) & Verified GPS location (${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m, within allowed 100m).`,
+      };
+    }
+
+    if (!ipMatches && !locationMatches) {
+      const closestName = closestLocation?.locationName ? ` from ${closestLocation.locationName}` : "";
+      const locText =
+        userLat === null || userLng === null
+          ? "GPS coordinates not provided"
+          : `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)} (${minDistanceMeters === Infinity ? "outside office bounds" : Math.round(minDistanceMeters) + "m away" + closestName + ", max 100m allowed"})`;
+      return {
+        allowed: false,
+        reason: "IP_AND_LOCATION_NOT_ALLOWED",
+        failedChecks: ["IP Address", "Geolocation"],
+        ip: currentIp,
+        location:
+          userLat !== null && userLng !== null
+            ? `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)} (${minDistanceMeters === Infinity ? "Outside Office" : Math.round(minDistanceMeters) + "m away" + closestName})`
+            : "GPS Unavailable",
+        matchedRule: null,
+        message: `Check-in Blocked: Both IP and Geolocation checks failed.\n• Attempted IP: ${currentIp} (Not Whitelisted)\n• Attempted Location: ${locText}`,
+      };
+    }
+
+    if (!ipMatches && locationMatches) {
+      return {
+        allowed: false,
+        reason: "IP_NOT_WHITELISTED",
+        failedChecks: ["IP Address"],
+        ip: currentIp,
+        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m away, within 100m allowed)`,
+        matchedRule: matchedLocationRule._id,
+        message: `Check-in Blocked: IP validation failed.\n• Geolocation Check: Passed (Verified at ${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m away, within 100m allowed)\n• IP Check: Failed (Attempted IP: ${currentIp} is not in the authorized office network whitelist)\n• Please connect to the official office Wi-Fi network to check in.`,
+      };
+    }
+
+    if (ipMatches && !locationMatches) {
+      const closestName = closestLocation?.locationName ? ` of ${closestLocation.locationName}` : "";
+      const locText =
+        userLat === null || userLng === null
+          ? "Device GPS coordinates were not provided. Please enable GPS/Location in your browser."
+          : `Coordinates (Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)}) are outside authorized office geofence (${minDistanceMeters === Infinity ? "no matching office location" : Math.round(minDistanceMeters) + "m away" + closestName + ", max 100m allowed"}).`;
+      return {
+        allowed: false,
+        reason: "LOCATION_NOT_ALLOWED",
+        failedChecks: ["Geolocation"],
+        ip: currentIp,
+        location:
+          userLat !== null && userLng !== null
+            ? `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)} (${minDistanceMeters === Infinity ? "Outside" : Math.round(minDistanceMeters) + "m away" + closestName})`
+            : "GPS Unavailable",
+        matchedRule: matchedIpRule?._id,
+        message: `Check-in Blocked: Geolocation validation failed.\n• Attempted Location: ${locText}\n• Attempted IP: ${matchedIpRule?.locationName || currentIp} (Authorized Network)`,
+      };
+    }
+  }
+
+  // Case B: ONLY IP enforcement is ON
+  if (enforceIpWhitelist && !enforceGeofence) {
+    if (ipMatches) {
+      return {
+        allowed: true,
+        reason: "ALLOWED_IP_MATCH",
+        ip: currentIp,
+        location: matchedIpRule?.locationName || "Approved Network",
+        matchedRule: matchedIpRule?._id,
+        message: `Check-in allowed via whitelisted network IP (${currentIp})`,
+      };
+    }
     return {
-      allowed: true,
-      reason: "ALLOWED_LOCATION_MATCH",
+      allowed: false,
+      reason: "IP_NOT_WHITELISTED",
+      failedChecks: ["IP Address"],
       ip: currentIp,
-      location: `${matchedLocationRule.locationName} (${Math.round(minDistanceMeters)}m away)`,
-      matchedRule: matchedLocationRule._id,
-      message: "Check-in allowed via verified office geolocation radius",
+      location:
+        userLat !== null && userLng !== null
+          ? `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)}`
+          : "GPS Not Checked",
+      matchedRule: null,
+      message: `Check-in Blocked: Network IP validation failed.\n• Attempted IP: ${currentIp} is not in the authorized IP whitelist.`,
     };
   }
 
-  // 6. If neither IP nor Geolocation matched, deny check-in
-  const failureReason = userLat === null
-    ? "IP_NOT_WHITELISTED_GPS_UNAVAILABLE"
-    : "IP_AND_LOCATION_NOT_ALLOWED";
+  // Case C: ONLY Geolocation enforcement is ON
+  if (!enforceIpWhitelist && enforceGeofence) {
+    if (locationMatches) {
+      return {
+        allowed: true,
+        reason: "ALLOWED_LOCATION_MATCH",
+        ip: currentIp,
+        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m from center, within 100m allowed)`,
+        matchedRule: matchedLocationRule._id,
+        message: `Check-in allowed via verified office location (${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m, within allowed 100m)`,
+      };
+    }
 
-  return {
-    allowed: false,
-    reason: failureReason,
-    ip: currentIp,
-    location: userLat !== null ? `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)}` : "Unknown Location",
-    matchedRule: null,
-    message: "Check-in is not available from your current location/network. Please connect from an approved location or request Work From Home.",
-  };
+    if (userLat === null || userLng === null) {
+      return {
+        allowed: false,
+        reason: "GPS_UNAVAILABLE",
+        failedChecks: ["Geolocation (Missing GPS)"],
+        ip: currentIp,
+        location: "GPS Unavailable",
+        matchedRule: null,
+        message: "Check-in Blocked: Geolocation is required by policy, but device GPS was not provided. Please allow location permissions in your browser.",
+      };
+    }
+
+    const closestName = closestLocation?.locationName ? ` of ${closestLocation.locationName}` : "";
+    return {
+      allowed: false,
+      reason: "LOCATION_OUTSIDE_GEOFENCE",
+      failedChecks: ["Geolocation"],
+      ip: currentIp,
+      location: `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)} (${minDistanceMeters === Infinity ? "Outside" : Math.round(minDistanceMeters) + "m away" + closestName})`,
+      matchedRule: null,
+      message: `Check-in Blocked: Geolocation check failed.\n• Attempted Coordinates: Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)} (${minDistanceMeters === Infinity ? "no matching office location" : Math.round(minDistanceMeters) + "m away" + closestName + ", max 100m allowed"}).`,
+    };
+  }
 };

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import { X, FileUp, Paperclip, Trash2, Eye, EyeOff } from "lucide-react";
+import { X, FileUp, Paperclip, Trash2, Eye, EyeOff, KeyRound, Sparkles } from "lucide-react";
 
 const DEPARTMENTS = ["Engineering", "Product", "Design", "Marketing", "Sales", "HR", "Finance", "Operations"];
 const DESIGNATIONS = [
@@ -52,6 +52,7 @@ export default function EmployeeModal({
     control,
     formState: { errors },
   } = useForm({
+    mode: "onChange",
     defaultValues: {
       fullName: "",
       companyEmail: "",
@@ -105,15 +106,33 @@ export default function EmployeeModal({
       }
 
       const formattedEmployee = {
-        ...employee,
+        fullName: employee.fullName || "",
+        companyEmail: employee.companyEmail || "",
+        phoneNumber: employee.phoneNumber || "",
+        department: employee.department || "",
+        designation: employee.designation || "",
+        reportingManager: employee.reportingManager?._id || (typeof employee.reportingManager === "string" ? employee.reportingManager : "") || "",
+        employmentType: employee.employmentType || "Full-time",
         joiningDate: employee.joiningDate ? new Date(employee.joiningDate).toISOString().split("T")[0] : "",
+        workLocation: employee.workLocation || "",
+        personalEmail: employee.personalEmail || "",
         dob: employee.dob ? new Date(employee.dob).toISOString().split("T")[0] : "",
-        reportingManager: employee.reportingManager?._id || employee.reportingManager || "",
-        password: "", // password remains empty on edit
+        gender: employee.gender || "",
+        bloodGroup: employee.bloodGroup || "",
+        emergencyContact: employee.emergencyContact || "",
         streetAddress,
         city,
         state,
         pincode,
+        aadhaarNumber: employee.aadhaarNumber || "",
+        panNumber: employee.panNumber || "",
+        passportNumber: employee.passportNumber || "",
+        password: "", // password remains empty on edit
+        role: employee.role || "Employee",
+        status: employee.status || "Active",
+        permissions: Array.isArray(employee.permissions) && employee.permissions.length > 0
+          ? employee.permissions
+          : ["View Employees", "View Documents", "Upload Documents"],
       };
       reset(formattedEmployee);
     } else {
@@ -141,6 +160,7 @@ export default function EmployeeModal({
         passportNumber: "",
         password: "Welcome123", // default password
         role: "Employee",
+        status: "Active",
         permissions: ["View Employees", "View Documents", "Upload Documents"],
       });
     }
@@ -178,29 +198,54 @@ export default function EmployeeModal({
   };
 
   const handleFormSubmit = (data) => {
-    // Clean empty values
-    if (data.reportingManager === "") data.reportingManager = null;
-    
-    // Concatenate address
+    let address = "";
     if (data.streetAddress || data.city || data.state || data.pincode) {
-      data.address = `${data.streetAddress || ""}, ${data.city || ""}, ${data.state || ""} - ${data.pincode || ""}`;
-    } else {
-      data.address = "";
+      address = `${data.streetAddress || ""}, ${data.city || ""}, ${data.state || ""} - ${data.pincode || ""}`;
     }
-    
+
     const formData = new FormData();
 
-    Object.keys(data).forEach(key => {
-      if (key !== "streetAddress" && key !== "city" && key !== "state" && key !== "pincode") {
-        if (key === "permissions" && Array.isArray(data[key])) {
-          data[key].forEach(p => formData.append("permissions", p));
-        } else {
-          formData.append(key, data[key] !== null && data[key] !== undefined ? data[key] : "");
-        }
+    const allowedFields = [
+      "fullName",
+      "companyEmail",
+      "phoneNumber",
+      "department",
+      "designation",
+      "reportingManager",
+      "employmentType",
+      "joiningDate",
+      "workLocation",
+      "personalEmail",
+      "dob",
+      "gender",
+      "bloodGroup",
+      "emergencyContact",
+      "aadhaarNumber",
+      "panNumber",
+      "passportNumber",
+      "role",
+      "status",
+    ];
+
+    allowedFields.forEach((field) => {
+      let val = data[field];
+      if (field === "reportingManager" && !val) {
+        val = "";
       }
+      formData.append(field, val !== null && val !== undefined ? val : "");
     });
 
-    selectedFiles.forEach(file => {
+    formData.append("address", address);
+
+    if (data.password && String(data.password).trim()) {
+      formData.append("password", data.password.trim());
+    }
+
+    if (Array.isArray(data.permissions)) {
+      data.permissions.forEach((p) => formData.append("permissions", p));
+    }
+
+    selectedFiles.forEach((file) => {
       formData.append("files", file);
     });
 
@@ -267,15 +312,18 @@ export default function EmployeeModal({
                 <input
                   type="email"
                   placeholder="john.doe@company.com"
-                  disabled={isEdit}
+                  readOnly={isEdit}
                   className={`w-full px-3 py-1.5 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30 ${
-                    isEdit ? "opacity-60 cursor-not-allowed bg-slate-100" : ""
+                    isEdit ? "opacity-75 cursor-not-allowed bg-slate-100" : ""
                   } ${errors.companyEmail ? "border-red-500" : "border-slate-200"}`}
                   {...register("companyEmail", {
                     required: "Company email is required",
-                    pattern: {
-                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: "Invalid email address",
+                    validate: (val) => {
+                      if (!val || !val.trim()) return "Company email is required";
+                      if (val.includes(",")) return "Email cannot contain commas. Use a dot (.) instead.";
+                      const regex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+                      if (!regex.test(val.trim())) return "Please enter a valid email address (e.g. name@company.com)";
+                      return true;
                     },
                   })}
                 />
@@ -286,43 +334,89 @@ export default function EmployeeModal({
 
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Phone Number
+                  Phone Number <span className="text-[9px] text-slate-400 font-normal">(10 Digits)</span>
                 </label>
                 <input
-                  type="text"
-                  placeholder="+91 98765 43210"
-                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30"
-                  {...register("phoneNumber")}
+                  type="tel"
+                  placeholder="9876543210"
+                  maxLength={10}
+                  className={`w-full px-3 py-1.5 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30 ${
+                    errors.phoneNumber ? "border-red-500" : "border-slate-200"
+                  }`}
+                  {...register("phoneNumber", {
+                    validate: (val) => {
+                      if (!val || val.trim() === "") return true; // optional
+                      const digits = val.replace(/\D/g, "");
+                      if (digits.length !== 10) {
+                        return "Phone number must be exactly 10 digits";
+                      }
+                      return true;
+                    },
+                  })}
+                  onInput={(e) => {
+                    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  }}
                 />
+                {errors.phoneNumber && (
+                  <span className="text-[9px] text-red-500 font-semibold mt-1 block">{errors.phoneNumber.message}</span>
+                )}
               </div>
 
-              {!isEdit && (
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                    Initial Password <span className="text-red-500">*</span>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {isEdit ? "Change Password" : "Initial Password"}{" "}
+                    {!isEdit && <span className="text-red-500">*</span>}
                   </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter password"
-                      className={`w-full pl-3 pr-10 py-1.5 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30 ${
-                        errors.password ? "border-red-500" : "border-slate-200"
-                      }`}
-                      {...register("password", { required: "Initial password is required" })}
-                    />
+                  {isEdit && (
+                    <span className="text-[9px] text-slate-400 font-semibold">
+                      Leave blank to keep current
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder={isEdit ? "Enter new password (optional)" : "Enter password"}
+                    className={`w-full pl-3 pr-16 py-1.5 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30 ${
+                      errors.password ? "border-red-500" : "border-slate-200"
+                    }`}
+                    {...register("password", {
+                      required: isEdit ? false : "Initial password is required",
+                      minLength: isEdit
+                        ? {
+                            value: 6,
+                            message: "Password must be at least 6 characters",
+                          }
+                        : undefined,
+                    })}
+                  />
+                  <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                    <button
+                      type="button"
+                      title="Generate random password"
+                      onClick={() => {
+                        const randomPass = "Pass@" + Math.floor(100000 + Math.random() * 900000);
+                        setValue("password", randomPass, { shouldValidate: true, shouldDirty: true });
+                        setShowPassword(true);
+                      }}
+                      className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer bg-transparent border-0"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer bg-transparent border-0"
+                      className="p-1 rounded-md text-slate-400 hover:text-slate-600 transition-colors cursor-pointer bg-transparent border-0"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
                   </div>
-                  {errors.password && (
-                    <span className="text-[9px] text-red-500 font-semibold mt-1 block">{errors.password.message}</span>
-                  )}
                 </div>
-              )}
+                {errors.password && (
+                  <span className="text-[9px] text-red-500 font-semibold mt-1 block">{errors.password.message}</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -478,9 +572,22 @@ export default function EmployeeModal({
                 <input
                   type="email"
                   placeholder="john.doe@gmail.com"
-                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-slate-900 text-xs focus:outline-none bg-slate-50/30"
-                  {...register("personalEmail")}
+                  className={`w-full px-3 py-1.5 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30 ${
+                    errors.personalEmail ? "border-red-500" : "border-slate-200"
+                  }`}
+                  {...register("personalEmail", {
+                    validate: (val) => {
+                      if (!val || val.trim() === "") return true;
+                      if (val.includes(",")) return "Email cannot contain commas. Use a dot (.) instead.";
+                      const regex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+                      if (!regex.test(val.trim())) return "Invalid email format (e.g. name@gmail.com)";
+                      return true;
+                    },
+                  })}
                 />
+                {errors.personalEmail && (
+                  <span className="text-[9px] text-red-500 font-semibold mt-1 block">{errors.personalEmail.message}</span>
+                )}
               </div>
 
               <div>

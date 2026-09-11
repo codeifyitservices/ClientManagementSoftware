@@ -20,17 +20,29 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Please enter email and password." });
     }
 
+    const cleanInput = String(email).trim();
+    const cleanEmail = cleanInput.toLowerCase();
+    const cleanPassword = String(password).trim();
+
     // Try finding in Admin collection first
-    let user = await Admin.findOne({ email: email.toLowerCase() });
+    let user = await Admin.findOne({ email: cleanEmail });
     let isEmployee = false;
 
     if (!user) {
-      // Find in Employee collection
-      user = await Employee.findOne({ companyEmail: email.toLowerCase() });
-      isEmployee = true;
+      // Find in Employee collection by companyEmail, personalEmail, or employeeId
+      user = await Employee.findOne({
+        $or: [
+          { companyEmail: cleanEmail },
+          { personalEmail: cleanEmail },
+          { employeeId: { $regex: new RegExp(`^${cleanInput}$`, "i") } },
+        ],
+      });
+      if (user) {
+        isEmployee = true;
+      }
     }
 
-    if (user && (await user.matchPassword(password))) {
+    if (user && (await user.matchPassword(cleanPassword))) {
       if (isEmployee && user.status === "Inactive") {
         return res.status(403).json({ message: "Your account is inactive. Please contact your manager." });
       }

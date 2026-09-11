@@ -353,8 +353,28 @@ export const createEmployee = async (req, res) => {
       return res.status(400).json({ message: "Please provide Full Name, Company Email, and Joining Date." });
     }
 
+    const cleanCompanyEmail = String(companyEmail).trim().toLowerCase();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(cleanCompanyEmail) || cleanCompanyEmail.includes(",")) {
+      return res.status(400).json({ message: "Please enter a valid company email address." });
+    }
+
+    if (personalEmail && String(personalEmail).trim() !== "") {
+      const cleanPersonalEmail = String(personalEmail).trim().toLowerCase();
+      if (!emailRegex.test(cleanPersonalEmail) || cleanPersonalEmail.includes(",")) {
+        return res.status(400).json({ message: "Please enter a valid personal email address." });
+      }
+    }
+
+    if (phoneNumber && String(phoneNumber).trim() !== "") {
+      const cleanPhone = String(phoneNumber).replace(/\D/g, "");
+      if (cleanPhone.length !== 10) {
+        return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+      }
+    }
+
     // Validate email uniqueness
-    const emailExists = await Employee.findOne({ companyEmail: companyEmail.toLowerCase() });
+    const emailExists = await Employee.findOne({ companyEmail: cleanCompanyEmail });
     if (emailExists) {
       return res.status(400).json({ message: "An employee with this company email already exists." });
     }
@@ -372,16 +392,16 @@ export const createEmployee = async (req, res) => {
     }
 
     const newEmployee = new Employee({
-      fullName,
-      companyEmail: companyEmail.toLowerCase(),
-      phoneNumber,
-      department,
-      designation,
+      fullName: String(fullName).trim(),
+      companyEmail: cleanCompanyEmail,
+      phoneNumber: phoneNumber ? String(phoneNumber).trim() : "",
+      department: department ? String(department).trim() : "",
+      designation: designation ? String(designation).trim() : "",
       reportingManager: (reportingManager && reportingManager.trim() !== "") ? reportingManager : null,
       employmentType: employmentType || "Full-time",
       joiningDate: new Date(joiningDate),
-      workLocation,
-      personalEmail,
+      workLocation: workLocation ? String(workLocation).trim() : "",
+      personalEmail: personalEmail ? String(personalEmail).trim().toLowerCase() : "",
       dob: (dob && dob.trim() !== "") ? new Date(dob) : undefined,
       gender: gender || "",
       bloodGroup,
@@ -390,7 +410,7 @@ export const createEmployee = async (req, res) => {
       aadhaarNumber,
       panNumber,
       passportNumber,
-      password: password || "Welcome123", // default initial password
+      password: (password && password.trim()) ? password.trim() : "Welcome123", // default initial password
       role: role || "Employee",
       permissions: permissions || ["View Employees", "View Documents", "Upload Documents"],
       documents,
@@ -420,13 +440,13 @@ export const updateEmployee = async (req, res) => {
 
     // Access control
     const isEditingSelf = req.user._id.toString() === employee._id.toString();
-    const hasEditPermission = req.user.role === "Admin" || req.user.permissions.includes("Edit Employees");
+    const hasEditPermission = req.user.role === "Admin" || (req.user.permissions && req.user.permissions.includes("Edit Employees"));
 
     if (!isEditingSelf && !hasEditPermission) {
       return res.status(403).json({ message: "Access denied. You do not have permissions to edit this employee." });
     }
 
-    const updates = req.body;
+    const updates = { ...req.body };
 
     // Prevent standard employee from editing core fields
     if (!hasEditPermission && isEditingSelf) {
@@ -438,12 +458,84 @@ export const updateEmployee = async (req, res) => {
       delete updates.role;
       delete updates.permissions;
       delete updates.employeeId;
+      delete updates.password; // standard employee updating self can't directly overwrite password via this field
     }
 
     // Clean empty values to prevent Mongoose CastErrors
-    if (updates.dob === "") updates.dob = null;
-    if (updates.joiningDate === "") delete updates.joiningDate;
-    if (updates.reportingManager === "") updates.reportingManager = null;
+    if (updates.dob === "" || updates.dob === "null" || updates.dob === "undefined") {
+      updates.dob = null;
+    } else if (updates.dob) {
+      updates.dob = new Date(updates.dob);
+    }
+
+    if (updates.joiningDate === "" || updates.joiningDate === "null" || updates.joiningDate === "undefined") {
+      delete updates.joiningDate;
+    } else if (updates.joiningDate) {
+      updates.joiningDate = new Date(updates.joiningDate);
+    }
+
+    if (
+      updates.reportingManager === "" ||
+      updates.reportingManager === "null" ||
+      updates.reportingManager === "undefined" ||
+      updates.reportingManager === null
+    ) {
+      updates.reportingManager = null;
+    } else if (updates.reportingManager && updates.reportingManager.toString() === employee._id.toString()) {
+      updates.reportingManager = null; // Cannot report to self
+    }
+
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (updates.companyEmail && updates.companyEmail.trim() !== "") {
+      const cleanCompanyEmail = String(updates.companyEmail).trim().toLowerCase();
+      if (!emailRegex.test(cleanCompanyEmail) || cleanCompanyEmail.includes(",")) {
+        return res.status(400).json({ message: "Please enter a valid company email address." });
+      }
+      // Check if email is already taken by another employee
+      const existingEmail = await Employee.findOne({
+        companyEmail: cleanCompanyEmail,
+        _id: { $ne: employee._id },
+      });
+      if (existingEmail) {
+        return res.status(400).json({ message: "An employee with this company email already exists." });
+      }
+      updates.companyEmail = cleanCompanyEmail;
+    } else {
+      delete updates.companyEmail;
+    }
+
+    if (updates.personalEmail !== undefined) {
+      if (String(updates.personalEmail).trim() !== "") {
+        const cleanPersonalEmail = String(updates.personalEmail).trim().toLowerCase();
+        if (!emailRegex.test(cleanPersonalEmail) || cleanPersonalEmail.includes(",")) {
+          return res.status(400).json({ message: "Please enter a valid personal email address." });
+        }
+        updates.personalEmail = cleanPersonalEmail;
+      } else {
+        updates.personalEmail = "";
+      }
+    }
+
+    if (updates.phoneNumber !== undefined) {
+      if (String(updates.phoneNumber).trim() !== "") {
+        const cleanPhone = String(updates.phoneNumber).replace(/\D/g, "");
+        if (cleanPhone.length !== 10) {
+          return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+        }
+        updates.phoneNumber = cleanPhone;
+      } else {
+        updates.phoneNumber = "";
+      }
+    }
+
+    // Handle permissions if sent
+    if (updates.permissions !== undefined) {
+      if (typeof updates.permissions === "string") {
+        updates.permissions = [updates.permissions];
+      } else if (!Array.isArray(updates.permissions)) {
+        delete updates.permissions;
+      }
+    }
 
     // Keep track of what changed for timeline
     const changedFields = [];
@@ -458,9 +550,23 @@ export const updateEmployee = async (req, res) => {
       }
     });
 
-    // Update fields
-    Object.keys(updates).forEach(key => {
-      if (key !== "password" && key !== "documents" && key !== "notes" && key !== "timeline") {
+    // Update password if provided by admin/authorized user
+    if (updates.password && typeof updates.password === "string" && updates.password.trim() !== "") {
+      employee.password = updates.password.trim();
+      changedFields.push("password");
+    }
+
+    // Update allowed fields only (never overwrite _id, __v, createdAt, updatedAt, etc.)
+    const allowedFields = [
+      "fullName", "companyEmail", "phoneNumber", "department", "designation",
+      "reportingManager", "employmentType", "joiningDate", "workLocation",
+      "status", "personalEmail", "dob", "gender", "bloodGroup",
+      "emergencyContact", "address", "aadhaarNumber", "panNumber",
+      "passportNumber", "role", "permissions"
+    ];
+
+    allowedFields.forEach(key => {
+      if (updates[key] !== undefined) {
         employee[key] = updates[key];
       }
     });
@@ -489,6 +595,7 @@ export const updateEmployee = async (req, res) => {
     const updated = await employee.save();
     res.json(updated);
   } catch (error) {
+    console.error("Error updating employee profile:", error);
     res.status(500).json({ message: "Error updating employee profile.", error: error.message });
   }
 };

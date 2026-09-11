@@ -1,4 +1,5 @@
 import express from "express";
+import protect from "../middleware/authMiddleware.js";
 import {
   checkIn,
   startBreak,
@@ -27,46 +28,107 @@ import {
   approveWfhRequest,
   rejectWfhRequest,
   getSecurityAuditLogs,
+  // Upgraded Admin Attendance methods
+  getAdminDashboard,
+  getAdminLiveAttendance,
+  getAdminRecords,
+  getAdminCalendar,
+  getAdminWfhRequests,
+  bulkApproveWfhAdmin,
+  getAdminRegularizations,
+  approveRegularizationAdmin,
+  rejectRegularizationAdmin,
+  getAdminExceptions,
+  updateAdminExceptionStatus,
+  runAdminExceptionDetection,
+  getAdminEmployeeProfile,
+  getAdminReportsData,
+  getAdminPayrollSummary,
+  finalizePayrollPeriod,
+  unlockPayrollPeriod,
+  getAdminPolicies,
+  updateAdminPolicies,
+  getAdminAuditLogs,
+  detectCurrentNetworkInfo,
 } from "../controllers/attendanceController.js";
 
 const router = express.Router();
 
-router.get("/my-session", getMyAttendanceSession);
-router.post("/check-in", checkIn);
-router.post("/start-break", startBreak);
-router.post("/end-break", endBreak);
-router.post("/check-out", checkOut);
-router.get("/summary", getTodaySummary);
-router.get("/list", getAttendanceList);
-router.get("/details/:id", getAttendanceDetails);
-router.post("/manual", manualUpsertAttendance);
-router.post("/request-correction", requestCorrection);
-router.post("/approve-correction", approveCorrection);
-router.get("/reports", getAttendanceReports);
-router.post("/note", saveAttendanceNote);
+// ── Employee / Shared Endpoints ──
+router.get("/my-session", protect, getMyAttendanceSession);
+router.post("/check-in", protect, checkIn);
+router.post("/start-break", protect, startBreak);
+router.post("/end-break", protect, endBreak);
+router.post("/check-out", protect, checkOut);
+router.get("/summary", protect, getTodaySummary);
+router.get("/list", protect, getAttendanceList);
+router.get("/details/:id", protect, getAttendanceDetails);
+router.post("/manual", protect, manualUpsertAttendance);
+router.post("/request-correction", protect, requestCorrection);
+router.post("/approve-correction", protect, approveCorrection);
+router.get("/reports", protect, getAttendanceReports);
+router.post("/note", protect, saveAttendanceNote);
+router.get("/security-status", protect, getEmployeeSecurityStatus);
 
-// ── Attendance Security & Whitelisting Routes ──
-router.get("/security-status", getEmployeeSecurityStatus);
+// ── IP Whitelist & Locations ──
+router.get("/whitelist", protect, getWhitelists);
+router.post("/whitelist", protect, createWhitelist);
+router.put("/whitelist/:id", protect, updateWhitelist);
+router.delete("/whitelist/:id", protect, deleteWhitelist);
 
-// IP Whitelist
-router.get("/whitelist", getWhitelists);
-router.post("/whitelist", createWhitelist);
-router.put("/whitelist/:id", updateWhitelist);
-router.delete("/whitelist/:id", deleteWhitelist);
+router.get("/locations", protect, getLocations);
+router.post("/locations", protect, createLocation);
+router.put("/locations/:id", protect, updateLocation);
+router.delete("/locations/:id", protect, deleteLocation);
 
-// Office / Geolocation Locations
-router.get("/locations", getLocations);
-router.post("/locations", createLocation);
-router.put("/locations/:id", updateLocation);
-router.delete("/locations/:id", deleteLocation);
+// ── Work From Home (WFH) Requests ──
+router.get("/wfh-requests", protect, getWfhRequests);
+router.post("/wfh-request", protect, createWfhRequest);
+router.put("/wfh-requests/:id/approve", protect, approveWfhRequest);
+router.put("/wfh-requests/:id/reject", protect, rejectWfhRequest);
+router.get("/audit-logs", protect, getSecurityAuditLogs);
 
-// Work From Home (WFH) Requests
-router.get("/wfh-requests", getWfhRequests);
-router.post("/wfh-request", createWfhRequest);
-router.put("/wfh-requests/:id/approve", approveWfhRequest);
-router.put("/wfh-requests/:id/reject", rejectWfhRequest);
+// ══════════════════════════════════════════════════════════════════════════════
+// ── UPGRADED ADMIN ATTENDANCE ROUTES ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
 
-// Security Audit Logs
-router.get("/audit-logs", getSecurityAuditLogs);
+// Dashboard & Live View
+router.get("/admin/dashboard", protect, getAdminDashboard);
+router.get("/admin/live", protect, getAdminLiveAttendance);
+router.get("/admin/records", protect, getAdminRecords);
+router.get("/admin/calendar", protect, getAdminCalendar);
+
+// WFH Requests Management
+router.get("/admin/wfh-requests", protect, getAdminWfhRequests);
+router.post("/admin/wfh-requests/bulk-approve", protect, bulkApproveWfhAdmin);
+
+// Regularization Requests Management
+router.get("/admin/regularizations", protect, getAdminRegularizations);
+router.put("/admin/regularizations/:id/approve", protect, approveRegularizationAdmin);
+router.put("/admin/regularizations/:id/reject", protect, rejectRegularizationAdmin);
+
+// Attendance Exceptions
+router.get("/admin/exceptions", protect, getAdminExceptions);
+router.put("/admin/exceptions/:id", protect, updateAdminExceptionStatus);
+router.post("/admin/exceptions/detect", protect, runAdminExceptionDetection);
+
+// Employee Attendance Profile
+router.get("/admin/employee-profile/:employeeId", protect, getAdminEmployeeProfile);
+
+// Reports & Data Export
+router.get("/admin/reports-data", protect, getAdminReportsData);
+
+// Payroll Summary & Locks
+router.get("/admin/payroll-summary", protect, getAdminPayrollSummary);
+router.post("/admin/payroll-period/finalize", protect, finalizePayrollPeriod);
+router.post("/admin/payroll-period/unlock", protect, unlockPayrollPeriod);
+
+// Attendance Policies & Configuration
+router.get("/admin/policies", protect, getAdminPolicies);
+router.put("/admin/policies", protect, updateAdminPolicies);
+router.get("/admin/detect-network", protect, detectCurrentNetworkInfo);
+
+// Traceable Audit Logs
+router.get("/admin/audit-logs", protect, getAdminAuditLogs);
 
 export default router;

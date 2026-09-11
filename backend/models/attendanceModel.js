@@ -20,19 +20,25 @@ const breakSchema = new mongoose.Schema({
 });
 
 const timelineEventSchema = new mongoose.Schema({
-  eventType: {
+    eventType: {
     type: String,
     enum: [
       "Checked In",
       "Break Started",
       "Break Ended",
       "Became Idle",
+      "Became Inactive",
       "Became Active",
       "Status Changed",
       "Checked Out",
       "Correction Submitted",
       "Correction Approved",
+      "Correction Rejected",
+      "WFH Approved",
+      "On-Duty Approved",
       "Manual Edit",
+      "Payroll Finalized",
+      "Payroll Unlocked",
     ],
     required: true,
   },
@@ -82,6 +88,10 @@ const correctionRequestSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  adminComment: {
+    type: String,
+    default: "",
+  },
 });
 
 const auditLogSchema = new mongoose.Schema({
@@ -92,6 +102,14 @@ const auditLogSchema = new mongoose.Schema({
   updatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Employee",
+  },
+  adminName: {
+    type: String,
+    default: "",
+  },
+  reason: {
+    type: String,
+    default: "",
   },
   previousData: {
     type: mongoose.Schema.Types.Mixed,
@@ -122,6 +140,10 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    shift: {
+      type: String,
+      default: "General Shift (09:00 AM - 06:00 PM)",
+    },
     checkInTime: {
       type: Date,
       default: null,
@@ -132,17 +154,99 @@ const attendanceSchema = new mongoose.Schema(
     },
     currentStatus: {
       type: String,
-      enum: ["Not Checked In", "Checked In", "Working", "On Break", "Checked Out", "Offline", "Idle"],
+      enum: ["Not Checked In", "Checked In", "Working", "On Break", "Checked Out", "Offline", "Idle", "Inactive", "Completed"],
       default: "Not Checked In",
     },
     attendanceStatus: {
       type: String,
-      enum: ["Present", "Absent", "Half Day", "Late Check-In", "On Leave"],
+      enum: ["Present", "Absent", "Half Day", "Late Check-In", "On Leave", "WFH", "On-Duty", "Holiday", "Weekly Off"],
       default: "Present",
+    },
+    locationMode: {
+      type: String,
+      enum: ["Office", "WFH", "On-Duty", "Client Site"],
+      default: "Office",
     },
     isRemote: {
       type: Boolean,
       default: false,
+    },
+    clockInLatitude: {
+      type: Number,
+      default: null,
+    },
+    clockInLongitude: {
+      type: Number,
+      default: null,
+    },
+    clockOutLatitude: {
+      type: Number,
+      default: null,
+    },
+    clockOutLongitude: {
+      type: Number,
+      default: null,
+    },
+    clockInIp: {
+      type: String,
+      default: "",
+    },
+    clockOutIp: {
+      type: String,
+      default: "",
+    },
+    clockInLocation: {
+      type: String,
+      default: "",
+    },
+    clockOutLocation: {
+      type: String,
+      default: "",
+    },
+    geofenceStatus: {
+      type: String,
+      enum: ["Verified", "Violated", "Exempted", "Not Applied"],
+      default: "Not Applied",
+    },
+    ipValidationStatus: {
+      type: String,
+      enum: ["Verified", "Violated", "Exempted", "Not Applied"],
+      default: "Not Applied",
+    },
+    isLate: {
+      type: Boolean,
+      default: false,
+    },
+    lateMinutes: {
+      type: Number,
+      default: 0,
+    },
+    isEarlyCheckout: {
+      type: Boolean,
+      default: false,
+    },
+    earlyCheckoutMinutes: {
+      type: Number,
+      default: 0,
+    },
+    overtimeMinutes: {
+      type: Number,
+      default: 0,
+    },
+    regularizationStatus: {
+      type: String,
+      enum: ["None", "Pending", "Approved", "Rejected"],
+      default: "None",
+    },
+    isPayrollFinalized: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    payrollPeriodId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PayrollPeriod",
+      default: null,
     },
     breaks: [breakSchema],
     totalWorkingMinutes: {

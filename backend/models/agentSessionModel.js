@@ -43,7 +43,7 @@ const agentSessionSchema = new mongoose.Schema(
     },
     currentStatus: {
       type: String,
-      enum: ["Active", "Idle", "On Break", "Offline"],
+      enum: ["Active", "Idle", "Inactive", "On Break", "Offline"],
       default: "Active",
     },
     idleTimeSeconds: {

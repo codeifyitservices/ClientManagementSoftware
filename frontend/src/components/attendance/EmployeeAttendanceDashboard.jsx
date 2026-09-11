@@ -18,6 +18,8 @@ import {
   Check,
   User,
   Users,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -31,6 +33,7 @@ import {
 } from "recharts";
 import { attendanceService } from "../../services/attendanceService";
 import AgentPairingModal from "./AgentPairingModal";
+import WfhRequestModal from "./WfhRequestModal";
 
 const getTodayDateString = (dateObj = new Date()) => {
   const d = new Date(dateObj);
@@ -68,7 +71,6 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [breakReason, setBreakReason] = useState("Lunch Break");
   const [showPairingModal, setShowPairingModal] = useState(false);
-  const [coords, setCoords] = useState(null);
   const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
   const [showWfhModal, setShowWfhModal] = useState(false);
 
@@ -150,6 +152,23 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     return () => clearInterval(timer);
   }, [sessionData, isToday]);
 
+  const getPositionAsync = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        return resolve(null);
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = parseFloat(pos.coords.latitude.toFixed(6));
+          const lng = parseFloat(pos.coords.longitude.toFixed(6));
+          resolve({ latitude: lat, longitude: lng });
+        },
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    });
+  };
+
   const handlePrevDay = () => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() - 1);
@@ -168,11 +187,17 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     setActionLoading(true);
     setSecurityCheckMsg(null);
     try {
+      const [currentCoords, currentWifiIp] = await Promise.all([
+        getPositionAsync().catch(() => null),
+        attendanceService.detectNetworkInfo().catch(() => null),
+      ]);
+
       const res = await attendanceService.checkIn({
         employeeId: empId,
         isRemote,
-        latitude: coords?.latitude,
-        longitude: coords?.longitude,
+        latitude: currentCoords?.latitude,
+        longitude: currentCoords?.longitude,
+        clientIp: currentWifiIp,
       });
       if (res.success) {
         fetchData();
@@ -181,7 +206,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
         setSecurityCheckMsg(msg);
       }
     } catch (err) {
-      setSecurityCheckMsg("Error checking in");
+      setSecurityCheckMsg(err?.response?.data?.message || err?.message || "Error checking in");
     } finally {
       setActionLoading(false);
     }
@@ -476,6 +501,45 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
         </div>
       </div>
 
+      {/* Security Check Failure Banner */}
+      {securityCheckMsg && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start justify-between gap-3 text-rose-900 shadow-sm animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-rose-100 text-rose-600 rounded-xl shrink-0 mt-0.5">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-xs font-black uppercase tracking-wider text-rose-800">
+                Check-in Verification Notice
+              </h4>
+              <p className="text-xs font-medium text-rose-700 whitespace-pre-line leading-relaxed">
+                {securityCheckMsg}
+              </p>
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSecurityCheckMsg(null);
+                    setShowWfhModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span>Submit Work From Home (WFH) Request</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSecurityCheckMsg(null)}
+            className="text-rose-400 hover:text-rose-700 p-1 rounded-lg hover:bg-rose-100/60 transition cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* ── METRIC CARDS ROW — equal height, identical padding/typography ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-stretch">
         {/* Working Hours Today */}
@@ -649,7 +713,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
                         if (type.includes("check-in") || type.includes("check in") || type.includes("active") || desc.includes("resumed")) {
                           return "bg-emerald-500 border-emerald-250";
                         }
-                        if (type.includes("idle")) {
+                        if (type.includes("idle") || type.includes("inactive")) {
                           return "bg-amber-400 border-amber-200";
                         }
                         if (type.includes("break")) {

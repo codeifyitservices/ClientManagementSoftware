@@ -33,6 +33,9 @@ export default function AttendanceSecurityAdmin({ token }) {
   // Modals
   const [showAddWhitelistModal, setShowAddWhitelistModal] = useState(false);
   const [showAddLocationModal, setShowAddLocationModal] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [detectingIp, setDetectingIp] = useState(false);
+  const [detectNotice, setDetectNotice] = useState(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,11 +58,63 @@ export default function AttendanceSecurityAdmin({ token }) {
     locationName: "Main Office",
     latitude: "",
     longitude: "",
-    radiusMeters: 200,
+    radiusMeters: 100,
     isOrgWide: true,
     employeeId: "",
     address: "",
   });
+
+  const handleDetectLocationForModal = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setDetectingLocation(false);
+        const lat = parseFloat(pos.coords.latitude.toFixed(6));
+        const lng = parseFloat(pos.coords.longitude.toFixed(6));
+        const acc = Math.round(pos.coords.accuracy || 50);
+        setLocForm(prev => ({
+          ...prev,
+          latitude: lat,
+          longitude: lng,
+          radiusMeters: prev.radiusMeters || Math.max(100, acc + 50)
+        }));
+        setDetectNotice({ type: "success", text: `Detected GPS: ${lat}, ${lng} (±${acc}m accuracy)` });
+        setTimeout(() => setDetectNotice(null), 5000);
+      },
+      (err) => {
+        setDetectingLocation(false);
+        setDetectNotice({ type: "error", text: `Location detection failed: ${err.message}` });
+        setTimeout(() => setDetectNotice(null), 5000);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleDetectIpForModal = async () => {
+    setDetectingIp(true);
+    try {
+      const res = await attendanceService.detectNetworkInfo();
+      if (res && res.clientIp) {
+        setWlForm(prev => ({
+          ...prev,
+          ipAddress: res.clientIp,
+          locationName: prev.locationName === "Office Network" ? (res.networkName || "Current Office Network") : prev.locationName
+        }));
+        setDetectNotice({ type: "success", text: `Detected Network IP: ${res.clientIp}` });
+      } else {
+        setDetectNotice({ type: "error", text: "Could not automatically determine IP." });
+      }
+    } catch (e) {
+      setDetectNotice({ type: "error", text: "Failed to detect IP address." });
+    } finally {
+      setDetectingIp(false);
+      setTimeout(() => setDetectNotice(null), 5000);
+    }
+  };
 
   const [saving, setSaving] = useState(false);
   const [actionProcessingId, setActionProcessingId] = useState(null);
@@ -146,7 +201,7 @@ export default function AttendanceSecurityAdmin({ token }) {
           locationName: "Main Office",
           latitude: "",
           longitude: "",
-          radiusMeters: 200,
+          radiusMeters: 100,
           isOrgWide: true,
           employeeId: "",
           address: "",
@@ -451,7 +506,7 @@ export default function AttendanceSecurityAdmin({ token }) {
           <div className="p-4 border-b border-slate-100">
             <h3 className="text-sm font-bold text-slate-900">Registered Geofences & Office Coordinates</h3>
             <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-              Employees within the configured GPS radius (e.g. 200m) will pass location validation
+              Employees within the configured GPS radius (e.g. 100m) will pass location validation
             </p>
           </div>
 
@@ -708,7 +763,7 @@ export default function AttendanceSecurityAdmin({ token }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in select-none">
           <div className="bg-white rounded-3xl max-w-md w-full custom-shadow overflow-hidden border border-slate-100">
             <div className="p-5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-              <h3 className="text-sm font-black">Add Manual IP Whitelist Entry</h3>
+              <h3 className="text-sm font-black">Add IP Whitelist Entry</h3>
               <button
                 onClick={() => setShowAddWhitelistModal(false)}
                 className="text-slate-400 hover:text-white transition"
@@ -717,10 +772,31 @@ export default function AttendanceSecurityAdmin({ token }) {
               </button>
             </div>
             <form onSubmit={handleCreateWhitelist} className="p-5 space-y-3.5 text-xs font-semibold">
+              {detectNotice && (
+                <div className={`p-2.5 rounded-xl border text-xs font-bold ${
+                  detectNotice.type === "success" 
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-red-50 text-red-700 border-red-200"
+                }`}>
+                  {detectNotice.text}
+                </div>
+              )}
+
               <div>
-                <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-bold mb-1">
-                  Public IP Address
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                    Public IP Address
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleDetectIpForModal}
+                    disabled={detectingIp}
+                    className="text-[10px] text-[#5D5FEF] hover:text-[#4d4fdf] font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    {detectingIp ? <Loader2 size={10} className="animate-spin" /> : <Globe size={10} />}
+                    <span>{detectingIp ? "Detecting IP..." : "Detect Current IP"}</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
@@ -847,6 +923,16 @@ export default function AttendanceSecurityAdmin({ token }) {
               </button>
             </div>
             <form onSubmit={handleCreateLocation} className="p-5 space-y-3.5 text-xs font-semibold">
+              {detectNotice && (
+                <div className={`p-2.5 rounded-xl border text-xs font-bold ${
+                  detectNotice.type === "success" 
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-red-50 text-red-700 border-red-200"
+                }`}>
+                  {detectNotice.text}
+                </div>
+              )}
+
               <div>
                 <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-bold mb-1">
                   Location Name
@@ -861,34 +947,44 @@ export default function AttendanceSecurityAdmin({ token }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-bold mb-1">
-                    Latitude
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    placeholder="28.4595"
-                    value={locForm.latitude}
-                    onChange={(e) => setLocForm({ ...locForm, latitude: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 font-mono"
-                  />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="block text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                    GPS Coordinates
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleDetectLocationForModal}
+                    disabled={detectingLocation}
+                    className="text-[10px] text-[#5D5FEF] hover:text-[#4d4fdf] font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    {detectingLocation ? <Loader2 size={10} className="animate-spin" /> : <MapPin size={10} />}
+                    <span>{detectingLocation ? "Detecting GPS..." : "📍 Detect Office GPS"}</span>
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-bold mb-1">
-                    Longitude
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    placeholder="77.0266"
-                    value={locForm.longitude}
-                    onChange={(e) => setLocForm({ ...locForm, longitude: e.target.value })}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 font-mono"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      placeholder="Latitude (e.g. 28.4595)"
+                      value={locForm.latitude}
+                      onChange={(e) => setLocForm({ ...locForm, latitude: e.target.value })}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      placeholder="Longitude (e.g. 77.0266)"
+                      value={locForm.longitude}
+                      onChange={(e) => setLocForm({ ...locForm, longitude: e.target.value })}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 font-mono"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -899,7 +995,7 @@ export default function AttendanceSecurityAdmin({ token }) {
                 <input
                   type="number"
                   required
-                  placeholder="200"
+                  placeholder="100"
                   value={locForm.radiusMeters}
                   onChange={(e) => setLocForm({ ...locForm, radiusMeters: e.target.value })}
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-slate-900 font-bold"

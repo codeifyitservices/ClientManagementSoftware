@@ -141,31 +141,24 @@ export function useAppService() {
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   const handleLogin = (newToken, email, userData, isAdminPortal) => {
-    const requiredRole = isAdminPortal ? "Admin" : "Employee";
-    if (userData?.role !== requiredRole) {
-      if (isAdminPortal) {
-        throw new Error("Access denied. Employees must log in through the employee portal.");
-      } else {
-        throw new Error("Access denied. Admins must log in through the admin portal.");
-      }
-    }
+    const userRole = userData?.role || (isAdminPortal ? "Admin" : "Employee");
 
     localStorage.setItem("token", newToken);
-    localStorage.setItem("userRole", userData?.role || "Employee");
+    localStorage.setItem("userRole", userRole);
     localStorage.setItem("userPermissions", JSON.stringify(userData?.permissions || []));
     localStorage.setItem("userFullName", userData?.fullName || "User");
     localStorage.setItem("userEmail", email);
     localStorage.setItem("userId", userData?._id || "");
     setToken(newToken);
     setCurrentUser({
-      role: userData?.role || "Employee",
+      role: userRole,
       permissions: userData?.permissions || [],
       fullName: userData?.fullName || "User",
       email: email,
       _id: userData?._id || "",
     });
     setIsAuthenticated(true);
-    showToast("Welcome to Startup Portal!", "success");
+    showToast(`Welcome back, ${userData?.fullName || "User"}!`, "success");
   };
 
   const handleLogout = () => {

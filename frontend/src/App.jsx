@@ -1329,6 +1329,7 @@ export default function App() {
         employee={selectedEmployeeForEdit}
         isSaving={isSavingEmployee}
         employeesList={employeesList}
+        currentUser={currentUser}
       />
       <ToastPanel toasts={toasts} removeToast={removeToast} />
     </>

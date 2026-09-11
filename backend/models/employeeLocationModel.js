@@ -23,7 +23,7 @@ const employeeLocationSchema = new mongoose.Schema(
     },
     radiusMeters: {
       type: Number,
-      default: 200,
+      default: 100,
     },
     status: {
       type: String,

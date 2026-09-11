@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Mail, Lock, AlertTriangle, KeyRound, Shield, Briefcase, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, AlertTriangle, KeyRound, Shield, Briefcase, Eye, EyeOff, User } from "lucide-react";
 
 export default function LoginPage({
   onLogin,
@@ -24,7 +24,7 @@ export default function LoginPage({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email: email.trim(), password: password.trim() }),
         },
       );
 
@@ -112,26 +112,26 @@ export default function LoginPage({
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Email Address */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Email Address / Employee ID */}
           <div>
             <label
               className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
                 isAdminPortal ? "text-slate-400" : "text-slate-500"
               }`}
             >
-              Email Address
+              {isAdminPortal ? "Admin Email Address" : "Email Address or Employee ID"}
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
-                <Mail className="h-4.5 w-4.5" />
+                {isAdminPortal ? <Mail className="h-4.5 w-4.5" /> : <User className="h-4.5 w-4.5" />}
               </span>
               <input
-                type="email"
+                type={isAdminPortal ? "email" : "text"}
                 value={email}
                 required
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={isAdminPortal ? "admin@codenap.co.in" : "employee@codenap.co.in"}
+                placeholder={isAdminPortal ? "admin@codenap.co.in" : "employee@codenap.co.in or EMP-0001"}
                 className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 ${
                   isAdminPortal
                     ? "border-slate-800 bg-slate-950/60 text-white placeholder-slate-600 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-slate-950"
