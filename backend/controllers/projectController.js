@@ -178,24 +178,53 @@ export const updateProject = async (req, res) => {
     if (milestones) {
       // Map existing milestone invoice links back to updated milestones if IDs match
       project.milestones = milestones.map((newMilestone) => {
-        // If it is an existing milestone, retain its invoice reference, invoicedAmount, paidAmount & status if not overridden
-        const existing = project.milestones.id(newMilestone._id);
-        if (existing) {
-          return {
-            ...newMilestone,
-            invoice: newMilestone.invoice !== undefined ? newMilestone.invoice : existing.invoice,
-            invoices: newMilestone.invoices !== undefined ? newMilestone.invoices : existing.invoices,
-            invoicedAmount: newMilestone.invoicedAmount !== undefined ? newMilestone.invoicedAmount : existing.invoicedAmount,
-            paidAmount: newMilestone.paidAmount !== undefined ? newMilestone.paidAmount : existing.paidAmount,
-            status: newMilestone.status || existing.status,
-          };
+        let existing = null;
+        if (newMilestone._id) {
+          existing = project.milestones.id(newMilestone._id);
         }
-        return newMilestone;
+
+        const invoiceId = newMilestone.invoice?._id || newMilestone.invoice || (existing ? (existing.invoice?._id || existing.invoice) : null);
+        const invoiceIds = (newMilestone.invoices && newMilestone.invoices.length > 0)
+          ? newMilestone.invoices.map((inv) => inv?._id || inv).filter(Boolean)
+          : (existing && existing.invoices ? existing.invoices.map((inv) => inv?._id || inv).filter(Boolean) : []);
+
+        const invoicedAmount = newMilestone.invoicedAmount !== undefined
+          ? newMilestone.invoicedAmount
+          : (existing ? existing.invoicedAmount : 0);
+
+        const paidAmount = newMilestone.paidAmount !== undefined
+          ? newMilestone.paidAmount
+          : (existing ? existing.paidAmount : 0);
+
+        const status = newMilestone.status || (existing ? existing.status : "Pending");
+
+        const resultMilestone = {
+          name: newMilestone.name,
+          service: newMilestone.service,
+          amount: Number(newMilestone.amount) || 0,
+          dueDate: newMilestone.dueDate,
+          invoice: invoiceId || null,
+          invoices: invoiceIds,
+          invoicedAmount,
+          paidAmount,
+          status,
+          isInclusive: !!newMilestone.isInclusive,
+          isPersonal: !!newMilestone.isPersonal,
+        };
+
+        if (newMilestone._id) {
+          resultMilestone._id = newMilestone._id;
+        }
+
+        return resultMilestone;
       });
     }
 
     const updatedProject = await project.save();
-    const populated = await updatedProject.populate("client");
+    await syncMilestoneInvoiceStatus(updatedProject._id);
+
+    const reloaded = await Project.findById(updatedProject._id);
+    const populated = await reloaded.populate("client");
     await populated.populate("milestones.invoice");
     await populated.populate("milestones.invoices");
     await populated.populate("assignedEmployees", "fullName employeeId companyEmail department designation");

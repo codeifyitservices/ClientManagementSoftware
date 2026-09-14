@@ -363,15 +363,18 @@ export default function InvoicePreviewPage({
   );
 
   // Tax calculations
+  const isNonINR = invoiceData.currency && !invoiceData.currency.includes("INR") && !invoiceData.currency.includes("₹");
+  const isTaxExempt = !!activeClient.isForeign || isNonINR;
+
   const items = invoiceData.items || [];
   let subTotal = 0;
   let totalGstAmount = 0;
   items.forEach((item) => {
     const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : ((item.qty || 1) * (item.rate || 0)));
-    const effectiveGstRate = activeClient.isForeign ? 0 : ((item.gstRate !== undefined && item.gstRate !== null) ? item.gstRate : 18);
-    const gst = item.isInclusive && item.originalAmount > 0
+    const effectiveGstRate = isTaxExempt ? 0 : ((item.gstRate !== undefined && item.gstRate !== null) ? item.gstRate : 18);
+    const gst = (item.isInclusive && item.originalAmount > 0 && !isTaxExempt)
       ? (item.originalAmount - base)
-      : (base * (effectiveGstRate / 100));
+      : (isTaxExempt ? 0 : (base * (effectiveGstRate / 100)));
 
     const roundedBase = Math.round(base * 100) / 100;
     const roundedGst = Math.round(gst * 100) / 100;
@@ -382,7 +385,7 @@ export default function InvoicePreviewPage({
   const grandTotal = subTotal + totalGstAmount;
 
   // Get active item GST rate for informational text
-  const primaryGstRate = (items[0]?.gstRate !== undefined && items[0]?.gstRate !== null) ? items[0].gstRate : 18;
+  const primaryGstRate = isTaxExempt ? 0 : ((items[0]?.gstRate !== undefined && items[0]?.gstRate !== null) ? items[0].gstRate : 18);
 
   const handleBack = () => {
     if (isDummyPreview) {
@@ -577,7 +580,7 @@ export default function InvoicePreviewPage({
                 {subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </span>
 
-              {activeClient.isForeign ? null : isInterstate ? (
+              {isTaxExempt ? null : isInterstate ? (
                 <>
                   <span className="text-slate-600 font-medium">
                     IGST ({primaryGstRate}%)

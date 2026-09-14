@@ -38,7 +38,10 @@ const protect = async (req, res, next) => {
 
       req.user = {
         _id: user._id,
+        employeeId: isEmployee ? user.employeeId : null,
         email: isEmployee ? user.companyEmail : user.email,
+        companyEmail: isEmployee ? user.companyEmail : null,
+        personalEmail: isEmployee ? user.personalEmail : null,
         role: isEmployee ? user.role : "Admin",
         permissions: isEmployee ? user.permissions : [
           "View Employees",

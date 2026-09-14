@@ -7,7 +7,7 @@ class IdleDetector extends EventEmitter {
   constructor() {
     super();
     this.idleTimeoutSeconds = config.idleTimeoutSeconds;
-    this.currentStatus = "Active"; // Active | Idle | On Break | Offline
+    this.currentStatus = "Offline"; // Offline until explicitly paired
     this.isOnBreak = false;
     this.timer = null;
   }

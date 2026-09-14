@@ -1,8 +1,6 @@
 import jwt from "jsonwebtoken";
 import Admin from "../models/adminModel.js";
 import Employee from "../models/employeeModel.js";
-import AgentSession from "../models/agentSessionModel.js";
-import { evaluateAgentSessionStatus } from "./attendanceController.js";
 
 // Generate a signed JWT token valid for 30 days
 const generateToken = (id) => {
@@ -47,27 +45,6 @@ export const login = async (req, res) => {
     if (user && (await user.matchPassword(cleanPassword))) {
       if (isEmployee && user.status === "Inactive") {
         return res.status(403).json({ message: "Your account is inactive. Please contact your manager." });
-      }
-
-      // Check if employee has an active/connected desktop agent
-      if (isEmployee) {
-        const agentSession = await AgentSession.findOne({
-          $or: [
-            { employeeId: user.employeeId },
-            { employeeId: user._id.toString() },
-            { employeeId: user.companyEmail },
-            { employeeId: user.personalEmail },
-          ].filter(Boolean),
-        }).sort({ lastHeartbeatAt: -1 });
-
-        const evalStatus = evaluateAgentSessionStatus(agentSession);
-
-        if (!evalStatus.isAgentConnected && !evalStatus.inGracePeriod) {
-          return res.status(403).json({
-            message: "Access Denied: Desktop Tracker Agent is disconnected. Please ensure the desktop agent is running and connected to your account before logging in.",
-            agentDisconnected: true,
-          });
-        }
       }
 
       res.json({

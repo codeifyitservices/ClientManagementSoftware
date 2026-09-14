@@ -16,12 +16,14 @@ class AuthManager {
   }
 
   getEmployeeId() {
-    return storage.getEmployeeId();
+    const id = storage.getEmployeeId();
+    return id && id !== "EMP-DEFAULT" ? id : null;
   }
 
   isPaired() {
     const token = storage.getDeviceToken();
-    return !!token;
+    const empId = storage.getEmployeeId();
+    return !!(token && empId && empId !== "EMP-DEFAULT");
   }
 
   /**
@@ -43,9 +45,21 @@ class AuthManager {
 
       if (result && result.success && result.deviceToken) {
         storage.setDeviceToken(result.deviceToken);
-        storage.setEmployeeId(result.employeeId || customEmployeeId || "EMP-DEFAULT");
+        storage.setEmployeeId(result.employeeId || customEmployeeId);
         storage.setDeviceId(result.deviceId || this.deviceId);
         storage.setLastSync(new Date().toISOString());
+
+        // Immediately activate presence detection & heartbeat service
+        try {
+          const idleDetector = require("../idle/idleDetector");
+          const heartbeatService = require("../heartbeat/heartbeatService");
+          idleDetector.setStatus("Active");
+          idleDetector.start();
+          heartbeatService.start();
+          await heartbeatService.forceSyncNow();
+        } catch (err) {
+          logger.warn("Could not trigger immediate heartbeat sync", err);
+        }
 
         logger.logPairing("Pairing successful", { employeeId: result.employeeId });
         logger.logLogin(result.employeeId);
@@ -124,6 +138,13 @@ class AuthManager {
       storage.clear();
       // Re-persist hardware device ID so future pairing reuses the same device ID
       storage.setDeviceId(this.deviceId);
+      try {
+        const idleDetector = require("../idle/idleDetector");
+        const heartbeatService = require("../heartbeat/heartbeatService");
+        idleDetector.setStatus("Offline");
+        idleDetector.stop();
+        heartbeatService.stop();
+      } catch (e) {}
     }
   }
 }

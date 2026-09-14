@@ -150,29 +150,32 @@ invoiceSchema.pre("save", async function () {
     }
   }
 
-  if (this.items && this.items.length > 0) {
+  // If any currency other than INR is selected, no tax should be added
+  const isNonINR = this.currency && !this.currency.includes("INR") && !this.currency.includes("₹");
+  const isTaxExempt = isForeign || isNonINR;
 
+  if (this.items && this.items.length > 0) {
     let baseSum = 0;
     let gstSum = 0;
     const descriptions = [];
     const sacCodes = [];
 
     this.items.forEach((item) => {
-      // If client is foreign, force GST rate to 0
-      const effectiveGstRate = isForeign ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
+      // If client is foreign or currency is non-INR, force GST rate to 0
+      const effectiveGstRate = isTaxExempt ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
       item.gstRate = effectiveGstRate;
 
       let itemBase = 0;
       let itemGst = 0;
 
-      if (item.isInclusive && item.originalAmount > 0) {
+      if (item.isInclusive && item.originalAmount > 0 && !isTaxExempt) {
         // Calculate rounded base amount
         itemBase = Math.round(item.originalAmount / (1 + effectiveGstRate / 100));
         // GST is the difference to ensure total matches exactly
         itemGst = item.originalAmount - itemBase;
       } else {
         itemBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
-        itemGst = itemBase * (effectiveGstRate / 100);
+        itemGst = isTaxExempt ? 0 : (itemBase * (effectiveGstRate / 100));
       }
 
       itemBase = Math.round(itemBase * 100) / 100;
@@ -194,11 +197,11 @@ invoiceSchema.pre("save", async function () {
     this.totalAmount = Number((baseSum + gstSum).toFixed(2));
     this.serviceDescription = descriptions.join(", ");
     this.sacCode = sacCodes.length > 0 ? sacCodes[0] : "9983";
-    this.gstRate = this.items.length > 0 ? this.items[0].gstRate : (isForeign ? 0 : 18); // Default rate reference
+    this.gstRate = this.items.length > 0 ? this.items[0].gstRate : (isTaxExempt ? 0 : 18); // Default rate reference
   } else {
     // Fallback if no items provided
     const baseAmount = Number(this.amount) || 0;
-    const rate = isForeign ? 0 : (Number(this.gstRate) || 0);
+    const rate = isTaxExempt ? 0 : (Number(this.gstRate) || 0);
     this.gstRate = rate;
     this.gstAmount = Number((baseAmount * (rate / 100)).toFixed(2));
     this.totalAmount = Number((baseAmount + this.gstAmount).toFixed(2));

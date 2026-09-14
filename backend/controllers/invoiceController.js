@@ -289,7 +289,11 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
         {
           _id: {
             $in: project.milestones.flatMap(
-              (m) => m.invoices || (m.invoice ? [m.invoice] : []),
+              (m) =>
+                (m.invoices || [])
+                  .concat(m.invoice ? [m.invoice] : [])
+                  .map((inv) => (inv?._id || inv)?.toString())
+                  .filter(Boolean),
             ),
           },
         },
@@ -305,11 +309,11 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
       // Find invoices directly associated with milestone m
       const directInvoices = allProjectInvoices.filter(
         (inv) =>
-          inv.milestoneId?.toString() === m._id.toString() ||
+          (inv.milestoneId && inv.milestoneId.toString() === m._id?.toString()) ||
           m.invoices?.some(
-            (invId) => invId.toString() === inv._id.toString(),
+            (invId) => (invId?._id || invId)?.toString() === inv._id.toString(),
           ) ||
-          m.invoice?.toString() === inv._id.toString(),
+          (m.invoice?._id || m.invoice)?.toString() === inv._id.toString(),
       );
 
       let directInvoiced = 0;
@@ -320,12 +324,12 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
         if (!invoiceIds.some((id) => id.toString() === inv._id.toString())) {
           invoiceIds.push(inv._id);
         }
-        const invVal =
-          inv.totalAmount !== undefined &&
-          inv.totalAmount !== null &&
-          inv.totalAmount > 0
-            ? inv.totalAmount
-            : inv.amount || 0;
+
+        // Compare base milestone value with base invoice amount (unless inclusive of GST)
+        const isIncl = !!m.isInclusive || !!project.inclusiveGst;
+        const invVal = isIncl
+          ? (inv.totalAmount !== undefined && inv.totalAmount !== null && inv.totalAmount > 0 ? inv.totalAmount : (inv.amount || 0))
+          : (inv.amount !== undefined && inv.amount !== null && inv.amount > 0 ? inv.amount : (inv.totalAmount || 0));
 
         directInvoiced += invVal;
         if (inv.paymentStatus === "Paid") {
@@ -333,12 +337,27 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
         }
       });
 
-      m.invoices = invoiceIds;
-      m.invoice = invoiceIds[0] || null;
+      if (invoiceIds.length > 0) {
+        m.invoices = invoiceIds;
+        m.invoice = invoiceIds[0];
+      }
+
+      // If this milestone is already marked 'Paid' (either previously settled or fully paid) and has no unpaid direct invoices:
+      const wasAlreadyPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
+      const hasUnpaidDirectInvoices = directInvoices.some((inv) => inv.paymentStatus !== "Paid");
+
+      if (wasAlreadyPaid && !hasUnpaidDirectInvoices) {
+        m.status = "Paid";
+        m.paidAmount = m.amount;
+        m.invoicedAmount = Math.max(m.amount, directInvoiced);
+        // Excess from direct invoices carries over if any
+        carryOverInvoiced = Math.max(0, Math.round((directInvoiced - m.amount) * 100) / 100);
+        carryOverPaid = Math.max(0, Math.round((directPaid - m.amount) * 100) / 100);
+        continue;
+      }
 
       // Add carried-over excess from previous milestone(s)
-      const totalInvoiced =
-        Math.round((directInvoiced + carryOverInvoiced) * 100) / 100;
+      const totalInvoiced = Math.round((directInvoiced + carryOverInvoiced) * 100) / 100;
       const totalPaid = Math.round((directPaid + carryOverPaid) * 100) / 100;
 
       // Amount credited to this milestone is capped at m.amount
@@ -346,14 +365,8 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
       m.paidAmount = Math.min(m.amount, totalPaid);
 
       // Remaining excess cascades to next milestone
-      carryOverInvoiced = Math.max(
-        0,
-        Math.round((totalInvoiced - m.amount) * 100) / 100,
-      );
-      carryOverPaid = Math.max(
-        0,
-        Math.round((totalPaid - m.amount) * 100) / 100,
-      );
+      carryOverInvoiced = Math.max(0, Math.round((totalInvoiced - m.amount) * 100) / 100);
+      carryOverPaid = Math.max(0, Math.round((totalPaid - m.amount) * 100) / 100);
 
       // Set milestone status
       if (m.paidAmount >= m.amount && m.amount > 0) {

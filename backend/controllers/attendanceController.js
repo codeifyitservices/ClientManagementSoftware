@@ -27,6 +27,47 @@ const getTodayDateString = (dateObj = new Date()) => {
 };
 
 /**
+ * Helper to find active agent session by any employee identifier
+ */
+export const findEmployeeAgentSession = async (employeeUser) => {
+  if (!employeeUser) return null;
+  const ids = [
+    employeeUser._id?.toString(),
+    employeeUser._id,
+    employeeUser.employeeId,
+    employeeUser.companyEmail,
+    employeeUser.personalEmail,
+    employeeUser.email,
+  ].filter(Boolean);
+
+  let fullEmp = null;
+  if (employeeUser._id) {
+    fullEmp = await Employee.findById(employeeUser._id);
+    if (fullEmp) {
+      if (fullEmp.employeeId) ids.push(fullEmp.employeeId);
+      if (fullEmp.companyEmail) ids.push(fullEmp.companyEmail);
+      if (fullEmp.personalEmail) ids.push(fullEmp.personalEmail);
+    }
+  }
+
+  const uniqueIds = [...new Set(ids.map((i) => i.toString()))];
+
+  let session = await AgentSession.findOne({
+    $or: uniqueIds.map((id) => ({ employeeId: id })),
+  }).sort({ lastHeartbeatAt: -1 });
+
+  if (!session && employeeUser._id) {
+    const todayStr = getTodayDateString();
+    const att = await Attendance.findOne({ employee: employeeUser._id, date: todayStr });
+    if (att?.deviceId) {
+      session = await AgentSession.findOne({ deviceId: att.deviceId }).sort({ lastHeartbeatAt: -1 });
+    }
+  }
+
+  return session;
+};
+
+/**
  * Helper to evaluate agent connection & 5-minute disconnect grace period
  */
 export const evaluateAgentSessionStatus = (agentSession) => {
@@ -42,8 +83,8 @@ export const evaluateAgentSessionStatus = (agentSession) => {
 
   const now = Date.now();
   const lastHbTime = agentSession.lastHeartbeatAt ? new Date(agentSession.lastHeartbeatAt).getTime() : 0;
-  // Consider heartbeat alive if received within last 45 seconds (heartbeats sent every 5-30s)
-  const isHeartbeatFresh = (now - lastHbTime) < 45000;
+  // Consider heartbeat alive if received within last 90 seconds (heartbeats sent every 5-30s + network jitter)
+  const isHeartbeatFresh = (now - lastHbTime) < 90000;
   const isExplicitOffline = agentSession.currentStatus === "Offline" || agentSession.currentStatus === "Disconnected";
 
   // Agent is actively connected ONLY if heartbeat is fresh and agent is not offline
@@ -64,12 +105,11 @@ export const evaluateAgentSessionStatus = (agentSession) => {
   const isDisconnectedOver5Mins = !isAgentConnected && (disconnectElapsedMs > 300000);
 
   // Marked idle if:
-  // 1. Idle time on desktop >= 15 mins (900s) OR explicit idle status
+  // 1. Idle time on desktop >= 15 mins (900s) OR explicit idle status from desktop idle detector
   // 2. OR agent has been closed / disconnected for MORE than 5 minutes (300,000 ms)
   const isAgentIdle =
-    (agentSession.idleTimeSeconds >= 900) ||
+    (typeof agentSession.idleTimeSeconds === "number" && agentSession.idleTimeSeconds >= 900) ||
     (agentSession.currentStatus === "Idle") ||
-    (agentSession.currentStatus === "Inactive") ||
     isDisconnectedOver5Mins;
 
   return {
@@ -106,14 +146,7 @@ export const checkIn = async (req, res) => {
     // Check desktop agent connection status and block check-in if agent is disconnected
     let isAgentConnected = false;
     if (req.user?.role === "Employee") {
-      const agentSession = await AgentSession.findOne({
-        $or: [
-          { employeeId: employee.employeeId },
-          { employeeId: employee._id.toString() },
-          { employeeId: employee.companyEmail },
-          { employeeId: employee.personalEmail },
-        ].filter(Boolean),
-      }).sort({ lastHeartbeatAt: -1 });
+      const agentSession = await findEmployeeAgentSession(employee);
 
       const evalStatus = evaluateAgentSessionStatus(agentSession);
       isAgentConnected = evalStatus.isAgentConnected;
@@ -528,12 +561,7 @@ export const getMyAttendanceSession = async (req, res) => {
     const attendance = await Attendance.findOne({ employee: req.user._id, date: queryDate }).populate("employee", "fullName name companyEmail email department employeeId role");
 
     // Fetch desktop agent pairing session for connection status
-    const agentSession = await AgentSession.findOne({
-      $or: [
-        { employeeId: req.user.employeeId },
-        { employeeId: req.user._id.toString() }
-      ]
-    }).sort({ lastHeartbeatAt: -1 });
+    const agentSession = await findEmployeeAgentSession(req.user);
     
     const {
       isAgentConnected,
@@ -600,16 +628,42 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
         $or: [
           { employeeId: employeeCustomId },
           ...(isObjectId ? [{ _id: employeeCustomId }] : []),
+          { companyEmail: employeeCustomId },
+          { personalEmail: employeeCustomId },
+          { email: employeeCustomId },
         ],
       });
     }
 
-    if (!employee) return;
+    if (!employee && deviceId) {
+      const agentSession = await AgentSession.findOne({ deviceId });
+      if (agentSession?.employeeId && agentSession.employeeId !== "EMP-DEFAULT") {
+        const mongoose = await import("mongoose");
+        const isObjectId = mongoose.default.Types.ObjectId.isValid(agentSession.employeeId);
+        employee = await Employee.findOne({
+          $or: [
+            { employeeId: agentSession.employeeId },
+            ...(isObjectId ? [{ _id: agentSession.employeeId }] : []),
+            { companyEmail: agentSession.employeeId },
+            { personalEmail: agentSession.employeeId },
+            { email: agentSession.employeeId },
+          ],
+        });
+      }
+      if (!employee) {
+        const att = await Attendance.findOne({ deviceId, date: todayStr });
+        if (att?.employee) {
+          employee = await Employee.findById(att.employee);
+        }
+      }
+    }
+
+    if (!employee) return { serverStatus: status };
 
     let attendance = await Attendance.findOne({ employee: employee._id, date: todayStr });
-    if (!attendance) return; // Attendance starts only after explicit check-in
+    if (!attendance) return { serverStatus: status }; // Attendance starts only after explicit check-in
 
-    if (attendance.currentStatus === "Checked Out") return;
+    if (attendance.currentStatus === "Checked Out") return { serverStatus: "Checked Out" };
 
     const oldStatus = attendance.currentStatus;
     const oldLastActivityAt = attendance.lastActivityAt || new Date();
@@ -632,7 +686,10 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
       return { serverStatus: "On Break" };
     }
 
-    if (status === "Idle" || status === "Inactive" || (idleTimeSeconds >= 900)) {
+    const isExplicitIdle = status === "Idle" || (typeof idleTimeSeconds === "number" && idleTimeSeconds >= 900);
+    const isExplicitOffline = status === "Offline" || status === "Disconnected";
+
+    if (isExplicitIdle) {
       if (oldStatus !== "Inactive" && oldStatus !== "Idle") {
         attendance.currentStatus = "Inactive";
         const initialIdleMins = Math.round((idleTimeSeconds || 900) / 60);
@@ -645,9 +702,10 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
       } else {
         attendance.currentStatus = "Inactive";
       }
-    } else if (status === "Offline" || status === "Disconnected") {
+    } else if (isExplicitOffline) {
       // 5-minute grace window applies before marking inactive. Stale session checker & session poller will transition after 5 mins.
-    } else if ((status === "Active" || status === "Working") && (idleTimeSeconds < 900)) {
+    } else {
+      // Reconnected / active desktop work
       if (oldStatus !== "Working") {
         if (oldStatus === "Idle" || oldStatus === "Inactive") {
           const elapsedMins = (Date.now() - new Date(oldLastActivityAt).getTime()) / 60000;
@@ -656,7 +714,7 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
         attendance.timeline.push({
           eventType: "Became Active",
           timestamp: new Date(),
-          description: "User resumed active desktop work",
+          description: "User resumed active desktop work (Auto-Sync)",
           source: "Desktop Agent",
         });
       }
@@ -707,12 +765,7 @@ export const getTodaySummary = async (req, res) => {
       const myRecord = await Attendance.findOne({ employee: userId, date: targetDate });
       
       // Fetch desktop agent pairing session for connection status
-      const agentSession = await AgentSession.findOne({
-        $or: [
-          { employeeId: req.user.employeeId },
-          { employeeId: req.user._id.toString() }
-        ]
-      }).sort({ lastHeartbeatAt: -1 });
+      const agentSession = await findEmployeeAgentSession(req.user);
       const {
         isAgentConnected,
         isAgentIdle,

@@ -26,9 +26,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       
       elAppVersion.textContent = `v${state.version || "1.0.0"}`;
       elDeviceId.textContent = state.deviceId || "Unknown";
-      elEmployeeId.textContent = state.employeeId || "Not Paired";
-      elActivityState.textContent = state.currentStatus || "Active";
-      elLastSyncTime.textContent = state.lastSync ? new Date(state.lastSync).toLocaleTimeString() : "Never";
+      elEmployeeId.textContent = state.isPaired ? (state.employeeId || "Paired") : "Not Paired";
+      elActivityState.textContent = state.isPaired ? (state.currentStatus || "Offline") : "Unpaired";
+      elLastSyncTime.textContent = state.isPaired && state.lastSync ? new Date(state.lastSync).toLocaleTimeString() : "Never";
 
       if (elCfgIdle) elCfgIdle.textContent = `${(state.config?.idleTimeoutSeconds || 900) / 60} minutes`;
       if (elCfgComputer) elCfgComputer.textContent = state.computerName || "Windows-PC";

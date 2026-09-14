@@ -506,13 +506,14 @@ export default function InvoiceFormPage({
     // Determine GST Rate and Pricing
     const isForeign = !!activeClient.isForeign;
     const isPersonal = !!(selectedM.isPersonal || activeProject.isPersonalAccount);
+    const isProjectNonINR = activeProject.currency && !activeProject.currency.includes("INR") && !activeProject.currency.includes("₹");
 
     // Find matching service from backendServices if available
     const matchingService = backendServices.find(
       (s) => s.name?.toLowerCase() === selectedM.service?.toLowerCase()
     );
 
-    const effectiveGstRate = isForeign || isPersonal ? 0 : (matchingService?.gstRate !== undefined ? matchingService.gstRate : 18);
+    const effectiveGstRate = isForeign || isPersonal || isProjectNonINR ? 0 : (matchingService?.gstRate !== undefined ? matchingService.gstRate : 18);
     const sacCode = matchingService?.sacCode || "998314";
 
     // Auto-fill amount defaults to remaining un-invoiced milestone balance
@@ -718,6 +719,10 @@ export default function InvoiceFormPage({
     ? `${clientStateName} (${clientStateCode}) (${isInterstate ? "Interstate" : "Intrastate"})`
     : "Intrastate";
 
+  // Check if currency is not INR or client is foreign
+  const isNonINR = currency && !currency.includes("INR") && !currency.includes("₹");
+  const isTaxExempt = !!activeClient.isForeign || isNonINR;
+
   // Tax calculations
   let subTotal = 0;
   let totalGstAmount = 0;
@@ -727,11 +732,11 @@ export default function InvoiceFormPage({
         ? item.amount
         : item.rate || 0,
     );
-    const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
-    const base = item.isInclusive
+    const effectiveGstRate = isTaxExempt ? 0 : item.gstRate;
+    const base = (item.isInclusive && !isTaxExempt)
       ? Math.round(entered / (1 + effectiveGstRate / 100))
       : entered;
-    const gst = item.isInclusive
+    const gst = (item.isInclusive && !isTaxExempt)
       ? entered - base
       : base * (effectiveGstRate / 100);
 
@@ -744,13 +749,15 @@ export default function InvoiceFormPage({
   const grandTotal = subTotal + totalGstAmount;
 
   // Get active item GST rate for informational text
-  const primaryGstRate = activeClient.isForeign
+  const primaryGstRate = isTaxExempt
     ? 0
     : items[0]?.gstRate !== undefined && items[0]?.gstRate !== null
       ? items[0].gstRate
       : 18;
-  const taxTypeText = activeClient.isForeign
-    ? "No Tax (Foreign client)"
+  const taxTypeText = isTaxExempt
+    ? isNonINR
+      ? "No Tax (Foreign Currency / Export)"
+      : "No Tax (Foreign client)"
     : isInterstate
       ? `IGST (${primaryGstRate}%)`
       : `CGST (${primaryGstRate / 2}%) + SGST (${primaryGstRate / 2}%)`;
@@ -781,8 +788,8 @@ export default function InvoiceFormPage({
             ? item.amount
             : item.rate || 0,
         );
-        const effectiveGstRate = activeClient.isForeign ? 0 : item.gstRate;
-        const base = item.isInclusive
+        const effectiveGstRate = isTaxExempt ? 0 : item.gstRate;
+        const base = (item.isInclusive && !isTaxExempt)
           ? Math.round(entered / (1 + effectiveGstRate / 100))
           : entered;
         return {
@@ -790,7 +797,7 @@ export default function InvoiceFormPage({
           amount: base,
           rate: base,
           gstRate: effectiveGstRate,
-          isInclusive: !!item.isInclusive,
+          isInclusive: isTaxExempt ? false : !!item.isInclusive,
           originalAmount: entered,
         };
       });
@@ -1213,13 +1220,13 @@ export default function InvoiceFormPage({
                     ? item.amount
                     : item.rate || 0,
                 );
-                const effectiveGstRate = activeClient.isForeign
+                const effectiveGstRate = isTaxExempt
                   ? 0
                   : item.gstRate;
-                const lineTaxable = item.isInclusive
+                const lineTaxable = (item.isInclusive && !isTaxExempt)
                   ? Math.round(entered / (1 + effectiveGstRate / 100))
                   : entered;
-                const lineTotal = item.isInclusive
+                const lineTotal = (item.isInclusive && !isTaxExempt)
                   ? entered
                   : lineTaxable * (1 + effectiveGstRate / 100);
 
@@ -1290,15 +1297,13 @@ export default function InvoiceFormPage({
                         placeholder="0"
                         className="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
                       />
-                      {item.isInclusive && (
+                      {item.isInclusive && !isTaxExempt && (
                         <span className="block mt-1 text-[9px] font-bold text-slate-400/90 text-right select-none">
                           Base: {getCurrencySymbol(currency)}{" "}
                           {Math.round(
                             (Number(item.amount) || 0) /
                               (1 +
-                                (activeClient.isForeign
-                                  ? 0
-                                  : item.gstRate || 18) /
+                                (item.gstRate || 18) /
                                   100),
                           )}
                         </span>
@@ -1309,7 +1314,8 @@ export default function InvoiceFormPage({
                     <div className="self-start flex justify-center pt-2">
                       <input
                         type="checkbox"
-                        checked={!!item.isInclusive}
+                        checked={!isTaxExempt && !!item.isInclusive}
+                        disabled={isTaxExempt}
                         onChange={(e) =>
                           handleItemChange(
                             index,
@@ -1317,7 +1323,7 @@ export default function InvoiceFormPage({
                             e.target.checked,
                           )
                         }
-                        className="h-4 w-4 rounded border-slate-300 text-[#5D5FEF] focus:ring-[#5D5FEF] cursor-pointer"
+                        className="h-4 w-4 rounded border-slate-300 text-[#5D5FEF] focus:ring-[#5D5FEF] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -1325,8 +1331,8 @@ export default function InvoiceFormPage({
                     <input
                       type="number"
                       min="0"
-                      value={activeClient.isForeign ? 0 : item.gstRate}
-                      disabled={activeClient.isForeign}
+                      value={isTaxExempt ? 0 : item.gstRate}
+                      disabled={isTaxExempt}
                       onChange={(e) =>
                         handleItemChange(index, "gstRate", e.target.value)
                       }
@@ -1386,7 +1392,7 @@ export default function InvoiceFormPage({
               </div>
               <div>
                 <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-400 block">
-                  {activeClient.isForeign ? "GST (0%)" : "GST Amount"}
+                  {isTaxExempt ? "GST (0%)" : "GST Amount"}
                 </span>
                 <span className="text-sm font-bold text-indigo-300">
                   {formatWithINRConversion(totalGstAmount, currency)}
@@ -1404,11 +1410,13 @@ export default function InvoiceFormPage({
           {/* GST Auto Calculations Info Box */}
           <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100/50 text-xs text-indigo-950/80 space-y-1 select-none">
             <h4 className="font-extrabold text-[#5D5FEF]">
-              {activeClient.isForeign
-                ? "No GST applied for Foreign Client"
+              {isTaxExempt
+                ? isNonINR
+                  ? `No Tax / GST applied for Foreign Currency (${currency.split(" ")[0]})`
+                  : "No GST applied for Foreign Client"
                 : "GST is calculated automatically"}
             </h4>
-            {!activeClient.isForeign && (
+            {!isTaxExempt && (
               <>
                 <p className="font-semibold text-slate-500">
                   Place of Supply:{" "}

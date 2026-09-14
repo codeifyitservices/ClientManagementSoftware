@@ -80,6 +80,14 @@ class HeartbeatService extends EventEmitter {
 
     const response = await agentApi.sendHeartbeat(payload);
 
+    if (response && response.pairingValid === false) {
+      logger.warn("Server returned invalid or expired pairing. Resetting to unpaired state.");
+      this.stop();
+      await authManager.logout();
+      this.emit("agent-unpaired");
+      return;
+    }
+
     if (response && response.success) {
       this.consecutiveFailures = 0;
       storage.setLastSync(new Date().toISOString());

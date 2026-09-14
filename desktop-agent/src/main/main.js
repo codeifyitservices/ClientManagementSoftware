@@ -143,11 +143,15 @@ app.whenReady().then(() => {
     mainWindow.show();
   });
 
-  // Start System Idle Monitoring
-  idleDetector.start();
-
-  // Start Heartbeat & Presence Sync
-  heartbeatService.start();
+  // Only start presence tracking and heartbeats if already paired with an employee account
+  if (authManager.isPaired()) {
+    idleDetector.setStatus("Active");
+    idleDetector.start();
+    heartbeatService.start();
+  } else {
+    idleDetector.setStatus("Offline");
+    logger.info("Agent running in unpaired state. Awaiting pairing from web application.");
+  }
 
   // Initialize Auto Updater
   autoUpdater.init();

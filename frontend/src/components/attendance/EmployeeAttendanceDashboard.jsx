@@ -331,7 +331,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const isAgentConnected = sessionData?.isAgentConnected;
   const inGracePeriod = sessionData?.inGracePeriod;
 
-  const currentStatusVal = summary?.myStatus || "Not Checked In";
+  const currentStatusVal = sessionData?.currentStatus || summary?.myStatus || "Not Checked In";
   const checkInVal = attendance?.checkInTime
     ? formatTime(attendance.checkInTime)
     : "--:--";

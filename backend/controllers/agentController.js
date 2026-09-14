@@ -62,6 +62,7 @@ export const pairAgentDevice = async (req, res) => {
       if (employeeId) session.employeeId = employeeId;
       session.currentStatus = "Active";
       session.lastHeartbeatAt = new Date();
+      session.disconnectedAt = null;
       await session.save();
     } else {
       session = await AgentSession.create({
@@ -74,8 +75,22 @@ export const pairAgentDevice = async (req, res) => {
         agentVersion: agentVersion || "1.0.0",
         currentStatus: "Active",
         lastHeartbeatAt: new Date(),
+        disconnectedAt: null,
         ipAddress: req.ip,
       });
+    }
+
+    // Trigger immediate presence sync with attendance status
+    try {
+      await syncAgentActivity({
+        deviceId: session.deviceId,
+        employeeCustomId: session.employeeId,
+        status: session.currentStatus,
+        idleTimeSeconds: 0,
+        computerName: session.computerName,
+      });
+    } catch (syncErr) {
+      console.error("Error syncing activity on pair:", syncErr);
     }
 
     return res.status(200).json({
@@ -115,29 +130,19 @@ export const receiveHeartbeat = async (req, res) => {
 
     let session = await AgentSession.findOne({ deviceId });
 
-    if (!session) {
-      // Create session if first heartbeat without prior explicit pairing in dev
-      const deviceToken = deviceTokenHeader || "DEV-" + crypto.randomBytes(16).toString("hex");
-      session = await AgentSession.create({
-        deviceId,
-        employeeId: employeeId || "EMP-DEFAULT",
-        deviceToken,
-        isPaired: true,
-        computerName: computerName || "Unknown",
-        operatingSystem: os || "Windows",
-        agentVersion: agentVersion || "1.0.0",
-        currentStatus: status || "Active",
-        idleTimeSeconds: idleTime || 0,
-        lastHeartbeatAt: new Date(),
-        ipAddress: req.ip,
+    if (!session || !session.isPaired || !session.employeeId || session.employeeId === "EMP-DEFAULT") {
+      return res.status(200).json({
+        success: false,
+        pairingValid: false,
+        message: "Device is not paired. Please pair the desktop agent from the web application first.",
       });
     } else {
-      session.currentStatus = status || session.currentStatus;
-      session.idleTimeSeconds = typeof idleTime === "number" ? idleTime : session.idleTimeSeconds;
+      session.currentStatus = (status && status !== "Offline" && status !== "Disconnected") ? status : "Active";
+      session.idleTimeSeconds = typeof idleTime === "number" ? idleTime : 0;
       session.agentVersion = agentVersion || session.agentVersion;
       session.computerName = computerName || session.computerName;
       session.operatingSystem = os || session.operatingSystem;
-      if (employeeId) session.employeeId = employeeId;
+      if (employeeId && employeeId !== "EMP-DEFAULT") session.employeeId = employeeId;
       session.lastHeartbeatAt = new Date();
       session.disconnectedAt = null;
       await session.save();

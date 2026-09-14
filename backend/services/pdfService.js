@@ -192,12 +192,15 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   let subTotal = 0;
   let totalGst = 0;
 
+  const isNonINR = (invoice.currency && !invoice.currency.includes("INR") && !invoice.currency.includes("₹")) || (pdfCurrency !== "INR" && pdfCurrency !== "Rs." && pdfCurrency !== "₹");
+  const isTaxExempt = !!client.isForeign || isNonINR;
+
   items.forEach((item, idx) => {
     const lineBase = Number(item.amount !== undefined && item.amount !== null && item.amount !== 0 ? item.amount : ((item.qty || 1) * (item.rate || 0))) || 0;
-    const effectiveGstRate = client.isForeign ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
-    const lineGst = item.isInclusive && item.originalAmount > 0
+    const effectiveGstRate = isTaxExempt ? 0 : (item.gstRate !== undefined && item.gstRate !== null ? item.gstRate : 18);
+    const lineGst = (item.isInclusive && item.originalAmount > 0 && !isTaxExempt)
       ? (item.originalAmount - lineBase)
-      : (lineBase * (effectiveGstRate / 100));
+      : (isTaxExempt ? 0 : (lineBase * (effectiveGstRate / 100)));
 
     const roundedBase = Math.round(lineBase * 100) / 100;
     const roundedGst = Math.round(lineGst * 100) / 100;
@@ -263,7 +266,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   const companyStateCode = companyGst ? companyGst.slice(0, 2) : "06";
   const clientStateCode = detectStateCode(client);
   const isInterstate = !!(clientStateCode && companyStateCode !== clientStateCode);
-  const primaryRate = client.isForeign ? 0 : (items[0]?.gstRate !== undefined && items[0]?.gstRate !== null ? items[0].gstRate : 18);
+  const primaryRate = isTaxExempt ? 0 : (items[0]?.gstRate !== undefined && items[0]?.gstRate !== null ? items[0].gstRate : 18);
 
   doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
     .text("Sub Total:", totalBlockX, currentY, { width: 110, align: "right" });
@@ -271,7 +274,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
     .text(`${pdfCurrency} ${subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 450, currentY, { width: 100, align: "right" });
 
   currentY += 16;
-  if (client.isForeign) {
+  if (isTaxExempt) {
     // Completely remove GST row from the totals breakdown - do nothing
   } else if (isInterstate) {
     doc.font("Helvetica").fontSize(8.5).fillColor("#475569")
