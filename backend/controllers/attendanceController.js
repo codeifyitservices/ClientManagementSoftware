@@ -48,16 +48,31 @@ export const checkIn = async (req, res) => {
       return res.status(404).json({ success: false, message: "Employee not found" });
     }
 
-    // Check desktop agent connection status without hard blocking web check-ins
+    // Check desktop agent connection status and block check-in if agent is disconnected
     let isAgentConnected = false;
     if (req.user?.role === "Employee") {
       const agentSession = await AgentSession.findOne({
         $or: [
           { employeeId: employee.employeeId },
-          { employeeId: employee._id.toString() }
-        ]
+          { employeeId: employee._id.toString() },
+          { employeeId: employee.companyEmail },
+          { employeeId: employee.personalEmail },
+        ].filter(Boolean),
       }).sort({ lastHeartbeatAt: -1 });
-      isAgentConnected = !!(agentSession && agentSession.isPaired && (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000));
+      isAgentConnected = !!(
+        agentSession &&
+        agentSession.isPaired &&
+        agentSession.lastHeartbeatAt &&
+        (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000)
+      );
+
+      if (!isAgentConnected) {
+        return res.status(403).json({
+          success: false,
+          message: "Access Denied: Desktop Tracker Agent is disconnected. You must have the desktop tracker agent running and connected to your account to check in.",
+          agentDisconnected: true,
+        });
+      }
     }
 
     // ── Attendance Security Validation (IP & Geolocation Whitelist) ──
@@ -236,6 +251,26 @@ export const startBreak = async (req, res) => {
 
     await attendance.save();
 
+    // Immediately signal desktop agent session to On Break
+    try {
+      await AgentSession.updateMany(
+        {
+          $or: [
+            { employeeId: employeeId?.toString() },
+            { employeeId: attendance.employeeCustomId },
+          ].filter(Boolean),
+        },
+        {
+          $set: {
+            currentStatus: "On Break",
+            lastHeartbeatAt: now,
+          },
+        }
+      );
+    } catch (agentErr) {
+      console.error("Error updating agent session on startBreak:", agentErr);
+    }
+
     return res.status(200).json({
       success: true,
       message: "Break started",
@@ -290,6 +325,26 @@ export const endBreak = async (req, res) => {
     });
 
     await attendance.save();
+
+    // Immediately signal desktop agent session to Active
+    try {
+      await AgentSession.updateMany(
+        {
+          $or: [
+            { employeeId: employeeId?.toString() },
+            { employeeId: attendance.employeeCustomId },
+          ].filter(Boolean),
+        },
+        {
+          $set: {
+            currentStatus: "Active",
+            lastHeartbeatAt: now,
+          },
+        }
+      );
+    } catch (agentErr) {
+      console.error("Error updating agent session on endBreak:", agentErr);
+    }
 
     return res.status(200).json({
       success: true,
@@ -504,55 +559,13 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
     attendance.systemIdleSeconds = idleTimeSeconds;
     attendance.lastActivityAt = new Date();
 
-    // Map Desktop Agent Status -> Attendance Status rules
-    const lastBreak = attendance.breaks[attendance.breaks.length - 1];
-    const isBreakClosedOnServer = lastBreak && lastBreak.endTime;
-
-    if (status === "On Break" && isBreakClosedOnServer) {
-      // User must have resumed work from the Web App, force Agent back to Working!
-      if (attendance.currentStatus !== "Working") {
-        attendance.currentStatus = "Working";
-        await attendance.save();
-      }
-      return { serverStatus: "Working" };
-    }
-
-    if ((status === "Active" || status === "Working") && oldStatus === "On Break") {
-      // User resumed work from the Desktop Agent: close the break in the database
-      if (lastBreak && !lastBreak.endTime) {
-        lastBreak.endTime = new Date();
-        lastBreak.durationMinutes = Math.max(1, Math.round((lastBreak.endTime - lastBreak.startTime) / 60000));
-        attendance.totalBreakMinutes += lastBreak.durationMinutes;
-      }
-      attendance.currentStatus = "Working";
-      attendance.timeline.push({
-        eventType: "Break Ended",
-        timestamp: new Date(),
-        description: "Status changed to Working via Desktop Agent",
-        source: "Desktop Agent",
-      });
-      await attendance.save();
-      return { serverStatus: "Working" };
-    }
-
+    // 2. Breaks are managed exclusively from the website
     if (oldStatus === "On Break") {
-      // Keep "On Break" status if break is still open
+      // While on break on website, enforce On Break status to the desktop agent
       return { serverStatus: "On Break" };
     }
 
-    if (status === "On Break" && oldStatus !== "On Break") {
-      attendance.currentStatus = "On Break";
-      attendance.breaks.push({
-        startTime: new Date(),
-        breakReason: "General Break (Agent)",
-      });
-      attendance.timeline.push({
-        eventType: "Break Started",
-        timestamp: new Date(),
-        description: "Status changed to On Break via Desktop Agent",
-        source: "Desktop Agent",
-      });
-    } else if (status === "Idle" || status === "Inactive" || (idleTimeSeconds >= 900)) {
+    if (status === "Idle" || status === "Inactive" || (idleTimeSeconds >= 900)) {
       if (oldStatus !== "Inactive" && oldStatus !== "Idle") {
         attendance.currentStatus = "Inactive";
         const initialIdleMins = Math.round((idleTimeSeconds || 900) / 60);

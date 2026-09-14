@@ -166,7 +166,7 @@ app.whenReady().then(() => {
       employeeId: authManager.getEmployeeId(),
       deviceId: authManager.getDeviceId(),
       currentStatus: idleDetector.getCurrentStatus(),
-      isOnBreak: idleDetector.isManualBreak(),
+      isOnBreak: idleDetector.isBreak(),
       lastSync: storage.getLastSync(),
       computerName: machineInfo.getComputerName(),
       version: config.version,
@@ -182,12 +182,6 @@ app.whenReady().then(() => {
     const res = await authManager.pairWithToken(pairingToken);
     trayManager.updateTrayStatus(idleDetector.getCurrentStatus());
     return res;
-  });
-
-  ipcMain.handle("agent:toggle-break", (event, onBreak) => {
-    idleDetector.setManualBreak(onBreak);
-    trayManager.updateTrayStatus(idleDetector.getCurrentStatus());
-    return { success: true, status: idleDetector.getCurrentStatus() };
   });
 
   ipcMain.handle("agent:force-sync", async () => {

@@ -25,9 +25,25 @@ const milestoneSchema = new mongoose.Schema({
     ref: "Invoice",
     default: null,
   },
+  invoices: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Invoice",
+    },
+  ],
+  invoicedAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  paidAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   status: {
     type: String,
-    enum: ["Pending", "Invoiced", "Paid"],
+    enum: ["Pending", "Partially Invoiced", "Invoiced", "Partially Paid", "Paid"],
     default: "Pending",
   },
   isInclusive: {

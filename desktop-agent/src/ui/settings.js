@@ -10,7 +10,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const elPairingTokenInput = document.getElementById("pairingTokenInput");
   const elPairingError = document.getElementById("pairingError");
   const elBtnPair = document.getElementById("btnPair");
-  const elBtnToggleBreak = document.getElementById("btnToggleBreak");
   const elBtnForceSync = document.getElementById("btnForceSync");
   const elBtnCheckUpdates = document.getElementById("btnCheckUpdates");
   const elBtnLogout = document.getElementById("btnLogout");
@@ -64,13 +63,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             break;
         }
       }
-
-      // Update Break Button Text
-      if (state.isOnBreak) {
-        elBtnToggleBreak.textContent = "▶️ Resume Work";
-      } else {
-        elBtnToggleBreak.textContent = "⏸️ Take Break";
-      }
     } catch (err) {
       console.error("Failed to load agent status", err);
     }
@@ -101,14 +93,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       elBtnPair.disabled = false;
       elBtnPair.textContent = "Pair Device";
     }
-  });
-
-  // Handle Break Toggle
-  elBtnToggleBreak.addEventListener("click", async () => {
-    const state = await window.electronAPI.getAgentStatus();
-    const newBreakState = !state.isOnBreak;
-    await window.electronAPI.toggleBreak(newBreakState);
-    await refreshAgentStatus();
   });
 
   // Handle Manual Force Sync

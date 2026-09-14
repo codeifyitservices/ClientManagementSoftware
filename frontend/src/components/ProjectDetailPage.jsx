@@ -84,20 +84,29 @@ export default function ProjectDetailPage({
     }
   };
 
-  // Generate invoice for selected milestone
-  const handleGenerateInvoice = () => {
-    if (selectedMilestoneIdx === null || !project) return;
-    const milestone = project.milestones[selectedMilestoneIdx];
-    if (milestone.status !== "Pending") return;
+  // Generate invoice for selected milestone (or specific milestoneIdx)
+  const handleGenerateInvoice = (milestoneIdx = selectedMilestoneIdx) => {
+    if (milestoneIdx === null || !project || !project.milestones) return;
+    const milestone = project.milestones[milestoneIdx];
+    if (!milestone) return;
+
+    const isPaid = milestone.status === "Paid" || (milestone.paidAmount !== undefined && milestone.paidAmount >= milestone.amount && milestone.amount > 0);
+    if (isPaid) return;
+
+    const invoiced = milestone.invoicedAmount !== undefined ? milestone.invoicedAmount : (milestone.invoice ? milestone.amount : 0);
+    const remainingAmount = Math.max(0, milestone.amount - invoiced);
+    if (remainingAmount <= 0) return;
+
+    const amountToBill = remainingAmount > 0 ? remainingAmount : milestone.amount;
 
     const isForeign = project.client?.isForeign === true;
-    const isPersonal = milestone.isPersonal === true;
+    const isPersonal = milestone.isPersonal === true || project.isPersonalAccount === true;
     const gstRate = (isForeign || isPersonal) ? 0 : 18;
 
     const isInclusive = milestone.isInclusive === true;
-    let rate = milestone.amount;
+    let rate = amountToBill;
     if (isInclusive && gstRate > 0) {
-      rate = Math.round(milestone.amount / (1 + gstRate / 100));
+      rate = Math.round(amountToBill / (1 + gstRate / 100));
     }
 
     const draftInvoice = {
@@ -107,14 +116,16 @@ export default function ProjectDetailPage({
       items: [
         {
           serviceName: milestone.service,
-          description: milestone.name,
+          description: invoiced > 0
+            ? `${project.projectName} - ${milestone.name} (Part Payment)`
+            : `${project.projectName} - ${milestone.name}`,
           sacCode: "998314",
           qty: 1,
           rate: rate,
           amount: rate,
           gstRate: gstRate,
           isInclusive: isInclusive && gstRate > 0,
-          originalAmount: milestone.amount,
+          originalAmount: amountToBill,
         },
       ],
       projectId: project._id,
@@ -152,17 +163,47 @@ export default function ProjectDetailPage({
     }
   };
 
-  const handleViewInvoicePreview = (invoiceId) => {
-    const fullInvoice = invoices.find((inv) => inv._id === invoiceId);
-    if (fullInvoice) {
+  const handleViewInvoicePreview = async (invRef) => {
+    if (!invRef) return;
+    let targetInv = null;
+    const invIdOrNum = typeof invRef === "object" ? (invRef._id || invRef.invoiceNumber) : invRef;
+
+    // Check if invRef is already a fully populated invoice object
+    if (typeof invRef === "object" && invRef.items && invRef.items.length > 0 && invRef.client) {
+      targetInv = invRef;
+    }
+
+    // Check in local invoices list if available
+    if (!targetInv && invoices && invoices.length > 0) {
+      targetInv = invoices.find((inv) => inv._id === invIdOrNum || inv.invoiceNumber === invIdOrNum);
+    }
+
+    // Fetch from backend API if not found or incomplete
+    if (!targetInv || !targetInv.items || targetInv.items.length === 0) {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/invoices/${invIdOrNum}`, {
+          headers: {
+            Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+          },
+        });
+        if (res.ok) {
+          targetInv = await res.json();
+        }
+      } catch (err) {
+        console.error("Error fetching invoice for preview:", err);
+      }
+    }
+
+    if (targetInv) {
       navigate("/invoices/preview", {
         state: {
-          invoiceData: fullInvoice,
+          invoiceData: targetInv,
+          readOnly: true,
           returnTo: `/projects/${project._id}`,
         },
       });
     } else {
-      navigate(`/invoices/${invoiceId}/edit`);
+      alert("Unable to load invoice preview.");
     }
   };
 
@@ -205,20 +246,40 @@ export default function ProjectDetailPage({
     }
   }
 
+  // Filter invoices linked to this project
+  const projectInvoices = invoices.filter((inv) =>
+    (inv.projectId && (inv.projectId?._id || inv.projectId)?.toString() === project._id?.toString()) ||
+    project.milestones?.some((m) =>
+      (m.invoices && m.invoices.some((mi) => (mi?._id || mi)?.toString() === inv._id?.toString())) ||
+      (m.invoice?._id || m.invoice)?.toString() === inv._id?.toString()
+    )
+  );
+
   let received = 0;
   let invoicesCount = 0;
   let nextDueMilestone = null;
 
   project.milestones?.forEach((m) => {
-    if (m.status === "Paid") {
-      received += m.amount || 0;
-    } else {
+    const paid = (m.status === "Paid")
+      ? (m.amount || m.paidAmount || 0)
+      : (m.paidAmount || 0);
+    received += paid;
+    if (paid < m.amount) {
       if (!nextDueMilestone || new Date(m.dueDate) < new Date(nextDueMilestone.dueDate)) {
         nextDueMilestone = m;
       }
     }
-    if (m.invoice) invoicesCount++;
+    const invList = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
+    invoicesCount += invList.length;
   });
+
+  if ((!project.milestones || project.milestones.length === 0) && projectInvoices.length > 0) {
+    projectInvoices.forEach((inv) => {
+      if (inv.paymentStatus === "Paid") {
+        received += (inv.totalAmount || inv.amount || 0);
+      }
+    });
+  }
 
   const outstanding = Math.max(0, projectValue - received);
 
@@ -233,11 +294,6 @@ export default function ProjectDetailPage({
   const baseProgressPercent = totalBaseValue > 0 ? Math.min(100, Math.round((baseReceived / totalBaseValue) * 100)) : 0;
   const taxProgressPercent = (hasGst && totalTaxValue > 0) ? Math.min(100, Math.round((taxReceived / totalTaxValue) * 100)) : 0;
 
-  // Filter invoices linked to this project
-  const projectInvoices = invoices.filter((inv) =>
-    project.milestones?.some((m) => m.invoice?._id === inv._id || m.invoice === inv._id)
-  );
-
   const getStatusBadgeClass = (status) => {
     if (status === "Completed") return "bg-emerald-50 text-emerald-700 border-emerald-100";
     return "bg-blue-50 text-blue-700 border-blue-100";
@@ -245,8 +301,18 @@ export default function ProjectDetailPage({
 
   const getMilestoneCircleColor = (status, idx) => {
     if (status === "Paid") return "bg-emerald-500 text-white";
+    if (status === "Partially Paid") return "bg-teal-500 text-white";
     if (status === "Invoiced") return "bg-indigo-500 text-white";
+    if (status === "Partially Invoiced") return "bg-blue-500 text-white";
     return "bg-amber-500 text-white";
+  };
+
+  const getMilestoneStatusBadgeClass = (status) => {
+    if (status === "Paid") return "bg-emerald-50 text-emerald-700 border-emerald-100";
+    if (status === "Partially Paid") return "bg-teal-50 text-teal-700 border-teal-100";
+    if (status === "Invoiced") return "bg-indigo-50 text-indigo-700 border-indigo-100";
+    if (status === "Partially Invoiced") return "bg-blue-50 text-blue-700 border-blue-100";
+    return "bg-amber-50 text-amber-700 border-amber-100";
   };
 
   const selectedMilestone = selectedMilestoneIdx !== null ? project.milestones[selectedMilestoneIdx] : null;
@@ -464,7 +530,12 @@ export default function ProjectDetailPage({
               <tbody className="divide-y divide-slate-50 text-slate-700">
                 {project.milestones?.map((m, idx) => {
                   const isSelected = selectedMilestoneIdx === idx;
-                  const invoiceId = m.invoice?._id || m.invoice;
+                  const linkedInvoices = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
+                  const isPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
+                  const invoiced = m.invoicedAmount !== undefined ? m.invoicedAmount : (m.invoice ? m.amount : 0);
+                  const remaining = Math.max(0, m.amount - invoiced);
+                  const canGenerate = currentUser?.role !== "Employee" && !isPaid && remaining > 0;
+
                   return (
                     <tr
                       key={m._id || idx}
@@ -477,93 +548,63 @@ export default function ProjectDetailPage({
                         <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${getMilestoneCircleColor(m.status, idx)}`}>
                           {idx + 1}
                         </span>
-                        <span className="text-slate-800 font-bold truncate max-w-[180px]">{m.name}</span>
+                        <div>
+                          <span className="text-slate-800 font-bold truncate max-w-[180px] block">{m.name}</span>
+                          <span className="text-[10px] text-slate-400 font-normal">{m.service}</span>
+                        </div>
                       </td>
-                      <td className="py-3.5 text-right font-black text-slate-900 whitespace-nowrap">
-                        {formatWithINRConversion(m.amount, project.currency)}
+                      <td className="py-3.5 text-right whitespace-nowrap">
+                        <div className="font-black text-slate-900">
+                          {formatWithINRConversion(m.amount, project.currency)}
+                        </div>
+                        {!isPaid && invoiced > 0 && remaining > 0 && (
+                          <span className="text-[10px] font-medium text-amber-600 block">
+                            Rem: {formatWithINRConversion(remaining, project.currency)}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 pl-12 text-slate-500">
                         {m.dueDate ? new Date(m.dueDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }) : "N/A"}
                       </td>
                       <td className="py-3.5 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
-                          m.status === "Paid"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            : m.status === "Invoiced"
-                              ? "bg-indigo-50 text-indigo-700 border-indigo-100"
-                              : "bg-amber-50 text-amber-700 border-amber-100"
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${getMilestoneStatusBadgeClass(m.status)}`}>
                           {m.status}
                         </span>
                       </td>
                       <td className="py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                        {invoiceId ? (
-                          <span
-                            onClick={() => {
-                              if (currentUser?.role === "Employee") {
-                                handleViewInvoicePreview(invoiceId);
-                              } else {
-                                navigate(`/invoices/${invoiceId}/edit`);
-                              }
-                            }}
-                            className="text-[#5D5FEF] font-black hover:underline cursor-pointer flex items-center justify-center gap-0.5"
-                          >
-                            <span>{m.invoice?.invoiceNumber || "INV LINK"}</span>
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </span>
+                        {linkedInvoices.length > 0 ? (
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            {linkedInvoices.map((inv, invIdx) => {
+                              const invNum = inv?.invoiceNumber || (typeof inv === "string" ? inv : `INV-${invIdx + 1}`);
+                              return (
+                                <span
+                                  key={inv?._id || invIdx}
+                                  onClick={() => handleViewInvoicePreview(inv)}
+                                  className="text-[#5D5FEF] font-bold text-[10px] hover:underline cursor-pointer inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-indigo-50/70 border border-indigo-100"
+                                  title="Click to preview invoice"
+                                >
+                                  <span>{invNum}</span>
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </span>
+                              );
+                            })}
+                          </div>
                         ) : (
-                          currentUser?.role === "Employee" ? (
-                            <span className="text-slate-400 text-[10px] font-bold">-</span>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                const isForeign = project.client?.isForeign === true;
-                                const isPersonal = m.isPersonal === true;
-                                const gstRate = (isForeign || isPersonal) ? 0 : 18;
-                                const isInclusive = m.isInclusive === true;
-                                let rate = m.amount;
-                                if (isInclusive && gstRate > 0) {
-                                  rate = Math.round(m.amount / (1 + gstRate / 100));
-                                }
-                                const draftInvoice = {
-                                  client: project.client?._id || project.client,
-                                  currency: project.currency || "INR (₹)",
-                                  dueDate: m.dueDate ? new Date(m.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
-                                  items: [
-                                    {
-                                      serviceName: m.service,
-                                      description: m.name,
-                                      sacCode: "998314",
-                                      qty: 1,
-                                      rate: rate,
-                                      amount: rate,
-                                      gstRate: gstRate,
-                                      isInclusive: isInclusive && gstRate > 0,
-                                      originalAmount: m.amount,
-                                    },
-                                  ],
-                                  projectId: project._id,
-                                  milestoneId: m._id,
-                                };
-                                navigate("/invoices/create", { state: { draftInvoice } });
-                              }}
-                              className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-2.5 py-1 rounded-lg text-[10px] transition-all cursor-pointer shadow-sm shadow-indigo-500/5 inline-flex items-center gap-1"
-                            >
-                              <FileText className="h-3 w-3" />
-                              <span>Generate</span>
-                            </button>
-                          )
+                          <span className="text-slate-400 text-[10px] font-medium">-</span>
                         )}
                       </td>
                       <td className="py-3.5 text-center pr-4" onClick={(e) => e.stopPropagation()}>
-                        {invoiceId && (
+                        {canGenerate ? (
                           <button
-                            onClick={() => handleViewInvoicePreview(invoiceId)}
-                            className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
-                            title="View Invoice Details"
+                            onClick={() => handleGenerateInvoice(idx)}
+                            className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-2.5 py-1 rounded-lg text-[10px] transition-all cursor-pointer shadow-sm shadow-indigo-500/5 inline-flex items-center gap-1"
+                            title={invoiced > 0 ? "Generate Part Invoice" : "Generate Invoice"}
                           >
-                            <Eye className="h-4 w-4" />
+                            <FileText className="h-3 w-3" />
+                            <span>{invoiced > 0 ? "+ Part Inv" : "Generate"}</span>
                           </button>
+                        ) : (
+                          <span className="text-slate-300 text-[10px] font-medium">-</span>
                         )}
                       </td>
                     </tr>
@@ -601,13 +642,7 @@ export default function ProjectDetailPage({
                   {projectInvoices.map((inv) => (
                     <tr
                       key={inv._id}
-                      onClick={() => {
-                        if (currentUser?.role === "Employee") {
-                          handleViewInvoicePreview(inv._id);
-                        } else {
-                          navigate(`/invoices/${inv._id}/edit`);
-                        }
-                      }}
+                      onClick={() => handleViewInvoicePreview(inv._id || inv)}
                       className="hover:bg-slate-50/50 cursor-pointer transition-colors"
                     >
                       <td className="py-3.5 pl-4 font-bold text-[#5D5FEF]">{inv.invoiceNumber}</td>

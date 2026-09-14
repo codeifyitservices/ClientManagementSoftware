@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Calendar, Eye, ChevronLeft } from "lucide-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Plus, Trash2, Calendar, Eye, ChevronLeft, RefreshCw, Hash } from "lucide-react";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { SUPPORTED_CURRENCIES, getCurrencySymbol, formatWithINRConversion } from "../utils/currencyUtils";
 
 // State lookup helper for state name from GSTIN code
@@ -103,16 +103,19 @@ export default function InvoiceFormPage({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id } = useParams();
   // Invoice to edit is passed via location state (from InvoiceTable or DashboardView)
   const invoice = location.state?.invoice || null;
   const draftInvoice = location.state?.draftInvoice || null;
-  const isEdit = !!invoice;
+  const isEdit = !!invoice || !!id;
 
   // Company and Services configuration states
   const [config, setConfig] = useState({
     companyGst: "06AABCT1234Q1Z5",
   });
   const [backendServices, setBackendServices] = useState([]);
+  const [allProjects, setAllProjects] = useState([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
 
   // Load layout configurations and services list
   useEffect(() => {
@@ -158,6 +161,25 @@ export default function InvoiceFormPage({
         // Fallback
       }
 
+      // Fetch projects list
+      try {
+        setIsLoadingProjects(true);
+        const projRes = await fetch(
+          `${import.meta.env.VITE_BACKEND_URL}/api/projects`,
+          {
+            headers,
+          },
+        );
+        if (projRes.ok) {
+          const projData = await projRes.json();
+          setAllProjects(Array.isArray(projData) ? projData : []);
+        }
+      } catch (err) {
+        console.error("Error fetching projects in InvoiceFormPage:", err);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+
       // Fetch next sequential invoice number
       try {
         const res = await fetch(
@@ -166,7 +188,10 @@ export default function InvoiceFormPage({
         );
         if (res.ok) {
           const data = await res.json();
-          if (data.invoiceNumber) setNextInvoiceNumber(data.invoiceNumber);
+          if (data.invoiceNumber) {
+            setNextInvoiceNumber(data.invoiceNumber);
+            setCurrentInvoiceNumber((prev) => (prev ? prev : data.invoiceNumber));
+          }
         }
       } catch (err) {
         // Fallback
@@ -175,6 +200,40 @@ export default function InvoiceFormPage({
 
     fetchConfigAndServices();
   }, [token]);
+
+  // Load single invoice by URL ID if not already in location state
+  useEffect(() => {
+    if (id && !invoice) {
+      const fetchSingleInvoice = async () => {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/invoices/${id}`, {
+            headers: {
+              Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+            },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.invoiceNumber) setCurrentInvoiceNumber(data.invoiceNumber);
+            setSelectedClientId(data.client?._id || data.client || "");
+            setInvoiceDate(new Date(data.invoiceDate || data.createdAt).toISOString().split("T")[0]);
+            setDueDate(new Date(data.dueDate || getDefaultDueDate()).toISOString().split("T")[0]);
+            setPaymentStatus(data.paymentStatus || "Pending");
+            setInvoiceType(data.invoiceType || "Tax Invoice");
+            setCurrency(data.currency || "INR (₹)");
+            setNotes(data.notes || "");
+            if (data.projectId) setProjectId(data.projectId);
+            if (data.milestoneId) setMilestoneId(data.milestoneId);
+            if (data.items && data.items.length > 0) {
+              setItems(data.items.map((i) => ({ ...i })));
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching invoice for edit:", err);
+        }
+      };
+      fetchSingleInvoice();
+    }
+  }, [id, invoice, token]);
 
   // Invoice form states
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -190,9 +249,11 @@ export default function InvoiceFormPage({
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [currency, setCurrency] = useState("INR (₹)");
   const [notes, setNotes] = useState("");
-  const [projectId, setProjectId] = useState(draftInvoice?.projectId || null);
+  const [projectId, setProjectId] = useState(
+    invoice?.projectId || draftInvoice?.projectId || location.state?.projectId || null,
+  );
   const [milestoneId, setMilestoneId] = useState(
-    draftInvoice?.milestoneId || null,
+    invoice?.milestoneId || draftInvoice?.milestoneId || location.state?.milestoneId || null,
   );
 
   // Invoice items list state
@@ -218,6 +279,9 @@ export default function InvoiceFormPage({
       setSelectedClientId(
         sourceInvoice.client?._id || sourceInvoice.client || "",
       );
+      if (sourceInvoice.projectId) setProjectId(sourceInvoice.projectId);
+      if (sourceInvoice.milestoneId) setMilestoneId(sourceInvoice.milestoneId);
+
       setInvoiceDate(
         new Date(
           sourceInvoice.invoiceDate || sourceInvoice.createdAt || new Date(),
@@ -388,6 +452,110 @@ export default function InvoiceFormPage({
 
   // Selected client object
   const activeClient = clients.find((c) => c._id === selectedClientId) || {};
+
+  // Projects belonging to the selected client
+  const clientProjects = allProjects.filter((p) => {
+    const pClientId = (p.client?._id || p.client)?.toString();
+    return pClientId && selectedClientId && pClientId === selectedClientId.toString();
+  });
+
+  const activeProject = allProjects.find((p) => p._id === projectId);
+
+  // Helper to calculate remaining un-invoiced balance of a milestone
+  const getMilestoneRemainingBalance = (m) => {
+    if (!m) return 0;
+    const invoiced = m.invoicedAmount !== undefined ? m.invoicedAmount : (m.invoice ? m.amount : 0);
+    return Math.max(0, m.amount - invoiced);
+  };
+
+  const availableMilestones =
+    activeProject?.milestones?.filter((m) => {
+      const isCompletelyPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
+      if (isCompletelyPaid && m._id !== milestoneId) return false;
+      const remaining = getMilestoneRemainingBalance(m);
+      return (
+        remaining > 0 ||
+        m.status === "Pending" ||
+        m.status === "Partially Invoiced" ||
+        m.status === "Partially Paid" ||
+        m._id === milestoneId
+      );
+    }) || [];
+
+  const activeMilestone = activeProject?.milestones?.find((m) => m._id === milestoneId);
+
+  const handleClientChange = (newClientId) => {
+    setSelectedClientId(newClientId);
+    // Reset project and milestone when client changes
+    setProjectId("");
+    setMilestoneId("");
+  };
+
+  const handleProjectChange = (newProjectId) => {
+    setProjectId(newProjectId);
+    setMilestoneId("");
+  };
+
+  const handleMilestoneChange = (newMilestoneId) => {
+    setMilestoneId(newMilestoneId);
+    if (!newMilestoneId || !activeProject) return;
+
+    const selectedM = activeProject.milestones?.find((m) => m._id === newMilestoneId);
+    if (!selectedM) return;
+
+    // Determine GST Rate and Pricing
+    const isForeign = !!activeClient.isForeign;
+    const isPersonal = !!(selectedM.isPersonal || activeProject.isPersonalAccount);
+
+    // Find matching service from backendServices if available
+    const matchingService = backendServices.find(
+      (s) => s.name?.toLowerCase() === selectedM.service?.toLowerCase()
+    );
+
+    const effectiveGstRate = isForeign || isPersonal ? 0 : (matchingService?.gstRate !== undefined ? matchingService.gstRate : 18);
+    const sacCode = matchingService?.sacCode || "998314";
+
+    // Auto-fill amount defaults to remaining un-invoiced milestone balance
+    const invoiced = selectedM.invoicedAmount !== undefined ? selectedM.invoicedAmount : 0;
+    const remainingAmount = Math.max(0, selectedM.amount - invoiced) || selectedM.amount;
+
+    const isIncl = !!selectedM.isInclusive && effectiveGstRate > 0;
+    const baseRate = isIncl
+      ? Math.round(remainingAmount / (1 + effectiveGstRate / 100))
+      : remainingAmount;
+
+    // Auto-fill items with milestone details
+    setItems([
+      {
+        serviceName: selectedM.service || "",
+        description: selectedM.name
+          ? (invoiced > 0
+              ? `${activeProject.projectName} - ${selectedM.name} (Part Payment)`
+              : `${activeProject.projectName} - ${selectedM.name}`)
+          : selectedM.service || "",
+        sacCode: sacCode,
+        amount: isIncl ? remainingAmount : baseRate,
+        rate: isIncl ? remainingAmount : baseRate,
+        qty: 1,
+        gstRate: effectiveGstRate,
+        isInclusive: isIncl,
+        originalAmount: remainingAmount,
+      },
+    ]);
+
+    // Auto-fill currency
+    if (activeProject.currency) {
+      setCurrency(activeProject.currency);
+    }
+
+    // Auto-fill due date
+    if (selectedM.dueDate) {
+      try {
+        const d = new Date(selectedM.dueDate).toISOString().split("T")[0];
+        setDueDate(d);
+      } catch (e) {}
+    }
+  };
 
   // Auto-detect Place of Supply (Intrastate vs. Interstate)
   const detectStateCode = (c) => {
@@ -592,6 +760,10 @@ export default function InvoiceFormPage({
       alert("Please select a client.");
       return;
     }
+    if (projectId && !milestoneId) {
+      alert("Please select a pending milestone for the selected project.");
+      return;
+    }
     if (!dueDate) {
       alert("Please select a due date.");
       return;
@@ -627,7 +799,8 @@ export default function InvoiceFormPage({
     const payloadItems = resolvePayloadItems(items);
 
     const payload = {
-      ...(invoice?._id ? { _id: invoice._id } : {}),
+      ...(invoice?._id || id ? { _id: invoice?._id || id } : {}),
+      invoiceNumber: currentInvoiceNumber ? currentInvoiceNumber.trim().toUpperCase() : undefined,
       client: selectedClientId,
       invoiceDate,
       dueDate,
@@ -637,8 +810,8 @@ export default function InvoiceFormPage({
       items: payloadItems,
       paymentStatus: statusOverride || paymentStatus,
       shouldSendEmail,
-      projectId,
-      milestoneId,
+      projectId: projectId || null,
+      milestoneId: milestoneId || null,
     };
 
     onSubmit(payload);
@@ -682,6 +855,10 @@ export default function InvoiceFormPage({
   const handlePreviewTrigger = () => {
     if (!selectedClientId) {
       alert("Please select a client to preview.");
+      return;
+    }
+    if (projectId && !milestoneId) {
+      alert("Please select a pending milestone for the selected project.");
       return;
     }
     if (!dueDate) {
@@ -739,7 +916,7 @@ export default function InvoiceFormPage({
           projectId: projectId || draftInvoice?.projectId || invoice?.projectId || null,
           milestoneId: milestoneId || draftInvoice?.milestoneId || invoice?.milestoneId || null,
         },
-        returnTo: isEdit ? `/invoices/${invoice._id}/edit` : "/invoices/create",
+        returnTo: isEdit ? `/invoices/${invoice?._id || id}/edit` : "/invoices/create",
       },
     });
   };
@@ -779,7 +956,53 @@ export default function InvoiceFormPage({
             Invoice Parameters
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {/* Invoice Number */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Invoice No. <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(
+                        `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/invoices/next-number?date=${invoiceDate}`,
+                        {
+                          headers: {
+                            Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+                          },
+                        }
+                      );
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data.invoiceNumber) {
+                          setCurrentInvoiceNumber(data.invoiceNumber);
+                        }
+                      }
+                    } catch (err) {}
+                  }}
+                  className="text-[9px] font-extrabold text-[#5D5FEF] hover:underline cursor-pointer flex items-center gap-0.5"
+                  title="Auto-generate sequential invoice number"
+                >
+                  <RefreshCw className="h-2.5 w-2.5" />
+                  <span>Auto</span>
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={currentInvoiceNumber}
+                  onChange={(e) => setCurrentInvoiceNumber(e.target.value.toUpperCase())}
+                  placeholder={nextInvoiceNumber || "e.g. CN26080011"}
+                  required
+                  className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white uppercase tracking-wider"
+                />
+                <Hash className="absolute left-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+
             {/* Client Select */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
@@ -787,7 +1010,7 @@ export default function InvoiceFormPage({
               </label>
               <select
                 value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
+                onChange={(e) => handleClientChange(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white cursor-pointer"
               >
                 <option value="">Select Client</option>
@@ -848,6 +1071,111 @@ export default function InvoiceFormPage({
               </select>
             </div>
           </div>
+
+          {/* Project & Milestone selection (shown when client is selected) */}
+          {selectedClientId && (
+            <div className="pt-3 border-t border-slate-100/80">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/70">
+                {/* Project Dropdown */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1 flex items-center justify-between">
+                    <span>Project (Optional)</span>
+                    {clientProjects.length > 0 && (
+                      <span className="text-[9px] text-[#5D5FEF] font-bold font-mono">
+                        {clientProjects.length} project{clientProjects.length > 1 ? "s" : ""} found
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    value={projectId || ""}
+                    onChange={(e) => handleProjectChange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="">None (Standalone / General Invoice)</option>
+                    {clientProjects.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.projectName} ({p.projectId || "PRJ"})
+                      </option>
+                    ))}
+                  </select>
+                  {clientProjects.length === 0 && !isLoadingProjects && (
+                    <p className="text-[10px] text-slate-400 mt-1">No projects registered for this client.</p>
+                  )}
+                </div>
+
+                {/* Milestone Dropdown (Mandatory if Project is selected) */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1 flex items-center justify-between">
+                    <span>
+                      Project Milestone {projectId && <span className="text-red-500">*</span>}
+                    </span>
+                    {projectId && availableMilestones.length > 0 && (
+                      <span className="text-[9px] text-amber-600 font-bold">
+                        {availableMilestones.length} pending
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    value={milestoneId || ""}
+                    onChange={(e) => handleMilestoneChange(e.target.value)}
+                    disabled={!projectId}
+                    className={`w-full px-3 py-2 rounded-lg border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 ${
+                      !projectId
+                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                        : milestoneId
+                        ? "bg-white text-slate-900 border-indigo-300 ring-1 ring-indigo-200 cursor-pointer"
+                        : "bg-white text-slate-900 border-amber-300 ring-1 ring-amber-200 cursor-pointer"
+                    }`}
+                  >
+                    <option value="">
+                      {!projectId
+                        ? "Select a project first"
+                        : availableMilestones.length === 0
+                        ? "No pending milestones"
+                        : "Select Pending Milestone *"}
+                    </option>
+                    {availableMilestones.map((m) => {
+                      const rem = getMilestoneRemainingBalance(m);
+                      return (
+                        <option key={m._id} value={m._id}>
+                          {m.name} — Rem: {getCurrencySymbol(activeProject?.currency || currency)}{rem?.toLocaleString("en-IN")} / Total: {getCurrencySymbol(activeProject?.currency || currency)}{m.amount?.toLocaleString("en-IN")} ({m.status})
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {projectId && availableMilestones.length === 0 && (
+                    <p className="text-[10px] text-amber-600 font-medium mt-1">
+                      All milestones in this project are already invoiced or completed.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Confirmation banner if milestone is selected */}
+              {projectId && milestoneId && activeMilestone && (
+                <div className="mt-2.5 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1 text-xs text-emerald-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <span>
+                        Linked to <strong>{activeProject?.projectName}</strong> &gt; <strong>{activeMilestone.name}</strong> ({activeMilestone.service})
+                        <span className="ml-2 text-[10px] text-emerald-700 font-semibold">
+                          (Planned: {getCurrencySymbol(activeProject?.currency || currency)}{activeMilestone.amount?.toLocaleString("en-IN")} | Remaining: {getCurrencySymbol(activeProject?.currency || currency)}{getMilestoneRemainingBalance(activeMilestone)?.toLocaleString("en-IN")})
+                        </span>
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-700">
+                      Payment &amp; service auto-filled
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-emerald-700/90 font-medium">
+                    💡 If this invoice total exceeds this milestone's balance, this milestone will be settled and any excess payment will automatically credit towards the next milestone as a partial payment.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* BOTTOM PANEL: Invoice Items Grid */}

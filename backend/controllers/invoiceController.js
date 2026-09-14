@@ -65,21 +65,27 @@ export const updateInvoiceNumberDatePart = (currentInvoiceNumber, newDate) => {
   const fullYear = d.getFullYear().toString();
 
   // Pattern 1: Standard prefix (e.g. CN) followed by 2-digit YY, 2-digit MM, and serial suffix (e.g. CN26030010 -> CN26040010)
-  const stdMatch = currentInvoiceNumber.match(/^([A-Za-z]+)(\d{2})(\d{2})(.*)$/);
+  const stdMatch = currentInvoiceNumber.match(
+    /^([A-Za-z]+)(\d{2})(\d{2})(.*)$/,
+  );
   if (stdMatch) {
     const [, prefix, , , suffix] = stdMatch;
     return `${prefix}${yy}${mm}${suffix}`;
   }
 
   // Pattern 2: Hyphenated with 4-digit year (e.g. CN-2026-03-001 or CN-202603-001)
-  const hyphen4Match = currentInvoiceNumber.match(/^([A-Za-z]+[-_])(\d{4})[-_]?(\d{2})([-_].*)$/);
+  const hyphen4Match = currentInvoiceNumber.match(
+    /^([A-Za-z]+[-_])(\d{4})[-_]?(\d{2})([-_].*)$/,
+  );
   if (hyphen4Match) {
     const [, prefix, , , suffix] = hyphen4Match;
     return `${prefix}${fullYear}-${mm}${suffix.startsWith("-") || suffix.startsWith("_") ? suffix : "-" + suffix}`;
   }
 
   // Pattern 3: Hyphenated with 2-digit year (e.g. CN-26-03-001)
-  const hyphen2Match = currentInvoiceNumber.match(/^([A-Za-z]+[-_])(\d{2})[-_]?(\d{2})([-_].*)$/);
+  const hyphen2Match = currentInvoiceNumber.match(
+    /^([A-Za-z]+[-_])(\d{2})[-_]?(\d{2})([-_].*)$/,
+  );
   if (hyphen2Match) {
     const [, prefix, , , suffix] = hyphen2Match;
     return `${prefix}${yy}-${mm}${suffix.startsWith("-") || suffix.startsWith("_") ? suffix : "-" + suffix}`;
@@ -101,7 +107,12 @@ export const getNextNumber = async (req, res) => {
     const nextInvoiceNumber = await getNextInvoiceNumber(req.query.date);
     res.json({ invoiceNumber: nextInvoiceNumber });
   } catch (error) {
-    res.status(500).json({ message: "Error generating next invoice number", error: error.message });
+    res
+      .status(500)
+      .json({
+        message: "Error generating next invoice number",
+        error: error.message,
+      });
   }
 };
 
@@ -115,10 +126,7 @@ export const getInvoices = async (req, res) => {
       const searchRegex = new RegExp(search, "i");
       // Find client profile IDs matching name or company name search terms
       const matchedClients = await Client.find({
-        $or: [
-          { clientName: searchRegex },
-          { companyName: searchRegex },
-        ],
+        $or: [{ clientName: searchRegex }, { companyName: searchRegex }],
       }).select("_id");
 
       const clientIds = matchedClients.map((c) => c._id);
@@ -150,7 +158,35 @@ export const getInvoices = async (req, res) => {
 
     res.json(invoices);
   } catch (error) {
-    res.status(500).json({ message: "Error fetching invoices", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error fetching invoices", error: error.message });
+  }
+};
+
+// GET /api/invoices/:id - Fetch single invoice details (by ObjectId or invoiceNumber)
+export const getInvoiceById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let invoice = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      invoice = await Invoice.findById(id).populate("client");
+    }
+
+    if (!invoice) {
+      invoice = await Invoice.findOne({ invoiceNumber: id }).populate("client");
+    }
+
+    if (!invoice) {
+      return res.status(404).json({ message: "Invoice not found." });
+    }
+
+    res.json(invoice);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching invoice", error: error.message });
   }
 };
 
@@ -162,12 +198,17 @@ export const downloadZip = async (req, res) => {
       return res.status(400).json({ message: "No invoice IDs provided." });
     }
 
-    const idArray = String(ids).split(",").map((id) => id.trim()).filter(Boolean);
+    const idArray = String(ids)
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
     if (idArray.length === 0) {
       return res.status(400).json({ message: "Invalid invoice IDs provided." });
     }
 
-    const invoices = await Invoice.find({ _id: { $in: idArray } }).populate("client");
+    const invoices = await Invoice.find({ _id: { $in: idArray } }).populate(
+      "client",
+    );
     if (!invoices || invoices.length === 0) {
       return res.status(404).json({ message: "No matching invoices found." });
     }
@@ -176,11 +217,16 @@ export const downloadZip = async (req, res) => {
     const zipBuffer = await generateInvoicesZIP(invoices, config);
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename=Invoices_Archive_${Date.now()}.zip`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=Invoices_Archive_${Date.now()}.zip`,
+    );
     res.send(zipBuffer);
   } catch (error) {
     console.error("ZIP generation error:", error);
-    res.status(500).json({ message: "Error generating ZIP download", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error generating ZIP download", error: error.message });
   }
 };
 
@@ -192,12 +238,17 @@ export const downloadCombinedPDF = async (req, res) => {
       return res.status(400).json({ message: "No invoice IDs provided." });
     }
 
-    const idArray = String(ids).split(",").map((id) => id.trim()).filter(Boolean);
+    const idArray = String(ids)
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
     if (idArray.length === 0) {
       return res.status(400).json({ message: "Invalid invoice IDs provided." });
     }
 
-    const invoices = await Invoice.find({ _id: { $in: idArray } }).populate("client");
+    const invoices = await Invoice.find({ _id: { $in: idArray } }).populate(
+      "client",
+    );
     if (!invoices || invoices.length === 0) {
       return res.status(404).json({ message: "No matching invoices found." });
     }
@@ -206,24 +257,172 @@ export const downloadCombinedPDF = async (req, res) => {
     const pdfBuffer = await generateCombinedInvoicesPDF(invoices, config);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename=Invoices_Combined_${Date.now()}.pdf`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=Invoices_Combined_${Date.now()}.pdf`,
+    );
     res.send(pdfBuffer);
   } catch (error) {
     console.error("Combined PDF generation error:", error);
-    res.status(500).json({ message: "Error generating combined PDF download", error: error.message });
+    res
+      .status(500)
+      .json({
+        message: "Error generating combined PDF download",
+        error: error.message,
+      });
+  }
+};
+
+// Helper function to sync milestone invoicedAmount, paidAmount, invoices list, and status across project milestones sequentially
+export const syncMilestoneInvoiceStatus = async (projectId) => {
+  if (!projectId) return;
+  try {
+    const ProjectModel = mongoose.model("Project");
+    const project = await ProjectModel.findById(projectId);
+    if (!project || !project.milestones || project.milestones.length === 0)
+      return;
+
+    // Find all invoices associated with this project
+    const allProjectInvoices = await Invoice.find({
+      $or: [
+        { projectId: project._id },
+        {
+          _id: {
+            $in: project.milestones.flatMap(
+              (m) => m.invoices || (m.invoice ? [m.invoice] : []),
+            ),
+          },
+        },
+      ],
+    });
+
+    let carryOverInvoiced = 0;
+    let carryOverPaid = 0;
+
+    for (let i = 0; i < project.milestones.length; i++) {
+      const m = project.milestones[i];
+
+      // Find invoices directly associated with milestone m
+      const directInvoices = allProjectInvoices.filter(
+        (inv) =>
+          inv.milestoneId?.toString() === m._id.toString() ||
+          m.invoices?.some(
+            (invId) => invId.toString() === inv._id.toString(),
+          ) ||
+          m.invoice?.toString() === inv._id.toString(),
+      );
+
+      let directInvoiced = 0;
+      let directPaid = 0;
+      const invoiceIds = [];
+
+      directInvoices.forEach((inv) => {
+        if (!invoiceIds.some((id) => id.toString() === inv._id.toString())) {
+          invoiceIds.push(inv._id);
+        }
+        const invVal =
+          inv.totalAmount !== undefined &&
+          inv.totalAmount !== null &&
+          inv.totalAmount > 0
+            ? inv.totalAmount
+            : inv.amount || 0;
+
+        directInvoiced += invVal;
+        if (inv.paymentStatus === "Paid") {
+          directPaid += invVal;
+        }
+      });
+
+      m.invoices = invoiceIds;
+      m.invoice = invoiceIds[0] || null;
+
+      // Add carried-over excess from previous milestone(s)
+      const totalInvoiced =
+        Math.round((directInvoiced + carryOverInvoiced) * 100) / 100;
+      const totalPaid = Math.round((directPaid + carryOverPaid) * 100) / 100;
+
+      // Amount credited to this milestone is capped at m.amount
+      m.invoicedAmount = Math.min(m.amount, totalInvoiced);
+      m.paidAmount = Math.min(m.amount, totalPaid);
+
+      // Remaining excess cascades to next milestone
+      carryOverInvoiced = Math.max(
+        0,
+        Math.round((totalInvoiced - m.amount) * 100) / 100,
+      );
+      carryOverPaid = Math.max(
+        0,
+        Math.round((totalPaid - m.amount) * 100) / 100,
+      );
+
+      // Set milestone status
+      if (m.paidAmount >= m.amount && m.amount > 0) {
+        m.status = "Paid";
+      } else if (m.paidAmount > 0) {
+        m.status = "Partially Paid";
+      } else if (m.invoicedAmount >= m.amount && m.amount > 0) {
+        m.status = "Invoiced";
+      } else if (m.invoicedAmount > 0) {
+        m.status = "Partially Invoiced";
+      } else {
+        m.status = "Pending";
+      }
+    }
+
+    await project.save();
+  } catch (err) {
+    console.error("Error syncing project milestone invoice status:", err);
   }
 };
 
 // POST /api/invoices - Create a GST invoice
 export const createInvoice = async (req, res) => {
   try {
-    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus, projectId, milestoneId } = req.body;
+    const {
+      client,
+      invoiceNumber: customInvoiceNumber,
+      invoiceDate,
+      dueDate,
+      invoiceType,
+      currency,
+      notes,
+      items,
+      paymentStatus,
+      projectId,
+      milestoneId,
+    } = req.body;
 
-    if (!client || !dueDate || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: "Please provide Client Profile, Due Date, and at least one Invoice Item." });
+    if (
+      !client ||
+      !dueDate ||
+      !items ||
+      !Array.isArray(items) ||
+      items.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Please provide Client Profile, Due Date, and at least one Invoice Item.",
+        });
     }
 
-    const invoiceNumber = await getNextInvoiceNumber(invoiceDate);
+    let invoiceNumber = customInvoiceNumber
+      ? String(customInvoiceNumber).trim().toUpperCase()
+      : "";
+
+    if (invoiceNumber) {
+      const existing = await Invoice.findOne({ invoiceNumber });
+      if (existing) {
+        return res
+          .status(400)
+          .json({
+            message: `Invoice number "${invoiceNumber}" is already in use.`,
+          });
+      }
+    } else {
+      invoiceNumber = await getNextInvoiceNumber(invoiceDate);
+    }
 
     const newInvoice = new Invoice({
       invoiceNumber,
@@ -235,43 +434,42 @@ export const createInvoice = async (req, res) => {
       notes: notes || "",
       items: items,
       paymentStatus: paymentStatus || "Pending",
+      projectId: projectId || null,
+      milestoneId: milestoneId || null,
     });
 
     const savedInvoice = await newInvoice.save();
 
-    if (projectId && milestoneId) {
-      try {
-        const projId = new mongoose.Types.ObjectId(projectId);
-        const mileId = new mongoose.Types.ObjectId(milestoneId);
-
-        console.log(`[Invoice Link] Linking invoice ${savedInvoice._id} to project ${projId}, milestone ${mileId}`);
-        const updateResult = await Project.updateOne(
-          { _id: projId, "milestones._id": mileId },
-          {
-            $set: {
-              "milestones.$.invoice": savedInvoice._id,
-              "milestones.$.status": paymentStatus === "Paid" ? "Paid" : "Invoiced"
-            }
-          }
-        );
-        console.log(`[Invoice Link] Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
-      } catch (castErr) {
-        console.error("[Invoice Link] Casting or update error linking milestone invoice:", castErr);
-      }
+    if (projectId) {
+      await syncMilestoneInvoiceStatus(projectId);
     }
 
     const populated = await savedInvoice.populate("client");
 
     res.status(201).json(populated);
   } catch (error) {
-    res.status(500).json({ message: "Error creating invoice", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error creating invoice", error: error.message });
   }
 };
 
 // PUT /api/invoices/:id - Edit an invoice
 export const updateInvoice = async (req, res) => {
   try {
-    const { client, invoiceDate, dueDate, invoiceType, currency, notes, items, paymentStatus } = req.body;
+    const {
+      client,
+      invoiceNumber: customInvoiceNumber,
+      invoiceDate,
+      dueDate,
+      invoiceType,
+      currency,
+      notes,
+      items,
+      paymentStatus,
+      projectId,
+      milestoneId,
+    } = req.body;
 
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) {
@@ -280,15 +478,33 @@ export const updateInvoice = async (req, res) => {
 
     const oldInvoiceNumber = invoice.invoiceNumber;
 
-    invoice.client = client ?? invoice.client;
-    if (invoiceDate) {
+    if (customInvoiceNumber && customInvoiceNumber.trim()) {
+      const cleanCustomNum = customInvoiceNumber.trim().toUpperCase();
+      if (cleanCustomNum !== invoice.invoiceNumber) {
+        const existing = await Invoice.findOne({
+          invoiceNumber: cleanCustomNum,
+          _id: { $ne: invoice._id },
+        });
+        if (existing) {
+          return res
+            .status(400)
+            .json({
+              message: `Invoice number "${cleanCustomNum}" is already in use by another invoice.`,
+            });
+        }
+        invoice.invoiceNumber = cleanCustomNum;
+      }
+    } else if (invoiceDate && invoiceDate !== invoice.invoiceDate) {
       const newD = new Date(invoiceDate);
-      invoice.invoiceDate = invoiceDate;
-
       if (!isNaN(newD.getTime())) {
-        const updatedInvoiceNumber = updateInvoiceNumberDatePart(invoice.invoiceNumber, newD);
-        if (updatedInvoiceNumber && updatedInvoiceNumber !== invoice.invoiceNumber) {
-          // Check if candidate invoice number already belongs to a different invoice
+        const updatedInvoiceNumber = updateInvoiceNumberDatePart(
+          invoice.invoiceNumber,
+          newD,
+        );
+        if (
+          updatedInvoiceNumber &&
+          updatedInvoiceNumber !== invoice.invoiceNumber
+        ) {
           const existing = await Invoice.findOne({
             invoiceNumber: updatedInvoiceNumber,
             _id: { $ne: invoice._id },
@@ -296,11 +512,15 @@ export const updateInvoice = async (req, res) => {
           if (!existing) {
             invoice.invoiceNumber = updatedInvoiceNumber;
           } else {
-            // Allocate next available sequence for that month/year
             invoice.invoiceNumber = await getNextInvoiceNumber(newD);
           }
         }
       }
+    }
+
+    invoice.client = client ?? invoice.client;
+    if (invoiceDate) {
+      invoice.invoiceDate = invoiceDate;
     }
     invoice.dueDate = dueDate ?? invoice.dueDate;
     invoice.invoiceType = invoiceType ?? invoice.invoiceType;
@@ -308,8 +528,14 @@ export const updateInvoice = async (req, res) => {
     invoice.notes = notes ?? invoice.notes;
     invoice.items = items ?? invoice.items;
     invoice.paymentStatus = paymentStatus ?? invoice.paymentStatus;
+    if (projectId !== undefined) invoice.projectId = projectId || null;
+    if (milestoneId !== undefined) invoice.milestoneId = milestoneId || null;
 
     const updatedInvoice = await invoice.save();
+
+    if (invoice.projectId) {
+      await syncMilestoneInvoiceStatus(invoice.projectId);
+    }
 
     // If invoiceNumber updated, keep subscription payments in sync
     if (oldInvoiceNumber && updatedInvoice.invoiceNumber !== oldInvoiceNumber) {
@@ -317,11 +543,18 @@ export const updateInvoice = async (req, res) => {
         const Subscription = mongoose.model("Subscription");
         await Subscription.updateMany(
           { "payments.invoiceNumber": oldInvoiceNumber },
-          { $set: { "payments.$[p].invoiceNumber": updatedInvoice.invoiceNumber } },
-          { arrayFilters: [{ "p.invoiceNumber": oldInvoiceNumber }] }
+          {
+            $set: {
+              "payments.$[p].invoiceNumber": updatedInvoice.invoiceNumber,
+            },
+          },
+          { arrayFilters: [{ "p.invoiceNumber": oldInvoiceNumber }] },
         );
       } catch (subErr) {
-        console.error("Error updating subscription payments with new invoiceNumber:", subErr);
+        console.error(
+          "Error updating subscription payments with new invoiceNumber:",
+          subErr,
+        );
       }
     }
 
@@ -329,32 +562,43 @@ export const updateInvoice = async (req, res) => {
 
     res.json(populated);
   } catch (error) {
-    res.status(500).json({ message: "Error updating invoice", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error updating invoice", error: error.message });
   }
 };
 
 // DELETE /api/invoices/:id - Delete an invoice
 export const deleteInvoice = async (req, res) => {
   try {
-    const invoice = await Invoice.findByIdAndDelete(req.params.id);
+    const invoice = await Invoice.findById(req.params.id);
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found." });
     }
 
-    // Clear invoice link from project milestones
+    const linkedProjId = invoice.projectId;
+
+    await Invoice.findByIdAndDelete(req.params.id);
+
+    // Pull invoice ID from any milestone invoices array
+    await Project.updateMany(
+      { "milestones.invoices": req.params.id },
+      { $pull: { "milestones.$.invoices": req.params.id } },
+    );
     await Project.updateMany(
       { "milestones.invoice": req.params.id },
-      {
-        $set: {
-          "milestones.$.invoice": null,
-          "milestones.$.status": "Pending"
-        }
-      }
+      { $set: { "milestones.$.invoice": null } },
     );
+
+    if (linkedProjId) {
+      await syncMilestoneInvoiceStatus(linkedProjId);
+    }
 
     res.json({ message: "Invoice deleted successfully." });
   } catch (error) {
-    res.status(500).json({ message: "Error deleting invoice", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error deleting invoice", error: error.message });
   }
 };
 
@@ -369,12 +613,29 @@ export const markPaid = async (req, res) => {
     invoice.paymentStatus = "Paid";
     await invoice.save();
 
+    if (invoice.projectId) {
+      await syncMilestoneInvoiceStatus(invoice.projectId);
+    } else {
+      // Check if any project milestone references this invoice ID
+      const linkedProject = await Project.findOne({
+        $or: [
+          { "milestones.invoices": invoice._id },
+          { "milestones.invoice": invoice._id },
+        ],
+      });
+      if (linkedProject) {
+        await syncMilestoneInvoiceStatus(linkedProject._id);
+      }
+    }
+
     res.json({
       success: true,
       invoice,
     });
   } catch (error) {
-    res.status(500).json({ message: "Error marking invoice as paid", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error marking invoice as paid", error: error.message });
   }
 };
 
@@ -387,7 +648,9 @@ export const resendEmail = async (req, res) => {
     }
 
     if (!invoice.client || !invoice.client.email) {
-      return res.status(400).json({ message: "Client email is missing for this invoice." });
+      return res
+        .status(400)
+        .json({ message: "Client email is missing for this invoice." });
     }
 
     const config = await getActiveConfig();
@@ -425,9 +688,14 @@ export const downloadPDF = async (req, res) => {
     const pdfBuffer = await generateInvoicePDF(invoice, config);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename=Invoice_${invoice.invoiceNumber}.pdf`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=Invoice_${invoice.invoiceNumber}.pdf`,
+    );
     res.send(pdfBuffer);
   } catch (error) {
-    res.status(500).json({ message: "Error generating PDF download", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error generating PDF download", error: error.message });
   }
 };

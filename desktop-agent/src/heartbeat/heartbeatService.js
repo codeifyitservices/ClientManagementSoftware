@@ -84,10 +84,10 @@ class HeartbeatService extends EventEmitter {
       this.consecutiveFailures = 0;
       storage.setLastSync(new Date().toISOString());
 
-      if (response.status === "On Break" && !idleDetector.isManualBreak()) {
-        idleDetector.setManualBreak(true);
-      } else if ((response.status === "Working" || response.status === "Active") && idleDetector.isManualBreak()) {
-        idleDetector.setManualBreak(false);
+      if (response.status === "On Break" && !idleDetector.isBreak()) {
+        idleDetector.setBreakState(true);
+      } else if ((response.status === "Working" || response.status === "Active") && idleDetector.isBreak()) {
+        idleDetector.setBreakState(false);
       }
 
       logger.logHeartbeat(response.status || payload.status, this.offlineQueue.length);

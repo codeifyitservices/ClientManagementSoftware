@@ -315,9 +315,14 @@ export default function ProjectFormPage({
 
   // Realtime calculated values
   const calcTotalValue = getCalculatedFinalAmount();
-  const calcReceived = milestones.filter(m => m.status === "Paid").reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
-  const calcOutstanding = calcTotalValue - calcReceived;
-  const calcProgressPercent = calcTotalValue > 0 ? Math.round((calcReceived / calcTotalValue) * 100) : 0;
+  const calcReceived = milestones.reduce((sum, m) => {
+    const paid = (m.status === "Paid")
+      ? (Number(m.amount) || Number(m.paidAmount) || 0)
+      : (Number(m.paidAmount) || 0);
+    return sum + (paid || 0);
+  }, 0);
+  const calcOutstanding = Math.max(0, calcTotalValue - calcReceived);
+  const calcProgressPercent = calcTotalValue > 0 ? Math.min(100, Math.round((calcReceived / calcTotalValue) * 100)) : 0;
 
   if (loading) {
     return (

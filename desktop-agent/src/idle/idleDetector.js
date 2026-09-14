@@ -8,7 +8,7 @@ class IdleDetector extends EventEmitter {
     super();
     this.idleTimeoutSeconds = config.idleTimeoutSeconds;
     this.currentStatus = "Active"; // Active | Idle | On Break | Offline
-    this.manualBreak = false;
+    this.isOnBreak = false;
     this.timer = null;
   }
 
@@ -28,21 +28,21 @@ class IdleDetector extends EventEmitter {
 
     powerMonitor.on("resume", () => {
       logger.info("System resumed from sleep");
-      if (!this.manualBreak) {
+      if (!this.isOnBreak) {
         this.setStatus("Active");
       }
     });
 
     powerMonitor.on("lock-screen", () => {
       logger.info("Workstation locked by user");
-      if (!this.manualBreak) {
+      if (!this.isOnBreak) {
         this.setStatus("Idle");
       }
     });
 
     powerMonitor.on("unlock-screen", () => {
       logger.info("Workstation unlocked by user");
-      if (!this.manualBreak) {
+      if (!this.isOnBreak) {
         this.setStatus("Active");
       }
     });
@@ -64,8 +64,8 @@ class IdleDetector extends EventEmitter {
   }
 
   checkIdleState() {
-    if (this.manualBreak) {
-      // Manual Break takes precedence over system idle calculations
+    if (this.isOnBreak) {
+      // Break state managed by server takes precedence over system idle calculations
       return;
     }
 
@@ -80,13 +80,14 @@ class IdleDetector extends EventEmitter {
     }
   }
 
-  setManualBreak(onBreak) {
-    this.manualBreak = onBreak;
-    if (onBreak) {
-      logger.logBreakStart();
+  setBreakState(onBreak) {
+    const prevBreak = this.isOnBreak;
+    this.isOnBreak = !!onBreak;
+    if (this.isOnBreak) {
+      if (!prevBreak) logger.logBreakStart();
       this.setStatus("On Break");
     } else {
-      logger.logBreakEnd();
+      if (prevBreak) logger.logBreakEnd();
       const idleSeconds = this.getSystemIdleSeconds();
       if (idleSeconds >= this.idleTimeoutSeconds) {
         this.setStatus("Idle");
@@ -96,8 +97,16 @@ class IdleDetector extends EventEmitter {
     }
   }
 
+  setManualBreak(onBreak) {
+    this.setBreakState(onBreak);
+  }
+
+  isBreak() {
+    return this.isOnBreak;
+  }
+
   isManualBreak() {
-    return this.manualBreak;
+    return this.isOnBreak;
   }
 
   setStatus(newStatus) {

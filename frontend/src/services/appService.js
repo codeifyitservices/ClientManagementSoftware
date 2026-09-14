@@ -502,6 +502,7 @@ export function useAppService() {
 
       navigate("/invoices");
       fetchInvoices();
+      fetchProjects();
     } catch (err) {
       if (err.message !== "Unauthorized") showToast(err.message, "error");
     } finally {

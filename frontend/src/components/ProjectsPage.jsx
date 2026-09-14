@@ -277,7 +277,10 @@ export default function ProjectsPage({
       : (proj.projectValue || (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0));
     let rec = 0;
     proj.milestones?.forEach((m) => {
-      if (m.status === "Paid") rec += m.amount || 0;
+      const paid = (m.status === "Paid")
+        ? (m.amount || m.paidAmount || 0)
+        : (m.paidAmount || 0);
+      rec += paid;
     });
     totalProjectsValue += convertToINR(val, proj.currency);
     totalOutstanding += convertToINR(Math.max(0, val - rec), proj.currency);
@@ -293,10 +296,12 @@ export default function ProjectsPage({
     let invoicesCount = 0;
 
     proj.milestones?.forEach((m) => {
-      if (m.status === "Paid") {
-        received += m.amount || 0;
-      }
-      if (m.invoice) invoicesCount++;
+      const paid = (m.status === "Paid")
+        ? (m.amount || m.paidAmount || 0)
+        : (m.paidAmount || 0);
+      received += paid;
+      const invList = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
+      invoicesCount += invList.length;
     });
 
     const pending = Math.max(0, value - received);

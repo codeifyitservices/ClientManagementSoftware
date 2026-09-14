@@ -107,23 +107,6 @@ class TrayManager {
         },
       },
       { type: "separator" },
-      isOnBreak
-        ? {
-            label: "▶️ Resume Work",
-            enabled: isPaired,
-            click: () => {
-              idleDetector.setManualBreak(false);
-              this.updateTrayStatus(idleDetector.getCurrentStatus());
-            },
-          }
-        : {
-            label: "⏸️ I'm On Break",
-            enabled: isPaired,
-            click: () => {
-              idleDetector.setManualBreak(true);
-              this.updateTrayStatus("On Break");
-            },
-          },
       {
         label: "🔄 Sync Now",
         enabled: isPaired,

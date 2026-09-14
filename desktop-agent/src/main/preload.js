@@ -6,7 +6,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("electronAPI", {
   getAgentStatus: () => ipcRenderer.invoke("agent:get-status"),
   pairDevice: (token) => ipcRenderer.invoke("agent:pair", token),
-  toggleBreak: (onBreak) => ipcRenderer.invoke("agent:toggle-break", onBreak),
   forceSync: () => ipcRenderer.invoke("agent:force-sync"),
   checkUpdates: () => ipcRenderer.invoke("agent:check-updates"),
   logout: () => ipcRenderer.invoke("agent:logout"),

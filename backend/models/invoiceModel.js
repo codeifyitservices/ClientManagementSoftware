@@ -116,6 +116,15 @@ const invoiceSchema = new mongoose.Schema(
       enum: ["Pending", "Paid"],
       default: "Pending",
     },
+    projectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Project",
+      default: null,
+    },
+    milestoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
     invoiceSentAt: {
       type: Date,
     },

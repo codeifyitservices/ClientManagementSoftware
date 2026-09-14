@@ -2,6 +2,7 @@ import express from "express";
 import {
   getNextNumber,
   getInvoices,
+  getInvoiceById,
   downloadZip,
   downloadCombinedPDF,
   createInvoice,
@@ -25,6 +26,9 @@ router.get("/download-zip", downloadZip);
 
 // GET /api/invoices/download-combined-pdf - Bulk download selected invoices as single combined PDF (MUST BE BEFORE /:id)
 router.get("/download-combined-pdf", downloadCombinedPDF);
+
+// GET /api/invoices/:id - Fetch single invoice details
+router.get("/:id", getInvoiceById);
 
 // POST /api/invoices - Create a GST invoice
 router.post("/", createInvoice);

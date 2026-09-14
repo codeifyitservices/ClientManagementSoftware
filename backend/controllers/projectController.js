@@ -1,5 +1,6 @@
 import Project from "../models/projectModel.js";
 import Client from "../models/clientModel.js";
+import { syncMilestoneInvoiceStatus } from "./invoiceController.js";
 
 const getNextProjectNumber = async () => {
   let count = await Project.countDocuments();
@@ -16,12 +17,16 @@ const getNextProjectNumber = async () => {
 // GET /api/projects - Get all projects (or assigned projects if employee)
 export const getProjects = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, clientId } = req.query;
     let query = {};
 
     // Restrict standard employees to only see projects they are assigned to
     if (req.user.role === "Employee") {
       query.assignedEmployees = req.user._id;
+    }
+
+    if (clientId) {
+      query.client = clientId;
     }
 
     if (search) {
@@ -45,6 +50,7 @@ export const getProjects = async (req, res) => {
     const projects = await Project.find(query)
       .populate("client")
       .populate("milestones.invoice")
+      .populate("milestones.invoices")
       .populate("assignedEmployees", "fullName employeeId companyEmail department designation")
       .sort({ createdAt: -1 });
 
@@ -57,9 +63,11 @@ export const getProjects = async (req, res) => {
 // GET /api/projects/:id - Get project by ID
 export const getProjectById = async (req, res) => {
   try {
+    await syncMilestoneInvoiceStatus(req.params.id);
     const project = await Project.findById(req.params.id)
       .populate("client")
       .populate("milestones.invoice")
+      .populate("milestones.invoices")
       .populate("assignedEmployees", "fullName employeeId companyEmail department designation");
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
@@ -164,12 +172,15 @@ export const updateProject = async (req, res) => {
     if (milestones) {
       // Map existing milestone invoice links back to updated milestones if IDs match
       project.milestones = milestones.map((newMilestone) => {
-        // If it is an existing milestone, retain its invoice reference & status if not overridden
+        // If it is an existing milestone, retain its invoice reference, invoicedAmount, paidAmount & status if not overridden
         const existing = project.milestones.id(newMilestone._id);
         if (existing) {
           return {
             ...newMilestone,
-            invoice: newMilestone.invoice || existing.invoice,
+            invoice: newMilestone.invoice !== undefined ? newMilestone.invoice : existing.invoice,
+            invoices: newMilestone.invoices !== undefined ? newMilestone.invoices : existing.invoices,
+            invoicedAmount: newMilestone.invoicedAmount !== undefined ? newMilestone.invoicedAmount : existing.invoicedAmount,
+            paidAmount: newMilestone.paidAmount !== undefined ? newMilestone.paidAmount : existing.paidAmount,
             status: newMilestone.status || existing.status,
           };
         }
@@ -180,6 +191,7 @@ export const updateProject = async (req, res) => {
     const updatedProject = await project.save();
     const populated = await updatedProject.populate("client");
     await populated.populate("milestones.invoice");
+    await populated.populate("milestones.invoices");
     await populated.populate("assignedEmployees", "fullName employeeId companyEmail department designation");
 
     res.json(populated);
