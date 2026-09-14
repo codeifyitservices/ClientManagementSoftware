@@ -100,6 +100,20 @@ class AuthManager {
   }
 
   /**
+   * Notify server of agent disconnection / application closure
+   */
+  async disconnect() {
+    try {
+      if (this.deviceId && this.isPaired()) {
+        logger.info("Notifying server of agent disconnection...");
+        await agentApi.disconnectDevice(this.deviceId).catch(() => {});
+      }
+    } catch (err) {
+      logger.error("Error during agent disconnect", err);
+    }
+  }
+
+  /**
    * Unpair and logout device
    */
   async logout() {

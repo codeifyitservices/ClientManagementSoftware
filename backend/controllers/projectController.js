@@ -102,7 +102,8 @@ export const createProject = async (req, res) => {
       projectValue,
       currency,
       inclusiveGst,
-      isPersonalAccount
+      isPersonalAccount,
+      commission,
     } = req.body;
 
     if (!projectName || !client || !startDate || !expectedEndDate) {
@@ -124,6 +125,7 @@ export const createProject = async (req, res) => {
       currency: currency || "INR (₹)",
       inclusiveGst: inclusiveGst !== undefined ? inclusiveGst : true,
       isPersonalAccount: isPersonalAccount !== undefined ? isPersonalAccount : false,
+      commission: commission || {},
     });
 
     const savedProject = await newProject.save();
@@ -150,7 +152,8 @@ export const updateProject = async (req, res) => {
       projectValue,
       currency,
       inclusiveGst,
-      isPersonalAccount
+      isPersonalAccount,
+      commission,
     } = req.body;
 
     const project = await Project.findById(req.params.id);
@@ -168,6 +171,9 @@ export const updateProject = async (req, res) => {
     project.currency = currency ?? project.currency;
     project.inclusiveGst = inclusiveGst !== undefined ? inclusiveGst : project.inclusiveGst;
     project.isPersonalAccount = isPersonalAccount !== undefined ? isPersonalAccount : project.isPersonalAccount;
+    if (commission !== undefined) {
+      project.commission = commission;
+    }
 
     if (milestones) {
       // Map existing milestone invoice links back to updated milestones if IDs match
@@ -224,5 +230,105 @@ export const deleteProject = async (req, res) => {
     res.json({ message: "Project deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Error deleting project", error: error.message });
+  }
+};
+
+// POST /api/projects/:id/expenses - Add an expense to project
+export const addProjectExpense = async (req, res) => {
+  try {
+    const { title, category, amount, date, paidBy, notes } = req.body;
+    if (!title || amount === undefined || amount === null) {
+      return res.status(400).json({ message: "Title and Amount are required." });
+    }
+
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    project.expenses.push({
+      title,
+      category: category || "Other",
+      amount: Number(amount) || 0,
+      date: date ? new Date(date) : new Date(),
+      paidBy: paidBy || "Company Account",
+      notes: notes || "",
+    });
+
+    await project.save();
+    res.status(201).json(project.expenses);
+  } catch (error) {
+    res.status(500).json({ message: "Error adding expense", error: error.message });
+  }
+};
+
+// PUT /api/projects/:id/expenses/:expenseId - Update a project expense
+export const updateProjectExpense = async (req, res) => {
+  try {
+    const { title, category, amount, date, paidBy, notes } = req.body;
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    const expense = project.expenses.id(req.params.expenseId);
+    if (!expense) {
+      return res.status(404).json({ message: "Expense not found" });
+    }
+
+    if (title !== undefined) expense.title = title;
+    if (category !== undefined) expense.category = category;
+    if (amount !== undefined) expense.amount = Number(amount);
+    if (date !== undefined) expense.date = new Date(date);
+    if (paidBy !== undefined) expense.paidBy = paidBy;
+    if (notes !== undefined) expense.notes = notes;
+
+    await project.save();
+    res.json(project.expenses);
+  } catch (error) {
+    res.status(500).json({ message: "Error updating expense", error: error.message });
+  }
+};
+
+// DELETE /api/projects/:id/expenses/:expenseId - Delete a project expense
+export const deleteProjectExpense = async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    project.expenses.pull({ _id: req.params.expenseId });
+    await project.save();
+    res.json(project.expenses);
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting expense", error: error.message });
+  }
+};
+
+// PUT /api/projects/:id/commission - Update project commission settings
+export const updateProjectCommission = async (req, res) => {
+  try {
+    const { enabled, type, basis, rate, status, paidDate, notes } = req.body;
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    project.commission = {
+      enabled: enabled !== undefined ? enabled : project.commission?.enabled || false,
+      type: type || project.commission?.type || "Percentage",
+      basis: basis || project.commission?.basis || "Revenue",
+      rate: rate !== undefined ? Number(rate) : (project.commission?.rate || 0),
+      status: status || project.commission?.status || "Pending",
+      paidDate: paidDate ? new Date(paidDate) : (status === "Paid" ? new Date() : null),
+      notes: notes !== undefined ? notes : (project.commission?.notes || ""),
+      updatedAt: new Date(),
+    };
+
+    await project.save();
+    res.json(project.commission);
+  } catch (error) {
+    res.status(500).json({ message: "Error updating commission", error: error.message });
   }
 };

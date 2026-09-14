@@ -80,9 +80,15 @@ function createSettingsWindow() {
   mainWindow.loadFile(path.join(__dirname, "../ui/settings.html"));
 
   // Closing the window quits the application completely from tray
-  mainWindow.on("close", (event) => {
+  mainWindow.on("close", async (event) => {
     if (!app.isQuitting) {
+      event.preventDefault();
       app.isQuitting = true;
+      try {
+        await authManager.disconnect();
+      } catch (err) {
+        logger.error("Error disconnecting agent on window close", err);
+      }
       app.quit();
     }
   });
@@ -207,8 +213,13 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.on("agent:close-app", () => {
+  ipcMain.on("agent:close-app", async () => {
     app.isQuitting = true;
+    try {
+      await authManager.disconnect();
+    } catch (err) {
+      logger.error("Error disconnecting on close-app", err);
+    }
     app.quit(); // Fully quits application and destroys tray icon
   });
 
@@ -219,13 +230,24 @@ app.whenReady().then(() => {
   }
 });
 
+let isDisconnecting = false;
 // App shutdown lifecycle
-app.on("before-quit", async () => {
-  app.isQuitting = true;
-  logger.logShutdown();
-  idleDetector.stop();
-  heartbeatService.stop();
-  trayManager.destroy();
+app.on("before-quit", async (event) => {
+  if (!isDisconnecting) {
+    isDisconnecting = true;
+    event.preventDefault();
+    logger.logShutdown();
+    idleDetector.stop();
+    heartbeatService.stop();
+    trayManager.destroy();
+    try {
+      await authManager.disconnect();
+    } catch (err) {
+      logger.error("Error disconnecting on before-quit", err);
+    }
+    app.isQuitting = true;
+    app.quit();
+  }
 });
 
 app.on("window-all-closed", () => {

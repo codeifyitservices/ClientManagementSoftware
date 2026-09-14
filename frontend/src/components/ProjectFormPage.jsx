@@ -12,7 +12,8 @@ import {
   CheckCircle,
   FileCheck2,
   Clock,
-  Briefcase
+  Briefcase,
+  Percent,
 } from "lucide-react";
 
 import {
@@ -51,6 +52,17 @@ export default function ProjectFormPage({
   const [currency, setCurrency] = useState("INR (₹)");
   const [inclusiveGst, setInclusiveGst] = useState(true);
   const [isPersonalAccount, setIsPersonalAccount] = useState(false);
+
+  // Commission settings
+  const [commission, setCommission] = useState({
+    enabled: false,
+    type: "Percentage",
+    basis: "Revenue",
+    rate: 0,
+    status: "Pending",
+    paidDate: "",
+    notes: "",
+  });
 
   // Fetch services & employees list
   useEffect(() => {
@@ -128,6 +140,15 @@ export default function ProjectFormPage({
         setProjectValue("");
         setInclusiveGst(true);
         setIsPersonalAccount(false);
+        setCommission({
+          enabled: false,
+          type: "Percentage",
+          basis: "Revenue",
+          rate: 0,
+          status: "Pending",
+          paidDate: "",
+          notes: "",
+        });
         setMilestones([
           { name: "Advance Payment", service: "", amount: 0, dueDate: "", status: "Pending", isInclusive: false, isPersonal: false },
         ]);
@@ -156,6 +177,29 @@ export default function ProjectFormPage({
     setCurrency(projectData.currency || "INR (₹)");
     setInclusiveGst(projectData.inclusiveGst !== false);
     setIsPersonalAccount(projectData.isPersonalAccount === true);
+    if (projectData.commission) {
+      setCommission({
+        enabled: projectData.commission.enabled || false,
+        type: projectData.commission.type || "Percentage",
+        basis: projectData.commission.basis || "Revenue",
+        rate: projectData.commission.rate || 0,
+        status: projectData.commission.status || "Pending",
+        paidDate: projectData.commission.paidDate
+          ? new Date(projectData.commission.paidDate).toISOString().split("T")[0]
+          : "",
+        notes: projectData.commission.notes || "",
+      });
+    } else {
+      setCommission({
+        enabled: false,
+        type: "Percentage",
+        basis: "Revenue",
+        rate: 0,
+        status: "Pending",
+        paidDate: "",
+        notes: "",
+      });
+    }
     setMilestones(
       projectData.milestones
         ? projectData.milestones.map((m) => ({
@@ -283,6 +327,7 @@ export default function ProjectFormPage({
       currency,
       inclusiveGst: (activeClient.isForeign || isPersonalAccount) ? false : inclusiveGst,
       isPersonalAccount,
+      commission,
     };
 
     setIsSaving(true);
@@ -323,6 +368,16 @@ export default function ProjectFormPage({
   }, 0);
   const calcOutstanding = Math.max(0, calcTotalValue - calcReceived);
   const calcProgressPercent = calcTotalValue > 0 ? Math.min(100, Math.round((calcReceived / calcTotalValue) * 100)) : 0;
+
+  const calcEstimatedCommission = () => {
+    if (!commission.enabled || !commission.rate) return 0;
+    if (commission.type === "Percentage") {
+      return Math.round(((calcTotalValue * Number(commission.rate)) / 100) * 100) / 100;
+    }
+    return Number(commission.rate) || 0;
+  };
+  const estimatedCommissionVal = calcEstimatedCommission();
+  const estimatedNetEarnings = Math.max(0, calcTotalValue - estimatedCommissionVal);
 
   if (loading) {
     return (
@@ -609,6 +664,151 @@ export default function ProjectFormPage({
 
           </div>
 
+          {/* Commission Details Card */}
+          <div className="bg-white border border-slate-100 rounded-2xl p-6 custom-shadow space-y-4">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-50">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                <Percent className="h-4 w-4 text-purple-600" />
+                <span>Commission Settings</span>
+              </h3>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                commission.enabled ? "bg-purple-100 text-purple-800" : "bg-slate-100 text-slate-500"
+              }`}>
+                {commission.enabled ? "Active" : "Optional"}
+              </span>
+            </div>
+
+            {/* Enable Commission Checkbox */}
+            <div className="flex items-start gap-2.5 bg-purple-50/40 border border-purple-100/80 p-3.5 rounded-xl">
+              <input
+                type="checkbox"
+                id="enableCommission"
+                checked={commission.enabled}
+                onChange={(e) => setCommission({ ...commission, enabled: e.target.checked })}
+                className="h-4 w-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300 mt-0.5 cursor-pointer accent-purple-600"
+              />
+              <label htmlFor="enableCommission" className="text-xs text-slate-800 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                <span>Enable Sales / Partner Commission</span>
+                <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal font-sans">
+                  Calculate commission either as a percentage of revenue/profit or as a flat fixed amount.
+                </span>
+              </label>
+            </div>
+
+            {commission.enabled && (
+              <div className="space-y-4 pt-1 animate-fade-in">
+                {/* 2-Column: Commission Type & Calculation Basis */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Type */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      Commission Type
+                    </label>
+                    <select
+                      value={commission.type}
+                      onChange={(e) => setCommission({ ...commission, type: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white cursor-pointer"
+                    >
+                      <option value="Percentage">Percentage (%)</option>
+                      <option value="Fixed Amount">Fixed Amount ({currency})</option>
+                    </select>
+                  </div>
+
+                  {/* Basis (only for Percentage) */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      Calculation Basis
+                    </label>
+                    {commission.type === "Percentage" ? (
+                      <select
+                        value={commission.basis}
+                        onChange={(e) => setCommission({ ...commission, basis: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white cursor-pointer"
+                      >
+                        <option value="Revenue">On Total Revenue (Collected)</option>
+                        <option value="Profit">On Gross Profit (Revenue - Expenses)</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        disabled
+                        value="Flat Project Fee"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-100 bg-slate-100/60 text-slate-400 text-xs font-semibold select-none cursor-not-allowed"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* 2-Column: Rate/Amount & Payout Status */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Rate / Amount */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      {commission.type === "Percentage" ? "Commission Rate (%)" : `Fixed Amount (${currency})`}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step={commission.type === "Percentage" ? "0.1" : "any"}
+                      value={commission.rate}
+                      onChange={(e) => setCommission({ ...commission, rate: Number(e.target.value) || 0 })}
+                      placeholder={commission.type === "Percentage" ? "e.g. 10" : "0.00"}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
+
+                  {/* Payout Status */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      Payout Status
+                    </label>
+                    <select
+                      value={commission.status}
+                      onChange={(e) => setCommission({
+                        ...commission,
+                        status: e.target.value,
+                        paidDate: e.target.value === "Paid" ? (commission.paidDate || new Date().toISOString().split("T")[0]) : "",
+                      })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white cursor-pointer"
+                    >
+                      <option value="Pending">Pending Payout</option>
+                      <option value="Paid">Disbursed / Paid</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Paid Date (if Paid) */}
+                {commission.status === "Paid" && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      Disbursement Date
+                    </label>
+                    <input
+                      type="date"
+                      value={commission.paidDate}
+                      onChange={(e) => setCommission({ ...commission, paidDate: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Commission Notes & Remarks <span className="text-[9px] text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={commission.notes}
+                    onChange={(e) => setCommission({ ...commission, notes: e.target.value })}
+                    placeholder="e.g. 10% sales referral for Q1 lead generation"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Realtime calculations summary card (Premium UI feature) */}
           <div className="bg-slate-900 text-white rounded-2xl p-6 custom-shadow space-y-4 border border-slate-950 relative overflow-hidden">
             {/* Background grid design */}
@@ -642,6 +842,24 @@ export default function ProjectFormPage({
                 <p className="text-sm font-black text-rose-455 mt-1">{formatWithINRConversion(calcOutstanding, currency)}</p>
               </div>
             </div>
+
+            {/* Estimated Commission row if enabled */}
+            {commission.enabled && (
+              <div className="grid grid-cols-2 gap-3 pt-1 text-center">
+                <div className="p-2 bg-purple-500/10 rounded-xl border border-purple-500/20">
+                  <p className="text-[9px] font-bold uppercase text-purple-300 tracking-wider">Est. Commission</p>
+                  <p className="text-xs font-black text-purple-300 mt-0.5">
+                    - {formatWithINRConversion(estimatedCommissionVal, currency)}
+                  </p>
+                </div>
+                <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                  <p className="text-[9px] font-bold uppercase text-emerald-300 tracking-wider">Net Retained Rev.</p>
+                  <p className="text-xs font-black text-emerald-300 mt-0.5">
+                    {formatWithINRConversion(estimatedNetEarnings, currency)}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Billing progress */}
             <div className="space-y-1.5 pt-2">

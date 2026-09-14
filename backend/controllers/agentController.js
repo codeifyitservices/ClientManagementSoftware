@@ -139,6 +139,7 @@ export const receiveHeartbeat = async (req, res) => {
       session.operatingSystem = os || session.operatingSystem;
       if (employeeId) session.employeeId = employeeId;
       session.lastHeartbeatAt = new Date();
+      session.disconnectedAt = null;
       await session.save();
     }
 
@@ -156,6 +157,7 @@ export const receiveHeartbeat = async (req, res) => {
 
     if (session.currentStatus !== agentPersistedStatus) {
       session.currentStatus = agentPersistedStatus;
+      session.disconnectedAt = null;
       await session.save();
     }
 
@@ -163,13 +165,57 @@ export const receiveHeartbeat = async (req, res) => {
       success: true,
       message: "Heartbeat processed successfully",
       status: finalStatus,
-      serverTime: new Date().toISOString(),
+      pairingValid: true,
     });
   } catch (error) {
-    console.error("Error processing heartbeat:", error);
+    console.error("Error receiving heartbeat:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to process heartbeat",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * @desc    Notify that desktop agent is closing / disconnecting
+ * @route   POST /api/agent/disconnect
+ * @access  Public
+ */
+export const disconnectAgentDevice = async (req, res) => {
+  try {
+    const { deviceId } = req.body;
+
+    if (deviceId) {
+      const session = await AgentSession.findOneAndUpdate(
+        { deviceId },
+        {
+          currentStatus: "Offline",
+          disconnectedAt: new Date(),
+        },
+        { new: true }
+      );
+
+      if (session) {
+        await syncAgentActivity({
+          deviceId: session.deviceId,
+          employeeCustomId: session.employeeId,
+          status: "Offline",
+          idleTimeSeconds: session.idleTimeSeconds || 0,
+          computerName: session.computerName,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Device marked as disconnected",
+    });
+  } catch (error) {
+    console.error("Error disconnecting agent:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to disconnect device",
       error: error.message,
     });
   }

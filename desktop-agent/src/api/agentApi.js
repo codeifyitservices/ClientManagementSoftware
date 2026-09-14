@@ -45,6 +45,19 @@ class AgentApi {
   }
 
   /**
+   * Notify server of agent disconnection / application closure
+   */
+  static async disconnectDevice(deviceId) {
+    try {
+      const response = await apiClient.post("/disconnect", { deviceId });
+      return response.data;
+    } catch (error) {
+      logger.error("API disconnectDevice failed", error);
+      return null;
+    }
+  }
+
+  /**
    * Revoke device pairing on server
    */
   static async logoutDevice(deviceId) {

@@ -27,6 +27,61 @@ const getTodayDateString = (dateObj = new Date()) => {
 };
 
 /**
+ * Helper to evaluate agent connection & 5-minute disconnect grace period
+ */
+export const evaluateAgentSessionStatus = (agentSession) => {
+  if (!agentSession || !agentSession.isPaired) {
+    return {
+      isAgentConnected: false,
+      isAgentIdle: false,
+      inGracePeriod: false,
+      disconnectMinutes: 0,
+      isDisconnectedOver5Mins: false,
+    };
+  }
+
+  const now = Date.now();
+  const lastHbTime = agentSession.lastHeartbeatAt ? new Date(agentSession.lastHeartbeatAt).getTime() : 0;
+  // Consider heartbeat alive if received within last 45 seconds (heartbeats sent every 5-30s)
+  const isHeartbeatFresh = (now - lastHbTime) < 45000;
+  const isExplicitOffline = agentSession.currentStatus === "Offline" || agentSession.currentStatus === "Disconnected";
+
+  // Agent is actively connected ONLY if heartbeat is fresh and agent is not offline
+  const isAgentConnected = isHeartbeatFresh && !isExplicitOffline;
+
+  // Determine when agent disconnected
+  let disconnectElapsedMs = 0;
+  if (!isAgentConnected) {
+    const disconnectStartTime = agentSession.disconnectedAt
+      ? new Date(agentSession.disconnectedAt).getTime()
+      : lastHbTime;
+    disconnectElapsedMs = Math.max(0, now - disconnectStartTime);
+  }
+
+  const disconnectMinutes = Math.round(disconnectElapsedMs / 60000);
+  // 5-minute (300,000 ms) reconnection grace window
+  const inGracePeriod = !isAgentConnected && (disconnectElapsedMs <= 300000);
+  const isDisconnectedOver5Mins = !isAgentConnected && (disconnectElapsedMs > 300000);
+
+  // Marked idle if:
+  // 1. Idle time on desktop >= 15 mins (900s) OR explicit idle status
+  // 2. OR agent has been closed / disconnected for MORE than 5 minutes (300,000 ms)
+  const isAgentIdle =
+    (agentSession.idleTimeSeconds >= 900) ||
+    (agentSession.currentStatus === "Idle") ||
+    (agentSession.currentStatus === "Inactive") ||
+    isDisconnectedOver5Mins;
+
+  return {
+    isAgentConnected,
+    isAgentIdle,
+    inGracePeriod,
+    disconnectMinutes,
+    isDisconnectedOver5Mins,
+  };
+};
+
+/**
  * @desc    Employee Check-In
  * @route   POST /api/attendance/check-in
  * @access  Private (Employee / Admin)
@@ -59,14 +114,11 @@ export const checkIn = async (req, res) => {
           { employeeId: employee.personalEmail },
         ].filter(Boolean),
       }).sort({ lastHeartbeatAt: -1 });
-      isAgentConnected = !!(
-        agentSession &&
-        agentSession.isPaired &&
-        agentSession.lastHeartbeatAt &&
-        (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000)
-      );
 
-      if (!isAgentConnected) {
+      const evalStatus = evaluateAgentSessionStatus(agentSession);
+      isAgentConnected = evalStatus.isAgentConnected;
+
+      if (!isAgentConnected && !evalStatus.inGracePeriod) {
         return res.status(403).json({
           success: false,
           message: "Access Denied: Desktop Tracker Agent is disconnected. You must have the desktop tracker agent running and connected to your account to check in.",
@@ -432,23 +484,32 @@ export const checkOut = async (req, res) => {
  */
 const autoCheckStaleAgentSessions = async (todayStr) => {
   try {
-    const threeMinsAgo = new Date(Date.now() - 180000);
+    const fiveMinsAgo = new Date(Date.now() - 300000);
     const staleRecords = await Attendance.find({
       date: todayStr,
       currentStatus: "Working",
       deviceId: { $exists: true, $ne: null },
-      lastActivityAt: { $exists: true, $ne: null, $lt: threeMinsAgo },
+      lastActivityAt: { $exists: true, $ne: null, $lt: fiveMinsAgo },
     });
 
     for (const record of staleRecords) {
-      record.currentStatus = "Idle";
-      record.timeline.push({
-        eventType: "Became Idle",
-        timestamp: new Date(),
-        description: "Desktop agent disconnected / inactive for over 3 minutes",
-        source: "Desktop Agent",
-      });
-      await record.save();
+      const agentSession = await AgentSession.findOne({
+        deviceId: record.deviceId,
+      }).sort({ lastHeartbeatAt: -1 });
+
+      const { isAgentIdle, isDisconnectedOver5Mins } = evaluateAgentSessionStatus(agentSession);
+      if (isAgentIdle || isDisconnectedOver5Mins) {
+        record.currentStatus = "Inactive";
+        record.timeline.push({
+          eventType: "Became Inactive",
+          timestamp: new Date(),
+          description: isDisconnectedOver5Mins
+            ? "Desktop agent disconnected for over 5 minutes"
+            : "No activity detected from desktop agent for 15+ minutes",
+          source: "Desktop Agent",
+        });
+        await record.save();
+      }
     }
   } catch (err) {
     console.error("Error checking stale agent sessions:", err);
@@ -474,11 +535,13 @@ export const getMyAttendanceSession = async (req, res) => {
       ]
     }).sort({ lastHeartbeatAt: -1 });
     
-    // Connected if paired and has had a heartbeat in the last 3 minutes (180,000 ms)
-    const isAgentConnected = !!(agentSession && agentSession.isPaired && (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000));
-    
-    // Check if 15 mins (900 seconds) of no mouse/keyboard activity detected from agent
-    const isAgentIdle = !!(agentSession && (agentSession.idleTimeSeconds >= 900 || agentSession.currentStatus === "Idle" || agentSession.currentStatus === "Inactive"));
+    const {
+      isAgentConnected,
+      isAgentIdle,
+      inGracePeriod,
+      disconnectMinutes,
+      isDisconnectedOver5Mins,
+    } = evaluateAgentSessionStatus(agentSession);
 
     if (attendance && attendance.currentStatus !== "Checked Out" && attendance.currentStatus !== "On Break") {
       if (isAgentIdle && attendance.currentStatus !== "Inactive" && attendance.currentStatus !== "Idle") {
@@ -486,11 +549,13 @@ export const getMyAttendanceSession = async (req, res) => {
         attendance.timeline.push({
           eventType: "Became Inactive",
           timestamp: new Date(),
-          description: `No activity detected for 15+ minutes (${Math.round((agentSession.idleTimeSeconds || 900) / 60)}m idle)`,
+          description: isDisconnectedOver5Mins
+            ? `Desktop agent disconnected for over 5 minutes (${disconnectMinutes}m)`
+            : `No activity detected for 15+ minutes (${Math.round((agentSession?.idleTimeSeconds || 900) / 60)}m idle)`,
           source: "Desktop Agent",
         });
         await attendance.save();
-      } else if (isAgentConnected && !isAgentIdle && attendance.currentStatus !== "Working") {
+      } else if ((isAgentConnected || inGracePeriod) && !isAgentIdle && attendance.currentStatus !== "Working") {
         if (attendance.currentStatus === "Idle" || attendance.currentStatus === "Inactive") {
           const elapsedMins = (Date.now() - new Date(attendance.lastActivityAt || Date.now()).getTime()) / 60000;
           attendance.totalIdleMinutes = (attendance.totalIdleMinutes || 0) + elapsedMins;
@@ -513,6 +578,8 @@ export const getMyAttendanceSession = async (req, res) => {
       currentStatus: attendance?.currentStatus || "Not Checked In",
       attendance,
       isAgentConnected,
+      inGracePeriod,
+      disconnectMinutes,
       agentDeviceName,
     });
   } catch (error) {
@@ -579,17 +646,7 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
         attendance.currentStatus = "Inactive";
       }
     } else if (status === "Offline" || status === "Disconnected") {
-      if (oldStatus === "Idle" || oldStatus === "Inactive") {
-        const elapsedMins = (Date.now() - new Date(oldLastActivityAt).getTime()) / 60000;
-        attendance.totalIdleMinutes = (attendance.totalIdleMinutes || 0) + elapsedMins;
-      }
-      attendance.currentStatus = "Inactive";
-      attendance.timeline.push({
-        eventType: "Became Inactive",
-        timestamp: new Date(),
-        description: "Desktop agent disconnected / offline",
-        source: "Desktop Agent",
-      });
+      // 5-minute grace window applies before marking inactive. Stale session checker & session poller will transition after 5 mins.
     } else if ((status === "Active" || status === "Working") && (idleTimeSeconds < 900)) {
       if (oldStatus !== "Working") {
         if (oldStatus === "Idle" || oldStatus === "Inactive") {
@@ -656,8 +713,13 @@ export const getTodaySummary = async (req, res) => {
           { employeeId: req.user._id.toString() }
         ]
       }).sort({ lastHeartbeatAt: -1 });
-      const isAgentConnected = !!(agentSession && agentSession.isPaired && (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000));
-      const isAgentIdle = !!(agentSession && (agentSession.idleTimeSeconds >= 900 || agentSession.currentStatus === "Idle" || agentSession.currentStatus === "Inactive"));
+      const {
+        isAgentConnected,
+        isAgentIdle,
+        inGracePeriod,
+        disconnectMinutes,
+        isDisconnectedOver5Mins,
+      } = evaluateAgentSessionStatus(agentSession);
 
       if (myRecord && myRecord.currentStatus !== "Checked Out" && myRecord.currentStatus !== "On Break") {
         if (isAgentIdle && myRecord.currentStatus !== "Inactive" && myRecord.currentStatus !== "Idle") {
@@ -665,11 +727,13 @@ export const getTodaySummary = async (req, res) => {
           myRecord.timeline.push({
             eventType: "Became Inactive",
             timestamp: new Date(),
-            description: `No activity detected for 15+ minutes (${Math.round((agentSession.idleTimeSeconds || 900) / 60)}m idle)`,
+            description: isDisconnectedOver5Mins
+              ? `Desktop agent disconnected for over 5 minutes (${disconnectMinutes}m)`
+              : `No activity detected for 15+ minutes (${Math.round((agentSession?.idleTimeSeconds || 900) / 60)}m idle)`,
             source: "Desktop Agent",
           });
           await myRecord.save();
-        } else if (isAgentConnected && !isAgentIdle && myRecord.currentStatus !== "Working") {
+        } else if ((isAgentConnected || inGracePeriod) && !isAgentIdle && myRecord.currentStatus !== "Working") {
           if (myRecord.currentStatus === "Idle" || myRecord.currentStatus === "Inactive") {
             const elapsedMins = (Date.now() - new Date(myRecord.lastActivityAt || Date.now()).getTime()) / 60000;
             myRecord.totalIdleMinutes = (myRecord.totalIdleMinutes || 0) + elapsedMins;

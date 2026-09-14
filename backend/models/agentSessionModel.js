@@ -54,6 +54,10 @@ const agentSessionSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    disconnectedAt: {
+      type: Date,
+      default: null,
+    },
     ipAddress: {
       type: String,
       default: null,

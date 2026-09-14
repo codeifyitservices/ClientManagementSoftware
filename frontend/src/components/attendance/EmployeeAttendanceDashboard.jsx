@@ -329,6 +329,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const attendance = sessionData?.attendance;
   const summary = summaryData?.summary;
   const isAgentConnected = sessionData?.isAgentConnected;
+  const inGracePeriod = sessionData?.inGracePeriod;
 
   const currentStatusVal = summary?.myStatus || "Not Checked In";
   const checkInVal = attendance?.checkInTime
@@ -479,14 +480,32 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
           {/* Agent status */}
           <div className="flex items-center gap-2 bg-white border border-slate-200/80 hover:bg-slate-50 cursor-pointer rounded-xl px-3.5 h-11 shadow-sm transition-colors">
             <span
-              className={`inline-block w-2 h-2 rounded-full ${isAgentConnected ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`}
+              className={`inline-block w-2 h-2 rounded-full ${
+                isAgentConnected
+                  ? "bg-emerald-500 animate-pulse"
+                  : inGracePeriod
+                  ? "bg-amber-500 animate-ping"
+                  : "bg-rose-400"
+              }`}
             ></span>
             <div className="leading-tight">
               <div className="text-[11px] font-extrabold text-slate-800">
                 Desktop Agent
               </div>
-              <div className="text-[9px] font-bold text-slate-400">
-                {isAgentConnected ? "Connected" : "Disconnected"}
+              <div
+                className={`text-[9px] font-bold ${
+                  isAgentConnected
+                    ? "text-emerald-600"
+                    : inGracePeriod
+                    ? "text-amber-600 font-semibold"
+                    : "text-slate-400"
+                }`}
+              >
+                {isAgentConnected
+                  ? "Connected"
+                  : inGracePeriod
+                  ? `Grace Window (${Math.max(0, 5 - (sessionData?.disconnectMinutes || 0))}m left)`
+                  : "Disconnected"}
               </div>
             </div>
           </div>

@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import Admin from "../models/adminModel.js";
 import Employee from "../models/employeeModel.js";
 import AgentSession from "../models/agentSessionModel.js";
+import { evaluateAgentSessionStatus } from "./attendanceController.js";
 
 // Generate a signed JWT token valid for 30 days
 const generateToken = (id) => {
@@ -59,14 +60,9 @@ export const login = async (req, res) => {
           ].filter(Boolean),
         }).sort({ lastHeartbeatAt: -1 });
 
-        const isAgentConnected = !!(
-          agentSession &&
-          agentSession.isPaired &&
-          agentSession.lastHeartbeatAt &&
-          (Date.now() - new Date(agentSession.lastHeartbeatAt).getTime() < 180000)
-        );
+        const evalStatus = evaluateAgentSessionStatus(agentSession);
 
-        if (!isAgentConnected) {
+        if (!evalStatus.isAgentConnected && !evalStatus.inGracePeriod) {
           return res.status(403).json({
             message: "Access Denied: Desktop Tracker Agent is disconnected. Please ensure the desktop agent is running and connected to your account before logging in.",
             agentDisconnected: true,

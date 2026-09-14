@@ -6,6 +6,10 @@ import {
   updateProject,
   bulkDeleteProjects,
   deleteProject,
+  addProjectExpense,
+  updateProjectExpense,
+  deleteProjectExpense,
+  updateProjectCommission,
 } from "../controllers/projectController.js";
 
 const router = express.Router();
@@ -27,5 +31,13 @@ router.post("/bulk-delete", bulkDeleteProjects);
 
 // DELETE /api/projects/:id - Delete a project
 router.delete("/:id", deleteProject);
+
+// Expenses endpoints
+router.post("/:id/expenses", addProjectExpense);
+router.put("/:id/expenses/:expenseId", updateProjectExpense);
+router.delete("/:id/expenses/:expenseId", deleteProjectExpense);
+
+// Commission endpoint
+router.put("/:id/commission", updateProjectCommission);
 
 export default router;

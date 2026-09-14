@@ -56,6 +56,87 @@ const milestoneSchema = new mongoose.Schema({
   },
 });
 
+const expenseSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  category: {
+    type: String,
+    enum: [
+      "Software / Tools",
+      "Server / Hosting",
+      "Subcontractor / Freelancer",
+      "Marketing / Ads",
+      "Travel / Logistics",
+      "Assets / Design",
+      "Other",
+    ],
+    default: "Other",
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  date: {
+    type: Date,
+    default: Date.now,
+  },
+  paidBy: {
+    type: String,
+    default: "Company Account",
+  },
+  notes: {
+    type: String,
+    default: "",
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const commissionSchema = new mongoose.Schema({
+  enabled: {
+    type: Boolean,
+    default: false,
+  },
+  type: {
+    type: String,
+    enum: ["Percentage", "Fixed Amount"],
+    default: "Percentage",
+  },
+  basis: {
+    type: String,
+    enum: ["Revenue", "Profit"],
+    default: "Revenue",
+  },
+  rate: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  status: {
+    type: String,
+    enum: ["Pending", "Paid"],
+    default: "Pending",
+  },
+  paidDate: {
+    type: Date,
+    default: null,
+  },
+  notes: {
+    type: String,
+    default: "",
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
 const projectSchema = new mongoose.Schema(
   {
     projectId: {
@@ -118,6 +199,22 @@ const projectSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+    expenses: {
+      type: [expenseSchema],
+      default: [],
+    },
+    commission: {
+      type: commissionSchema,
+      default: () => ({
+        enabled: false,
+        type: "Percentage",
+        basis: "Revenue",
+        rate: 0,
+        status: "Pending",
+        paidDate: null,
+        notes: "",
+      }),
     },
   },
   {
