@@ -1,6 +1,6 @@
 {
   "name": "company-desktop-agent",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Production-ready Windows Desktop Agent for Employee Presence, Idle Monitoring, and Sync",
   "main": "src/main/main.js",
   "author": "Company IT Engineering Team",

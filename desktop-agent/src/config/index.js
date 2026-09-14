@@ -1,5 +1,6 @@
 const path = require("path");
 const dotenv = require("dotenv");
+const pkg = require("../../package.json");
 
 // Load .env file from app directory
 dotenv.config({ path: path.join(__dirname, "../../.env") });
@@ -22,7 +23,7 @@ const config = {
   // App Metadata
   appProtocol: "desktop-agent",
   appName: "Company Desktop Agent",
-  version: "1.0.1",
+  version: pkg.version || "1.0.2",
 };
 
 module.exports = config;

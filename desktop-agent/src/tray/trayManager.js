@@ -5,6 +5,7 @@ const idleDetector = require("../idle/idleDetector");
 const heartbeatService = require("../heartbeat/heartbeatService");
 const authManager = require("../auth/authManager");
 const autoUpdater = require("../updater/autoUpdater");
+const config = require("../config");
 
 class TrayManager {
   constructor() {
@@ -31,42 +32,46 @@ class TrayManager {
     });
 
     this.updateContextMenu();
+  }
 
-    // Listen to status changes from idle detector
-    idleDetector.on("status-changed", ({ newStatus }) => {
+  onStatusChange(newStatus) {
+    if (this.tray) {
       this.updateTrayStatus(newStatus);
-    });
+    }
+  }
 
-    // Listen to connectivity changes
-    heartbeatService.on("connectivity-changed", (isOnline) => {
+  onNetworkChange(isOnline) {
+    if (this.tray) {
       if (!isOnline) {
         this.updateTrayStatus("Offline");
       } else {
         this.updateTrayStatus(idleDetector.getCurrentStatus());
       }
-    });
+    }
   }
 
   getIconForStatus(status) {
     const assetFolder = path.join(__dirname, "../../assets");
     switch (status) {
-      case "On Break":
-        return path.join(assetFolder, "tray-break.png");
+      case "Active":
+        return path.join(assetFolder, "tray-active.png");
       case "Idle":
         return path.join(assetFolder, "tray-idle.png");
+      case "On Break":
+        return path.join(assetFolder, "tray-break.png");
       case "Offline":
-        return path.join(assetFolder, "tray-offline.png");
-      case "Active":
       default:
-        return path.join(assetFolder, "tray-active.png");
+        return path.join(assetFolder, "tray-offline.png");
     }
   }
 
   updateTrayStatus(status) {
     if (!this.tray) return;
 
-    const isPaired = authManager.isPaired();
-    const tooltipText = `Company Desktop Agent - ${status} (${isPaired ? "Paired" : "Not Paired"})`;
+    let tooltipText = "Company Desktop Agent - Offline";
+    if (authManager.isPaired()) {
+      tooltipText = `Company Desktop Agent - ${status}`;
+    }
     this.tray.setToolTip(tooltipText);
 
     const iconPath = this.getIconForStatus(status);
@@ -88,7 +93,7 @@ class TrayManager {
 
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: `Company Desktop Agent (v1.0.0)`,
+        label: `Company Desktop Agent (v${config.version})`,
         enabled: false,
       },
       {
