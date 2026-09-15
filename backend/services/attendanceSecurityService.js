@@ -10,17 +10,6 @@ import AttendancePolicy from "../models/attendancePolicyModel.js";
 export const getClientIp = (req) => {
   if (!req) return "127.0.0.1";
 
-  // Check detected public Wi-Fi IP sent by client device
-  if (req.body?.clientIp && req.body.clientIp !== "127.0.0.1" && req.body.clientIp !== "::1") {
-    return String(req.body.clientIp).trim();
-  }
-  if (req.body?.wifiIp && req.body.wifiIp !== "127.0.0.1" && req.body.wifiIp !== "::1") {
-    return String(req.body.wifiIp).trim();
-  }
-  if (req.headers["x-client-ip"]) {
-    return String(req.headers["x-client-ip"]).trim();
-  }
-
   const forwarded = req.headers["x-forwarded-for"];
   let ip = "";
 
@@ -220,13 +209,15 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
   });
 
   if (matchedWfhRule) {
+    const isIpMatched = !matchedWfhRule.ipAddress || matchedWfhRule.ipAddress === currentIp;
     return {
       allowed: true,
       reason: "WFH_APPROVED",
       ip: currentIp,
       location: matchedWfhRule.locationName || "Approved Remote / WFH Network",
       matchedRule: matchedWfhRule._id,
-      message: "Check-in allowed via approved Work From Home (WFH) authorization",
+      isIpMatched,
+      message: `Check-in allowed via approved Work From Home (WFH) authorization (${matchedWfhRule.locationName || "Home Network"})`,
     };
   }
 

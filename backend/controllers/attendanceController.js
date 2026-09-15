@@ -151,7 +151,7 @@ export const evaluateAgentSessionStatus = (agentSession) => {
  */
 export const checkIn = async (req, res) => {
   try {
-    const employeeId = req.user?._id || req.body.employeeId;
+    const employeeId = req.user?.role === "Admin" && req.body.employeeId ? req.body.employeeId : req.user?._id;
     const { isRemote, deviceId, deviceName } = req.body;
 
     if (!employeeId) {
@@ -336,7 +336,7 @@ export const checkIn = async (req, res) => {
  */
 export const startBreak = async (req, res) => {
   try {
-    const employeeId = req.user?._id || req.body.employeeId;
+    const employeeId = req.user?.role === "Admin" && req.body.employeeId ? req.body.employeeId : req.user?._id;
     const { breakReason } = req.body;
     const todayStr = getTodayDateString();
 
@@ -416,7 +416,7 @@ export const startBreak = async (req, res) => {
  */
 export const endBreak = async (req, res) => {
   try {
-    const employeeId = req.user?._id || req.body.employeeId;
+    const employeeId = req.user?.role === "Admin" && req.body.employeeId ? req.body.employeeId : req.user?._id;
     const todayStr = getTodayDateString();
 
     const attendance = await Attendance.findOne({ employee: employeeId, date: todayStr });
@@ -501,7 +501,7 @@ export const endBreak = async (req, res) => {
  */
 export const checkOut = async (req, res) => {
   try {
-    const employeeId = req.user?._id || req.body.employeeId;
+    const employeeId = req.user?.role === "Admin" && req.body.employeeId ? req.body.employeeId : req.user?._id;
     const todayStr = getTodayDateString();
 
     const attendance = await Attendance.findOne({ employee: employeeId, date: todayStr });
@@ -1333,7 +1333,7 @@ export const manualUpsertAttendance = async (req, res) => {
  */
 export const requestCorrection = async (req, res) => {
   try {
-    const employeeId = req.user?._id || req.body.employeeId;
+    const employeeId = req.user?.role === "Admin" && req.body.employeeId ? req.body.employeeId : req.user?._id;
     const { attendanceId, date, checkInTime, checkOutTime, reason } = req.body;
 
     if (!reason) {
@@ -1343,6 +1343,13 @@ export const requestCorrection = async (req, res) => {
     let attendance = null;
     if (attendanceId && !attendanceId.startsWith("virtual-")) {
       attendance = await Attendance.findById(attendanceId);
+      if (!attendance) {
+        return res.status(404).json({ success: false, message: "Attendance record not found" });
+      }
+      // Non-admins can ONLY submit corrections on their own record
+      if (req.user?.role === "Employee" && attendance.employee?.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: "Forbidden: You cannot request corrections on another employee's record." });
+      }
     } else {
       const dateStr = date || getTodayDateString();
       attendance = await Attendance.findOne({ employee: employeeId, date: dateStr });
