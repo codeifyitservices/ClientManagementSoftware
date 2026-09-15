@@ -14,6 +14,11 @@ import {
   validateAttendanceAccess,
   logSecurityAudit,
 } from "../services/attendanceSecurityService.js";
+import {
+  broadcastAttendanceUpdate,
+  isAgentConnected as isSocketAgentConnected,
+  isEmployeeInGracePeriod,
+} from "../services/socketService.js";
 
 /**
  * Helper to get current YYYY-MM-DD string
@@ -64,6 +69,20 @@ export const findEmployeeAgentSession = async (employeeUser) => {
     }
   }
 
+  // Fallback: If there is an active paired session with recent heartbeat, link it to this user
+  if (!session) {
+    const fiveMinsAgo = new Date(Date.now() - 300000);
+    session = await AgentSession.findOne({
+      isPaired: true,
+      lastHeartbeatAt: { $gte: fiveMinsAgo },
+    }).sort({ lastHeartbeatAt: -1 });
+
+    if (session) {
+      session.employeeId = employeeUser.employeeId || employeeUser._id?.toString() || session.employeeId;
+      await session.save();
+    }
+  }
+
   return session;
 };
 
@@ -74,10 +93,10 @@ export const evaluateAgentSessionStatus = (agentSession) => {
   if (!agentSession || !agentSession.isPaired) {
     return {
       isAgentConnected: false,
-      isAgentIdle: false,
+      isAgentIdle: true,
       inGracePeriod: false,
-      disconnectMinutes: 0,
-      isDisconnectedOver5Mins: false,
+      disconnectMinutes: 999,
+      isDisconnectedOver5Mins: true,
     };
   }
 
@@ -87,8 +106,12 @@ export const evaluateAgentSessionStatus = (agentSession) => {
   const isHeartbeatFresh = (now - lastHbTime) < 90000;
   const isExplicitOffline = agentSession.currentStatus === "Offline" || agentSession.currentStatus === "Disconnected";
 
-  // Agent is actively connected ONLY if heartbeat is fresh and agent is not offline
-  const isAgentConnected = isHeartbeatFresh && !isExplicitOffline;
+  // Check live Socket.io presence
+  const isSocketLive = agentSession.employeeId ? isSocketAgentConnected(agentSession.employeeId) : false;
+  const inSocketGrace = agentSession.employeeId ? isEmployeeInGracePeriod(agentSession.employeeId) : false;
+
+  // Agent is actively connected if socket is live OR heartbeat is fresh and agent is not offline
+  const isAgentConnected = isSocketLive || (isHeartbeatFresh && !isExplicitOffline);
 
   // Determine when agent disconnected
   let disconnectElapsedMs = 0;
@@ -101,8 +124,8 @@ export const evaluateAgentSessionStatus = (agentSession) => {
 
   const disconnectMinutes = Math.round(disconnectElapsedMs / 60000);
   // 5-minute (300,000 ms) reconnection grace window
-  const inGracePeriod = !isAgentConnected && (disconnectElapsedMs <= 300000);
-  const isDisconnectedOver5Mins = !isAgentConnected && (disconnectElapsedMs > 300000);
+  const inGracePeriod = !isAgentConnected && (inSocketGrace || disconnectElapsedMs <= 300000);
+  const isDisconnectedOver5Mins = !isAgentConnected && !inSocketGrace && (disconnectElapsedMs > 300000);
 
   // Marked idle if:
   // 1. Idle time on desktop >= 15 mins (900s) OR explicit idle status from desktop idle detector
@@ -282,8 +305,17 @@ export const checkIn = async (req, res) => {
         deviceId: deviceId || null,
         deviceName: deviceName || null,
         lastActivityAt: now,
-        timeline: initialTimeline,
       });
+    }
+
+    try {
+      broadcastAttendanceUpdate(employee.employeeId || employee._id.toString(), {
+        currentStatus: attendance.currentStatus,
+        attendance,
+        isAgentConnected: true,
+      });
+    } catch (sockErr) {
+      console.error("Error broadcasting checkIn:", sockErr);
     }
 
     return res.status(200).json({
@@ -354,6 +386,16 @@ export const startBreak = async (req, res) => {
       );
     } catch (agentErr) {
       console.error("Error updating agent session on startBreak:", agentErr);
+    }
+
+    // Instantly push On Break status to Web and Desktop Agent sockets
+    try {
+      broadcastAttendanceUpdate(employeeId?.toString() || attendance.employeeCustomId, {
+        currentStatus: "On Break",
+        attendance,
+      });
+    } catch (sockErr) {
+      console.error("Error broadcasting startBreak:", sockErr);
     }
 
     return res.status(200).json({
@@ -431,6 +473,16 @@ export const endBreak = async (req, res) => {
       console.error("Error updating agent session on endBreak:", agentErr);
     }
 
+    // Instantly push Active/Working status to Web and Desktop Agent sockets
+    try {
+      broadcastAttendanceUpdate(employeeId?.toString() || attendance.employeeCustomId, {
+        currentStatus: "Working",
+        attendance,
+      });
+    } catch (sockErr) {
+      console.error("Error broadcasting endBreak:", sockErr);
+    }
+
     return res.status(200).json({
       success: true,
       message: "Break ended",
@@ -499,6 +551,16 @@ export const checkOut = async (req, res) => {
 
     await attendance.save();
 
+    // Broadcast Checked Out to Web and Desktop Agent sockets
+    try {
+      broadcastAttendanceUpdate(attendance.employee?.toString() || attendance.employeeCustomId, {
+        currentStatus: "Checked Out",
+        attendance,
+      });
+    } catch (sockErr) {
+      console.error("Error broadcasting checkOut:", sockErr);
+    }
+
     return res.status(200).json({
       success: true,
       message: "Checked out successfully",
@@ -542,12 +604,35 @@ const autoCheckStaleAgentSessions = async (todayStr) => {
           source: "Desktop Agent",
         });
         await record.save();
+
+        if (record.employee) {
+          try {
+            broadcastAttendanceUpdate(record.employee.toString(), {
+              currentStatus: "Inactive",
+              attendance: record,
+              isAgentConnected: false,
+              inGracePeriod: false,
+            });
+          } catch (sockErr) {
+            console.error("Error broadcasting in autoCheckStaleAgentSessions:", sockErr);
+          }
+        }
       }
     }
   } catch (err) {
     console.error("Error checking stale agent sessions:", err);
   }
 };
+
+// Start background timer to autonomously check stale agent sessions every 60s
+let staleInterval = null;
+export const startStaleSessionChecker = () => {
+  if (staleInterval) clearInterval(staleInterval);
+  staleInterval = setInterval(() => {
+    autoCheckStaleAgentSessions(getTodayDateString());
+  }, 60000);
+};
+startStaleSessionChecker();
 
 /**
  * @desc    Get Current Logged-in Employee's Attendance Session (Fast Polling Endpoint)
@@ -656,6 +741,18 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
           employee = await Employee.findById(att.employee);
         }
       }
+
+      if (!employee) {
+        const activeAtt = await Attendance.findOne({ date: todayStr, currentStatus: { $ne: "Checked Out" } }).sort({ checkInTime: -1 });
+        if (activeAtt?.employee) {
+          employee = await Employee.findById(activeAtt.employee);
+          if (employee) {
+            activeAtt.deviceId = deviceId;
+            activeAtt.deviceName = computerName;
+            await activeAtt.save();
+          }
+        }
+      }
     }
 
     if (!employee) return { serverStatus: status };
@@ -747,6 +844,17 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
     }
 
     await attendance.save();
+
+    try {
+      broadcastAttendanceUpdate(employeeCustomId || attendance.employeeCustomId || attendance.employee?.toString(), {
+        currentStatus: attendance.currentStatus,
+        attendance,
+        isAgentConnected: true,
+      });
+    } catch (sockErr) {
+      console.error("Error broadcasting in syncAgentActivity:", sockErr);
+    }
+
     return { serverStatus: attendance.currentStatus };
   } catch (err) {
     console.error("Error in syncAgentActivity:", err);

@@ -16,14 +16,12 @@ class AuthManager {
   }
 
   getEmployeeId() {
-    const id = storage.getEmployeeId();
-    return id && id !== "EMP-DEFAULT" ? id : null;
+    return storage.getEmployeeId() || null;
   }
 
   isPaired() {
     const token = storage.getDeviceToken();
-    const empId = storage.getEmployeeId();
-    return !!(token && empId && empId !== "EMP-DEFAULT");
+    return !!token;
   }
 
   /**
@@ -49,13 +47,15 @@ class AuthManager {
         storage.setDeviceId(result.deviceId || this.deviceId);
         storage.setLastSync(new Date().toISOString());
 
-        // Immediately activate presence detection & heartbeat service
+        // Immediately activate presence detection, heartbeat service & socket client
         try {
           const idleDetector = require("../idle/idleDetector");
           const heartbeatService = require("../heartbeat/heartbeatService");
+          const socketClient = require("../api/socketClient");
           idleDetector.setStatus("Active");
           idleDetector.start();
           heartbeatService.start();
+          socketClient.connect();
           await heartbeatService.forceSyncNow();
         } catch (err) {
           logger.warn("Could not trigger immediate heartbeat sync", err);
@@ -87,6 +87,15 @@ class AuthManager {
       if (parsedUrl.hostname === "pair" || parsedUrl.pathname.includes("pair")) {
         const token = parsedUrl.searchParams.get("token");
         const empId = parsedUrl.searchParams.get("emp");
+        const serverParam = parsedUrl.searchParams.get("server");
+
+        if (serverParam) {
+          const apiUrl = serverParam.endsWith("/api/agent")
+            ? serverParam
+            : `${serverParam.replace(/\/$/, "")}/api/agent`;
+          config.setApiBaseUrl(apiUrl);
+          logger.info(`[AuthManager] Dynamically updated API base URL to ${apiUrl}`);
+        }
 
         if (token) {
           return await this.pairWithToken(token, empId);
@@ -141,6 +150,8 @@ class AuthManager {
       try {
         const idleDetector = require("../idle/idleDetector");
         const heartbeatService = require("../heartbeat/heartbeatService");
+        const socketClient = require("../api/socketClient");
+        socketClient.disconnect();
         idleDetector.setStatus("Offline");
         idleDetector.stop();
         heartbeatService.stop();

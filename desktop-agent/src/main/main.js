@@ -9,6 +9,8 @@ const heartbeatService = require("../heartbeat/heartbeatService");
 const autoUpdater = require("../updater/autoUpdater");
 const storage = require("../utils/storage");
 const machineInfo = require("../utils/machineInfo");
+const socketClient = require("../api/socketClient");
+const localHttpServer = require("../server/localHttpServer");
 
 // Prevent multiple instances of the desktop agent
 const isSingleInstance = app.requestSingleInstanceLock();
@@ -79,17 +81,11 @@ function createSettingsWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "../ui/settings.html"));
 
-  // Closing the window quits the application completely from tray
-  mainWindow.on("close", async (event) => {
+  // Closing the window hides to system tray so the background agent continues running
+  mainWindow.on("close", (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
-      app.isQuitting = true;
-      try {
-        await authManager.disconnect();
-      } catch (err) {
-        logger.error("Error disconnecting agent on window close", err);
-      }
-      app.quit();
+      mainWindow.hide();
     }
   });
 
@@ -103,16 +99,22 @@ function createSettingsWindow() {
  */
 app.on("second-instance", (event, commandLine) => {
   logger.info("Second instance launched with command line", { commandLine });
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  }
 
   // Find deep link URL argument
   const urlArg = commandLine.find((arg) =>
     arg.startsWith(`${config.appProtocol}://`),
   );
+
+  // Only restore & focus window if it is NOT a background status change
+  if (!urlArg || !urlArg.includes("status")) {
+    if (!mainWindow) {
+      createSettingsWindow();
+    }
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+
   if (urlArg) {
     authManager.handleProtocolUrl(urlArg).then(() => {
       if (mainWindow) mainWindow.webContents.send("agent:status-updated");
@@ -143,11 +145,15 @@ app.whenReady().then(() => {
     mainWindow.show();
   });
 
-  // Only start presence tracking and heartbeats if already paired with an employee account
+  // Start Local Loopback HTTP Server (for local dashboard probe on 127.0.0.1:49152)
+  localHttpServer.start();
+
+  // Only start presence tracking, heartbeats, and socket client if already paired
   if (authManager.isPaired()) {
     idleDetector.setStatus("Active");
     idleDetector.start();
     heartbeatService.start();
+    socketClient.connect();
   } else {
     idleDetector.setStatus("Offline");
     logger.info("Agent running in unpaired state. Awaiting pairing from web application.");
@@ -167,6 +173,14 @@ app.whenReady().then(() => {
       if (mainWindow) mainWindow.webContents.send("agent:status-updated");
       heartbeatService.forceSyncNow();
     });
+  } else {
+    // Show window if manually launched by user (unless started silently with --hidden)
+    const isHiddenLaunch = process.argv.includes("--hidden");
+    if (!isHiddenLaunch) {
+      createSettingsWindow();
+      mainWindow.show();
+      mainWindow.focus();
+    }
   }
 
   // Register IPC Handlers for Settings UI
@@ -191,6 +205,9 @@ app.whenReady().then(() => {
   ipcMain.handle("agent:pair", async (event, pairingToken) => {
     const res = await authManager.pairWithToken(pairingToken);
     trayManager.updateTrayStatus(idleDetector.getCurrentStatus());
+    if (res && res.success) {
+      socketClient.connect();
+    }
     return res;
   });
 
@@ -205,6 +222,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("agent:logout", async () => {
+    socketClient.disconnect();
     await authManager.logout();
     trayManager.updateTrayStatus("Offline");
     return { success: true };
@@ -241,6 +259,8 @@ app.on("before-quit", async (event) => {
     isDisconnecting = true;
     event.preventDefault();
     logger.logShutdown();
+    socketClient.disconnect();
+    localHttpServer.stop();
     idleDetector.stop();
     heartbeatService.stop();
     trayManager.destroy();

@@ -399,22 +399,92 @@ export default function ProjectDetailPage({
   const isPersonalAcc = project.isPersonalAccount === true;
   const hasGst = !isForeignClient && !isPersonalAcc;
 
-  const projectValue = (project.finalAmount && project.finalAmount > 0)
-    ? project.finalAmount
-    : (project.projectValue || (project.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0));
-
-  let totalBaseValue = projectValue;
+  // Base Project Value & Tax Values
+  let totalBaseValue = Number(project.projectValue) || 0;
   let totalTaxValue = 0;
+  let totalProjectValue = (project.finalAmount && project.finalAmount > 0) ? project.finalAmount : totalBaseValue;
 
   if (hasGst) {
     if (project.inclusiveGst !== false) {
-      totalBaseValue = Math.round((projectValue / 1.18) * 100) / 100;
-      totalTaxValue = Math.round((projectValue - totalBaseValue) * 100) / 100;
+      // Inclusive GST: projectValue is the total including GST
+      totalProjectValue = Number(project.projectValue) || (project.finalAmount && project.finalAmount > 0 ? project.finalAmount : 0);
+      totalBaseValue = Math.round((totalProjectValue / 1.18) * 100) / 100;
+      totalTaxValue = Math.round((totalProjectValue - totalBaseValue) * 100) / 100;
     } else {
-      totalBaseValue = project.projectValue || Math.round((projectValue / 1.18) * 100) / 100;
+      // Exclusive GST: projectValue is the base amount, finalAmount is projectValue * 1.18
+      totalBaseValue = Number(project.projectValue) || 0;
       totalTaxValue = Math.round((totalBaseValue * 0.18) * 100) / 100;
+      totalProjectValue = (project.finalAmount && project.finalAmount > 0)
+        ? project.finalAmount
+        : Math.round((totalBaseValue + totalTaxValue) * 100) / 100;
     }
+  } else {
+    totalProjectValue = totalBaseValue;
+    totalTaxValue = 0;
   }
+
+  // Calculate detailed milestone metrics
+  const milestoneDetails = (project.milestones || []).map((m) => {
+    const isMExempt = isForeignClient || isPersonalAcc || !!m.isPersonal;
+    const isMIncl = isMExempt ? true : !!m.isInclusive;
+    const rawAmt = Number(m.amount) || 0;
+
+    let baseAmt = rawAmt;
+    let taxAmt = 0;
+    let totalAmt = rawAmt;
+
+    if (isMExempt) {
+      baseAmt = rawAmt;
+      taxAmt = 0;
+      totalAmt = rawAmt;
+    } else if (m.isInclusive === true) {
+      totalAmt = rawAmt;
+      baseAmt = Math.round((rawAmt / 1.18) * 100) / 100;
+      taxAmt = Math.round((totalAmt - baseAmt) * 100) / 100;
+    } else {
+      // Exclusive GST milestone: raw amount is base amount (+18% GST added)
+      baseAmt = rawAmt;
+      taxAmt = Math.round((baseAmt * 0.18) * 100) / 100;
+      totalAmt = Math.round((baseAmt + taxAmt) * 100) / 100;
+    }
+
+    const isPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
+    const invoicedRaw = m.invoicedAmount !== undefined ? m.invoicedAmount : (m.invoice ? m.amount : 0);
+    const paidRaw = isPaid ? m.amount : (m.paidAmount || 0);
+
+    let basePaid = 0;
+    let taxPaid = 0;
+    let totalPaid = 0;
+
+    if (isPaid) {
+      basePaid = baseAmt;
+      taxPaid = taxAmt;
+      totalPaid = totalAmt;
+    } else if (paidRaw > 0) {
+      const ratio = rawAmt > 0 ? Math.min(1, paidRaw / rawAmt) : 0;
+      basePaid = Math.round(baseAmt * ratio * 100) / 100;
+      taxPaid = Math.round(taxAmt * ratio * 100) / 100;
+      totalPaid = Math.round((basePaid + taxPaid) * 100) / 100;
+    }
+
+    const remainingRaw = Math.max(0, rawAmt - invoicedRaw);
+
+    return {
+      ...m,
+      isMExempt,
+      isMIncl,
+      baseAmt,
+      taxAmt,
+      totalAmt,
+      basePaid,
+      taxPaid,
+      totalPaid,
+      isPaid,
+      invoicedRaw,
+      paidRaw,
+      remaining: remainingRaw,
+    };
+  });
 
   const projectInvoices = invoices.filter((inv) =>
     (inv.projectId && (inv.projectId?._id || inv.projectId)?.toString() === project._id?.toString()) ||
@@ -424,40 +494,49 @@ export default function ProjectDetailPage({
     )
   );
 
-  let received = 0;
+  let baseReceived = 0;
+  let taxReceived = 0;
+  let totalReceived = 0;
   let invoicesCount = 0;
   let nextDueMilestone = null;
 
-  project.milestones?.forEach((m) => {
-    const paid = (m.status === "Paid")
-      ? (m.amount || m.paidAmount || 0)
-      : (m.paidAmount || 0);
-    received += paid;
-    if (paid < m.amount) {
-      if (!nextDueMilestone || new Date(m.dueDate) < new Date(nextDueMilestone.dueDate)) {
-        nextDueMilestone = m;
-      }
-    }
-    const invList = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
-    invoicesCount += invList.length;
-  });
+  if (milestoneDetails.length > 0) {
+    milestoneDetails.forEach((m) => {
+      baseReceived += m.basePaid;
+      taxReceived += m.taxPaid;
+      totalReceived += m.totalPaid;
 
-  if ((!project.milestones || project.milestones.length === 0) && projectInvoices.length > 0) {
+      if (!m.isPaid) {
+        if (!nextDueMilestone || (m.dueDate && (!nextDueMilestone.dueDate || new Date(m.dueDate) < new Date(nextDueMilestone.dueDate)))) {
+          nextDueMilestone = m;
+        }
+      }
+
+      const invList = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
+      invoicesCount += invList.length;
+    });
+  } else if (projectInvoices.length > 0) {
     projectInvoices.forEach((inv) => {
       if (inv.paymentStatus === "Paid") {
-        received += (inv.totalAmount || inv.amount || 0);
+        const invBase = Number(inv.amount) || 0;
+        const invTotal = Number(inv.totalAmount) || invBase;
+        const invTax = Number(inv.gstAmount) || (invTotal - invBase);
+        baseReceived += invBase;
+        taxReceived += invTax;
+        totalReceived += invTotal;
       }
     });
+    invoicesCount = projectInvoices.length;
   }
 
-  const outstanding = Math.max(0, projectValue - received);
+  // Round values
+  baseReceived = Math.round(baseReceived * 100) / 100;
+  taxReceived = Math.round(taxReceived * 100) / 100;
+  totalReceived = Math.round(totalReceived * 100) / 100;
 
-  let baseReceived = received;
-  let taxReceived = 0;
-  if (hasGst && projectValue > 0) {
-    baseReceived = Math.round((received / 1.18) * 100) / 100;
-    taxReceived = Math.round((received - baseReceived) * 100) / 100;
-  }
+  const totalOutstanding = Math.max(0, Math.round((totalProjectValue - totalReceived) * 100) / 100);
+  const baseOutstanding = Math.max(0, Math.round((totalBaseValue - baseReceived) * 100) / 100);
+  const taxOutstanding = Math.max(0, Math.round((totalTaxValue - taxReceived) * 100) / 100);
 
   const baseProgressPercent = totalBaseValue > 0 ? Math.min(100, Math.round((baseReceived / totalBaseValue) * 100)) : 0;
   const taxProgressPercent = (hasGst && totalTaxValue > 0) ? Math.min(100, Math.round((taxReceived / totalTaxValue) * 100)) : 0;
@@ -467,7 +546,7 @@ export default function ProjectDetailPage({
   const totalExpenses = expensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   // Profitability Calculations
-  const operationalRevenue = received; 
+  const operationalRevenue = totalReceived; 
   const grossProfit = operationalRevenue - totalExpenses;
   const grossMarginPercent = operationalRevenue > 0 ? ((grossProfit / operationalRevenue) * 100).toFixed(1) : 0;
 
@@ -1063,28 +1142,38 @@ export default function ProjectDetailPage({
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-xl">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Project Value</span>
-                <h4 className="text-lg font-black text-slate-900 mt-1">{formatWithINRConversion(projectValue, project.currency)}</h4>
+                <h4 className="text-lg font-black text-slate-900 mt-1">{formatWithINRConversion(totalProjectValue, project.currency)}</h4>
                 {project.isPersonalAccount && (
-                  <span className="text-[8px] text-amber-500 font-bold uppercase select-none block mt-0.5">(Personal)</span>
+                  <span className="text-[8px] text-amber-500 font-bold uppercase select-none block mt-0.5">(Personal - 0% Tax)</span>
                 )}
                 {project.client?.isForeign && (
-                  <span className="text-[8px] text-emerald-500 font-bold uppercase select-none block mt-0.5">(Foreign)</span>
+                  <span className="text-[8px] text-emerald-500 font-bold uppercase select-none block mt-0.5">(Foreign - 0% Tax)</span>
                 )}
                 {!project.isPersonalAccount && !project.client?.isForeign && project.projectValue !== undefined && (
                   <span className="text-[8px] text-indigo-500 font-bold uppercase select-none block mt-0.5">
-                    ({project.inclusiveGst ? "Inclusive" : "Exclusive"} GST)
+                    {project.inclusiveGst ? "(Inclusive GST)" : `(+18% GST: Base ${formatWithINRConversion(totalBaseValue, project.currency)} + Tax ${formatWithINRConversion(totalTaxValue, project.currency)})`}
                   </span>
                 )}
               </div>
 
               <div className="p-4 bg-emerald-50/25 border border-emerald-100/60 rounded-xl">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Received</span>
-                <h4 className="text-lg font-black text-emerald-600 mt-1">{formatWithINRConversion(received, project.currency)}</h4>
+                <h4 className="text-lg font-black text-emerald-600 mt-1">{formatWithINRConversion(totalReceived, project.currency)}</h4>
+                {hasGst && totalReceived > 0 && (
+                  <span className="text-[8px] text-emerald-600/80 font-semibold select-none block mt-0.5 truncate">
+                    Base: {formatWithINRConversion(baseReceived, project.currency)} | Tax: {formatWithINRConversion(taxReceived, project.currency)}
+                  </span>
+                )}
               </div>
 
               <div className="p-4 bg-rose-50/25 border border-rose-100/60 rounded-xl">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-rose-500">Outstanding</span>
-                <h4 className="text-lg font-black text-rose-600 mt-1">{formatWithINRConversion(outstanding, project.currency)}</h4>
+                <h4 className="text-lg font-black text-rose-600 mt-1">{formatWithINRConversion(totalOutstanding, project.currency)}</h4>
+                {hasGst && totalOutstanding > 0 && (
+                  <span className="text-[8px] text-rose-500/80 font-semibold select-none block mt-0.5 truncate">
+                    Base: {formatWithINRConversion(baseOutstanding, project.currency)} | Tax: {formatWithINRConversion(taxOutstanding, project.currency)}
+                  </span>
+                )}
               </div>
 
               <div className="p-4 bg-indigo-50/25 border border-indigo-100/60 rounded-xl">
@@ -1096,8 +1185,13 @@ export default function ProjectDetailPage({
                 <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700">Next Due</span>
                 {nextDueMilestone ? (
                   <div className="mt-0.5">
-                    <h4 className="text-sm font-black text-slate-900">{formatWithINRConversion(nextDueMilestone.amount, project.currency)}</h4>
-                    <p className="text-[8px] text-slate-400 font-bold uppercase">Due {new Date(nextDueMilestone.dueDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}</p>
+                    <h4 className="text-sm font-black text-slate-900">{formatWithINRConversion(nextDueMilestone.totalAmt, project.currency)}</h4>
+                    <p className="text-[8px] text-slate-400 font-bold uppercase">Due {nextDueMilestone.dueDate ? new Date(nextDueMilestone.dueDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' }) : "N/A"}</p>
+                    {hasGst && !nextDueMilestone.isMExempt && !nextDueMilestone.isMIncl && (
+                      <span className="text-[8px] text-indigo-500 font-medium block">
+                        Base: {formatWithINRConversion(nextDueMilestone.baseAmt, project.currency)} + Tax
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <h4 className="text-xs font-bold text-slate-400 mt-1">No due items</h4>
@@ -1169,22 +1263,19 @@ export default function ProjectDetailPage({
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      <th className="py-3 pl-4 w-52">Milestone</th>
-                      <th className="py-3 w-40 text-right">Amount</th>
-                      <th className="py-3 w-44 pl-12">Due Date</th>
+                      <th className="py-3 pl-4 w-48">Milestone</th>
+                      <th className="py-3 w-48 text-right">Amount</th>
+                      <th className="py-3 w-36 pl-10">Due Date</th>
                       <th className="py-3 w-32 text-center">Status</th>
                       <th className="py-3 w-40 text-center">Invoice</th>
                       <th className="py-3 w-20 text-center pr-4">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 text-slate-700">
-                    {project.milestones?.map((m, idx) => {
+                    {milestoneDetails.map((m, idx) => {
                       const isSelected = selectedMilestoneIdx === idx;
                       const linkedInvoices = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
-                      const isPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
-                      const invoiced = m.invoicedAmount !== undefined ? m.invoicedAmount : (m.invoice ? m.amount : 0);
-                      const remaining = Math.max(0, m.amount - invoiced);
-                      const canGenerate = currentUser?.role !== "Employee" && !isPaid && remaining > 0;
+                      const canGenerate = currentUser?.role !== "Employee" && !m.isPaid && m.remaining > 0;
 
                       return (
                         <tr
@@ -1205,15 +1296,25 @@ export default function ProjectDetailPage({
                           </td>
                           <td className="py-3.5 text-right whitespace-nowrap">
                             <div className="font-black text-slate-900">
-                              {formatWithINRConversion(m.amount, project.currency)}
+                              {formatWithINRConversion(m.totalAmt, project.currency)}
                             </div>
-                            {!isPaid && invoiced > 0 && remaining > 0 && (
+                            {!m.isMExempt && hasGst ? (
+                              <div className="text-[10px] text-slate-400 font-medium tracking-tight">
+                                Base: {formatWithINRConversion(m.baseAmt, project.currency)} + Tax: {formatWithINRConversion(m.taxAmt, project.currency)}
+                                {m.isMIncl ? " (Incl.)" : ""}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-400 font-medium">
+                                (0% Tax)
+                              </div>
+                            )}
+                            {!m.isPaid && m.invoicedRaw > 0 && m.remaining > 0 && (
                               <span className="text-[10px] font-medium text-amber-600 block">
-                                Rem: {formatWithINRConversion(remaining, project.currency)}
+                                Rem: {formatWithINRConversion(m.remaining, project.currency)}
                               </span>
                             )}
                           </td>
-                          <td className="py-3.5 pl-12 text-slate-500">
+                          <td className="py-3.5 pl-10 text-slate-500">
                             {m.dueDate ? new Date(m.dueDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }) : "N/A"}
                           </td>
                           <td className="py-3.5 text-center">
@@ -1223,14 +1324,14 @@ export default function ProjectDetailPage({
                           </td>
                           <td className="py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                             {linkedInvoices.length > 0 ? (
-                              <div className="flex flex-wrap items-center justify-center gap-1">
+                              <div className="flex flex-col items-center justify-center gap-1.5">
                                 {linkedInvoices.map((inv, invIdx) => {
                                   const invNum = inv?.invoiceNumber || (typeof inv === "string" ? inv : `INV-${invIdx + 1}`);
                                   return (
                                     <span
                                       key={inv?._id || invIdx}
                                       onClick={() => handleViewInvoicePreview(inv)}
-                                      className="text-[#5D5FEF] font-bold text-[10px] hover:underline cursor-pointer inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-indigo-50/70 border border-indigo-100"
+                                      className="text-[#5D5FEF] font-bold text-[10px] hover:underline cursor-pointer inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-indigo-50/70 border border-indigo-100 whitespace-nowrap transition-colors hover:bg-indigo-100"
                                       title="Click to preview invoice"
                                     >
                                       <span>{invNum}</span>
@@ -1248,10 +1349,10 @@ export default function ProjectDetailPage({
                               <button
                                 onClick={() => handleGenerateInvoice(idx)}
                                 className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-2.5 py-1 rounded-lg text-[10px] transition-all cursor-pointer shadow-sm shadow-indigo-500/5 inline-flex items-center gap-1"
-                                title={invoiced > 0 ? "Generate Part Invoice" : "Generate Invoice"}
+                                title={m.invoicedRaw > 0 ? "Generate Part Invoice" : "Generate Invoice"}
                               >
                                 <FileText className="h-3 w-3" />
-                                <span>{invoiced > 0 ? "+ Part Inv" : "Generate"}</span>
+                                <span>{m.invoicedRaw > 0 ? "+ Part Inv" : "Generate"}</span>
                               </button>
                             ) : (
                               <span className="text-slate-300 text-[10px] font-medium">-</span>

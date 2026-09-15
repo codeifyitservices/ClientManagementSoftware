@@ -32,6 +32,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { attendanceService } from "../../services/attendanceService";
+import socketService from "../../services/socketService";
 import AgentPairingModal from "./AgentPairingModal";
 import WfhRequestModal from "./WfhRequestModal";
 
@@ -73,8 +74,9 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
   const [showWfhModal, setShowWfhModal] = useState(false);
+  const [localAgentInfo, setLocalAgentInfo] = useState({ checked: false, isRunning: false });
 
-  const empId = currentUser?._id || currentUser?.id;
+  const empId = currentUser?.employeeId || currentUser?._id || currentUser?.id;
   const selectedDateStr = getTodayDateString(selectedDate);
   const isToday = selectedDateStr === getTodayDateString(new Date());
 
@@ -114,13 +116,60 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     fetchData();
   }, [selectedDateStr, empId]);
 
-  // Poll data every 3 seconds for real-time status updates (e.g. agent connection)
+  // Real-Time Socket.io Event Subscriptions (Replaces heavy 3s polling)
   useEffect(() => {
-    if (!isToday) return;
-    const interval = setInterval(() => {
-      fetchData();
-    }, 3000);
-    return () => clearInterval(interval);
+    if (empId) {
+      socketService.joinEmployeeRoom(empId);
+    }
+
+    const unsubscribeAttendance = socketService.subscribeToAttendance((update) => {
+      setSessionData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentStatus: update.currentStatus || prev.currentStatus,
+          attendance: update.attendance || {
+            ...prev.attendance,
+            currentStatus: update.currentStatus || prev.attendance?.currentStatus,
+          },
+          isAgentConnected: update.isAgentConnected !== undefined ? update.isAgentConnected : prev.isAgentConnected,
+          inGracePeriod: update.inGracePeriod !== undefined ? update.inGracePeriod : prev.inGracePeriod,
+        };
+      });
+    });
+
+    const unsubscribeConnection = socketService.subscribeToAgentConnection((data) => {
+      setSessionData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          isAgentConnected: data.isAgentConnected,
+          inGracePeriod: data.inGracePeriod,
+        };
+      });
+    });
+
+    // Check Local Desktop Agent Probe on port 49152
+    const checkLocalAgent = async () => {
+      const res = await socketService.pingLocalAgent();
+      setLocalAgentInfo({ checked: true, isRunning: res.isRunning, details: res });
+    };
+    checkLocalAgent();
+
+    // Low-frequency fallback refresh (every 45s instead of 3s)
+    let fallbackInterval = null;
+    if (isToday) {
+      fallbackInterval = setInterval(() => {
+        fetchData();
+        checkLocalAgent();
+      }, 45000);
+    }
+
+    return () => {
+      unsubscribeAttendance();
+      unsubscribeConnection();
+      if (fallbackInterval) clearInterval(fallbackInterval);
+    };
   }, [selectedDateStr, empId, isToday]);
 
   // Live session timer logic (running only for today's session if active)
@@ -230,20 +279,6 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     }
   };
 
-  const sendAgentSignal = (statusValue) => {
-    try {
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = `desktop-agent://status?value=${encodeURIComponent(statusValue)}`;
-      document.body.appendChild(iframe);
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 1000);
-    } catch (err) {
-      console.error("Failed to send deep link signal to desktop agent", err);
-    }
-  };
-
   const handleStartBreakConfirm = async (selectedReason) => {
     setActionLoading(true);
     setShowBreakModal(false);
@@ -253,7 +288,6 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
         breakReason: selectedReason || breakReason,
       });
       if (res.success) {
-        sendAgentSignal("On Break");
         fetchData();
       } else {
         alert(res.message || "Failed to start break");
@@ -270,7 +304,6 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     try {
       const res = await attendanceService.endBreak({ employeeId: empId });
       if (res.success) {
-        sendAgentSignal("Working");
         fetchData();
       } else {
         alert(res.message || "Failed to end break");
@@ -489,8 +522,15 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
               }`}
             ></span>
             <div className="leading-tight">
-              <div className="text-[11px] font-extrabold text-slate-800">
-                Desktop Agent
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-extrabold text-slate-800">
+                  Desktop Agent
+                </span>
+                {localAgentInfo.isRunning && (
+                  <span className="text-[8px] font-black bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full border border-emerald-200 uppercase tracking-wider">
+                    This PC
+                  </span>
+                )}
               </div>
               <div
                 className={`text-[9px] font-bold ${
@@ -502,7 +542,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
                 }`}
               >
                 {isAgentConnected
-                  ? "Connected"
+                  ? "Connected & Tracking"
                   : inGracePeriod
                   ? `Grace Window (${Math.max(0, 5 - (sessionData?.disconnectMinutes || 0))}m left)`
                   : "Disconnected"}

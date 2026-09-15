@@ -24,6 +24,10 @@ class IdleDetector extends EventEmitter {
     powerMonitor.on("suspend", () => {
       logger.info("System suspended (sleep mode)");
       this.setStatus("Offline");
+      try {
+        const socketClient = require("../api/socketClient");
+        socketClient.emitActivityChange("Offline", 0);
+      } catch (err) {}
     });
 
     powerMonitor.on("resume", () => {
@@ -113,8 +117,22 @@ class IdleDetector extends EventEmitter {
     if (this.currentStatus !== newStatus) {
       const oldStatus = this.currentStatus;
       this.currentStatus = newStatus;
+      const idleSecs = this.getSystemIdleSeconds();
       logger.info(`Status changed from ${oldStatus} -> ${newStatus}`);
-      this.emit("status-changed", { oldStatus, newStatus, idleSeconds: this.getSystemIdleSeconds() });
+
+      // Instantly update tray icon
+      try {
+        const trayManager = require("../tray/trayManager");
+        trayManager.updateTrayStatus(newStatus);
+      } catch (trayErr) {}
+
+      // Instantly push activity change to server via Socket.io (<50ms)
+      try {
+        const socketClient = require("../api/socketClient");
+        socketClient.emitActivityChange(newStatus, idleSecs);
+      } catch (sockErr) {}
+
+      this.emit("status-changed", { oldStatus, newStatus, idleSeconds: idleSecs });
     }
   }
 

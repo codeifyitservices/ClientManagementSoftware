@@ -1,13 +1,32 @@
-import React, { useState } from "react";
-import { X, Monitor, Copy, Check, ExternalLink, ShieldCheck, Download } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { X, Monitor, Copy, Check, ExternalLink, ShieldCheck, Download, CheckCircle2 } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
+import socketService from "../../services/socketService";
 
 export default function AgentPairingModal({ currentUser, onClose }) {
   const [pairingToken, setPairingToken] = useState("");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pairedDevice, setPairedDevice] = useState(null);
 
-  const empId = currentUser?.employeeId || currentUser?._id || "EMP-DEFAULT";
+  const empId = currentUser?.employeeId || currentUser?._id || currentUser?.id || currentUser?.companyEmail || currentUser?.email || "";
+
+  useEffect(() => {
+    if (empId) {
+      socketService.joinEmployeeRoom(empId);
+    }
+
+    const unsubscribe = socketService.subscribeToAgentPaired((details) => {
+      setPairedDevice(details);
+      setTimeout(() => {
+        onClose();
+      }, 1800);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [empId, onClose]);
 
   const handleGenerateToken = async () => {
     setLoading(true);
@@ -32,7 +51,8 @@ export default function AgentPairingModal({ currentUser, onClose }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const deepLinkUrl = pairingToken ? `desktop-agent://pair?token=${pairingToken}&emp=${empId}` : "#";
+  const backendBase = import.meta.env.VITE_BACKEND_URL || (window.location.origin.includes("localhost") ? "http://localhost:5000" : window.location.origin);
+  const deepLinkUrl = pairingToken ? `desktop-agent://pair?token=${pairingToken}&emp=${empId}&server=${encodeURIComponent(backendBase)}` : "#";
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -68,7 +88,17 @@ export default function AgentPairingModal({ currentUser, onClose }) {
             <span>Download Desktop Agent Setup (.zip)</span>
           </a>
 
-          {!pairingToken ? (
+          {pairedDevice ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 text-center space-y-2">
+              <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <h3 className="text-sm font-extrabold text-emerald-900">Desktop Agent Paired Successfully!</h3>
+              <p className="text-xs text-emerald-700 font-medium">
+                Connected with {pairedDevice.computerName || "your PC"}. Real-time presence tracking is now active.
+              </p>
+            </div>
+          ) : !pairingToken ? (
             <button
               onClick={handleGenerateToken}
               disabled={loading}

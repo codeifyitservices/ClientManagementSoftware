@@ -26,7 +26,10 @@ class TrayManager {
     this.tray = new Tray(icon);
     this.tray.setToolTip("Company Desktop Agent - Active");
 
-    // Double click to open Settings
+    // Click or double click to open Settings / Status Window
+    this.tray.on("click", () => {
+      if (this.onOpenSettings) this.onOpenSettings();
+    });
     this.tray.on("double-click", () => {
       if (this.onOpenSettings) this.onOpenSettings();
     });

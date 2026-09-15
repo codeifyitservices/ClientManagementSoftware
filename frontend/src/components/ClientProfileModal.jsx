@@ -1,5 +1,6 @@
 import React from "react";
 import { X, Building, Mail, Phone, Globe, Tag, FileText, Receipt } from "lucide-react";
+import { convertToINR, formatWithINRConversion } from "../utils/currencyUtils";
 
 export default function ClientProfileModal({ isOpen, onClose, client, invoices = [] }) {
   if (!isOpen || !client) return null;
@@ -10,10 +11,10 @@ export default function ClientProfileModal({ isOpen, onClose, client, invoices =
   );
 
   // Compute specific client summaries
-  const totalInvoiced = clientInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const totalInvoiced = clientInvoices.reduce((sum, inv) => sum + convertToINR(inv.totalAmount, inv.currency), 0);
   const paidInvoices = clientInvoices.filter((inv) => inv.paymentStatus === "Paid");
-  const totalPaid = paidInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
-  const pendingAmount = totalInvoiced - totalPaid;
+  const totalPaid = paidInvoices.reduce((sum, inv) => sum + convertToINR(inv.totalAmount, inv.currency), 0);
+  const pendingAmount = Math.max(0, totalInvoiced - totalPaid);
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -121,15 +122,15 @@ export default function ClientProfileModal({ isOpen, onClose, client, invoices =
           <div className="grid grid-cols-3 gap-4 pt-2">
             <div className="p-4 rounded-xl border border-slate-100 bg-white custom-shadow text-center">
               <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Billed</span>
-              <span className="text-base font-black text-slate-900">₹{totalInvoiced.toFixed(2)}</span>
+              <span className="text-base font-black text-slate-900">₹{totalInvoiced.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="p-4 rounded-xl border border-slate-100 bg-white custom-shadow text-center">
               <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Paid</span>
-              <span className="text-base font-black text-emerald-600">₹{totalPaid.toFixed(2)}</span>
+              <span className="text-base font-black text-emerald-600">₹{totalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="p-4 rounded-xl border border-slate-100 bg-white custom-shadow text-center">
               <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pending Balance</span>
-              <span className="text-base font-black text-amber-600">₹{pendingAmount.toFixed(2)}</span>
+              <span className="text-base font-black text-amber-600">₹{pendingAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
 
@@ -147,7 +148,7 @@ export default function ClientProfileModal({ isOpen, onClose, client, invoices =
                     <th className="py-2.5 px-4">Invoice No</th>
                     <th className="py-2.5 px-4">Description</th>
                     <th className="py-2.5 px-4">Date</th>
-                    <th className="py-2.5 px-4">Total (INR)</th>
+                    <th className="py-2.5 px-4">Total</th>
                     <th className="py-2.5 px-4 text-right">Status</th>
                   </tr>
                 </thead>
@@ -164,7 +165,7 @@ export default function ClientProfileModal({ isOpen, onClose, client, invoices =
                         <td className="py-3 px-4 font-bold text-slate-900">{inv.invoiceNumber}</td>
                         <td className="py-3 px-4 truncate max-w-[200px]">{inv.serviceDescription}</td>
                         <td className="py-3 px-4">{new Date(inv.invoiceDate || inv.createdAt).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900">₹{inv.totalAmount.toFixed(2)}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900">{formatWithINRConversion(inv.totalAmount, inv.currency)}</td>
                         <td className="py-3 px-4 text-right">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${

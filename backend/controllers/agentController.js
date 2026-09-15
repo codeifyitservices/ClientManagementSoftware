@@ -1,6 +1,10 @@
 import crypto from "crypto";
 import AgentSession from "../models/agentSessionModel.js";
 import { syncAgentActivity } from "./attendanceController.js";
+import { notifyAgentPaired } from "../services/socketService.js";
+
+// In-memory token cache for active pairing requests
+const activePairingTokens = new Map();
 
 /**
  * @desc    Generate temporary pairing token (Web App Endpoint)
@@ -10,15 +14,23 @@ import { syncAgentActivity } from "./attendanceController.js";
 export const generatePairingToken = async (req, res) => {
   try {
     const { employeeId } = req.body;
+    const resolvedEmpId = employeeId || req.user?.employeeId || req.user?._id?.toString() || null;
     const pairingToken = "PAIR-" + crypto.randomBytes(8).toString("hex").toUpperCase();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Valid for 15 minutes
+
+    activePairingTokens.set(pairingToken, {
+      token: pairingToken,
+      employeeId: resolvedEmpId,
+      userId: req.user?._id?.toString() || null,
+      expiresAt: expiresAt.getTime(),
+    });
 
     return res.status(200).json({
       success: true,
       message: "Pairing token generated successfully",
       pairingToken,
       expiresAt,
-      employeeId: employeeId || null,
+      employeeId: resolvedEmpId,
     });
   } catch (error) {
     console.error("Error generating pairing token:", error);
@@ -46,6 +58,16 @@ export const pairAgentDevice = async (req, res) => {
       });
     }
 
+    // Resolve employee from pairing token record if available
+    let resolvedEmployeeId = employeeId && employeeId !== "EMP-DEFAULT" ? employeeId : null;
+    if (activePairingTokens.has(pairingToken)) {
+      const tokenInfo = activePairingTokens.get(pairingToken);
+      if (tokenInfo && tokenInfo.expiresAt > Date.now()) {
+        resolvedEmployeeId = tokenInfo.employeeId || tokenInfo.userId || resolvedEmployeeId;
+      }
+      activePairingTokens.delete(pairingToken);
+    }
+
     // Generate permanent device token
     const deviceToken = "DEV-" + crypto.randomBytes(32).toString("hex");
 
@@ -59,7 +81,7 @@ export const pairAgentDevice = async (req, res) => {
       session.computerName = computerName || session.computerName;
       session.operatingSystem = operatingSystem || session.operatingSystem;
       session.agentVersion = agentVersion || session.agentVersion;
-      if (employeeId) session.employeeId = employeeId;
+      if (resolvedEmployeeId) session.employeeId = resolvedEmployeeId;
       session.currentStatus = "Active";
       session.lastHeartbeatAt = new Date();
       session.disconnectedAt = null;
@@ -67,7 +89,7 @@ export const pairAgentDevice = async (req, res) => {
     } else {
       session = await AgentSession.create({
         deviceId,
-        employeeId: employeeId || "EMP-DEFAULT",
+        employeeId: resolvedEmployeeId || "EMP-DEFAULT",
         deviceToken,
         isPaired: true,
         computerName: computerName || "Unknown PC",
@@ -91,6 +113,17 @@ export const pairAgentDevice = async (req, res) => {
       });
     } catch (syncErr) {
       console.error("Error syncing activity on pair:", syncErr);
+    }
+
+    // Instantly notify web client that agent pairing completed successfully
+    try {
+      notifyAgentPaired(session.employeeId, {
+        deviceId: session.deviceId,
+        computerName: session.computerName,
+        success: true,
+      });
+    } catch (sockErr) {
+      console.error("Error notifying socket on pair:", sockErr);
     }
 
     return res.status(200).json({
@@ -130,7 +163,7 @@ export const receiveHeartbeat = async (req, res) => {
 
     let session = await AgentSession.findOne({ deviceId });
 
-    if (!session || !session.isPaired || !session.employeeId || session.employeeId === "EMP-DEFAULT") {
+    if (!session || !session.isPaired) {
       return res.status(200).json({
         success: false,
         pairingValid: false,

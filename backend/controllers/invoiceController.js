@@ -278,7 +278,7 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
   if (!projectId) return;
   try {
     const ProjectModel = mongoose.model("Project");
-    const project = await ProjectModel.findById(projectId);
+    const project = await ProjectModel.findById(projectId).populate("client");
     if (!project || !project.milestones || project.milestones.length === 0)
       return;
 
@@ -302,6 +302,7 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
 
     let carryOverInvoiced = 0;
     let carryOverPaid = 0;
+    const isClientForeign = project.client?.isForeign === true;
 
     for (let i = 0; i < project.milestones.length; i++) {
       const m = project.milestones[i];
@@ -320,13 +321,15 @@ export const syncMilestoneInvoiceStatus = async (projectId) => {
       let directPaid = 0;
       const invoiceIds = [];
 
+      const isTaxExempt = isClientForeign || project.isPersonalAccount || !!m.isPersonal;
+      const isIncl = isTaxExempt || m.isInclusive === true;
+
       directInvoices.forEach((inv) => {
         if (!invoiceIds.some((id) => id.toString() === inv._id.toString())) {
           invoiceIds.push(inv._id);
         }
 
-        // Compare base milestone value with base invoice amount (unless inclusive of GST)
-        const isIncl = !!m.isInclusive || !!project.inclusiveGst;
+        // Compare milestone value with invoice amount
         const invVal = isIncl
           ? (inv.totalAmount !== undefined && inv.totalAmount !== null && inv.totalAmount > 0 ? inv.totalAmount : (inv.amount || 0))
           : (inv.amount !== undefined && inv.amount !== null && inv.amount > 0 ? inv.amount : (inv.totalAmount || 0));

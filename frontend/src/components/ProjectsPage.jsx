@@ -263,6 +263,100 @@ export default function ProjectsPage({
     });
   };
 
+  // Calculate values for individual project helper
+  const getProjectFinancials = (proj) => {
+    if (!proj) return { value: 0, received: 0, pending: 0, invoicesCount: 0, percent: 0, baseValue: 0, taxValue: 0, baseReceived: 0, taxReceived: 0 };
+    
+    const isForeign = proj.client?.isForeign === true;
+    const isPersonal = proj.isPersonalAccount === true;
+    const hasGst = !isForeign && !isPersonal;
+
+    let totalBase = Number(proj.projectValue) || 0;
+    let totalTax = 0;
+    let totalVal = (proj.finalAmount && proj.finalAmount > 0) ? proj.finalAmount : totalBase;
+
+    if (hasGst) {
+      if (proj.inclusiveGst !== false) {
+        totalVal = Number(proj.projectValue) || (proj.finalAmount && proj.finalAmount > 0 ? proj.finalAmount : 0);
+        totalBase = Math.round((totalVal / 1.18) * 100) / 100;
+        totalTax = Math.round((totalVal - totalBase) * 100) / 100;
+      } else {
+        totalBase = Number(proj.projectValue) || 0;
+        totalTax = Math.round((totalBase * 0.18) * 100) / 100;
+        totalVal = (proj.finalAmount && proj.finalAmount > 0)
+          ? proj.finalAmount
+          : Math.round((totalBase + totalTax) * 100) / 100;
+      }
+    }
+
+    let baseReceived = 0;
+    let taxReceived = 0;
+    let totalReceived = 0;
+    let invoicesCount = 0;
+
+    if (proj.milestones && proj.milestones.length > 0) {
+      proj.milestones.forEach((m) => {
+        const isMExempt = isForeign || isPersonal || !!m.isPersonal;
+        const rawAmt = Number(m.amount) || 0;
+
+        let mBase = rawAmt;
+        let mTax = 0;
+        let mTotal = rawAmt;
+
+        if (isMExempt) {
+          mBase = rawAmt;
+          mTax = 0;
+          mTotal = rawAmt;
+        } else if (m.isInclusive === true) {
+          mTotal = rawAmt;
+          mBase = Math.round((rawAmt / 1.18) * 100) / 100;
+          mTax = Math.round((mTotal - mBase) * 100) / 100;
+        } else {
+          mBase = rawAmt;
+          mTax = Math.round((rawAmt * 0.18) * 100) / 100;
+          mTotal = Math.round((mBase + mTax) * 100) / 100;
+        }
+
+        const isPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
+        const paidRaw = isPaid ? m.amount : (m.paidAmount || 0);
+
+        if (isPaid) {
+          baseReceived += mBase;
+          taxReceived += mTax;
+          totalReceived += mTotal;
+        } else if (paidRaw > 0) {
+          const ratio = rawAmt > 0 ? Math.min(1, paidRaw / rawAmt) : 0;
+          const bPaid = Math.round(mBase * ratio * 100) / 100;
+          const tPaid = Math.round(mTax * ratio * 100) / 100;
+          baseReceived += bPaid;
+          taxReceived += tPaid;
+          totalReceived += Math.round((bPaid + tPaid) * 100) / 100;
+        }
+
+        const invList = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
+        invoicesCount += invList.length;
+      });
+    }
+
+    baseReceived = Math.round(baseReceived * 100) / 100;
+    taxReceived = Math.round(taxReceived * 100) / 100;
+    totalReceived = Math.round(totalReceived * 100) / 100;
+
+    const pending = Math.max(0, Math.round((totalVal - totalReceived) * 100) / 100);
+    const percent = totalVal > 0 ? Math.min(100, Math.round((totalReceived / totalVal) * 100)) : 0;
+    return {
+      value: totalVal,
+      received: totalReceived,
+      pending,
+      invoicesCount,
+      percent,
+      baseValue: totalBase,
+      taxValue: totalTax,
+      baseReceived,
+      taxReceived,
+    };
+  };
+
   // Calculate statistics
   const totalProjectsCount = projects.length;
   const ongoingProjectsCount = projects.filter((p) => p.status === "Ongoing").length;
@@ -272,42 +366,10 @@ export default function ProjectsPage({
   let totalOutstanding = 0;
 
   projects.forEach((proj) => {
-    const val = (proj.finalAmount && proj.finalAmount > 0)
-      ? proj.finalAmount
-      : (proj.projectValue || (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0));
-    let rec = 0;
-    proj.milestones?.forEach((m) => {
-      const paid = (m.status === "Paid")
-        ? (m.amount || m.paidAmount || 0)
-        : (m.paidAmount || 0);
-      rec += paid;
-    });
-    totalProjectsValue += convertToINR(val, proj.currency);
-    totalOutstanding += convertToINR(Math.max(0, val - rec), proj.currency);
+    const fin = getProjectFinancials(proj);
+    totalProjectsValue += convertToINR(fin.value, proj.currency);
+    totalOutstanding += convertToINR(fin.pending, proj.currency);
   });
-
-  // Calculate values for individual project helper
-  const getProjectFinancials = (proj) => {
-    if (!proj) return { value: 0, received: 0, pending: 0, invoicesCount: 0, percent: 0 };
-    const value = (proj.finalAmount && proj.finalAmount > 0)
-      ? proj.finalAmount
-      : (proj.projectValue || (proj.milestones?.reduce((sum, m) => sum + (m.amount || 0), 0) || 0));
-    let received = 0;
-    let invoicesCount = 0;
-
-    proj.milestones?.forEach((m) => {
-      const paid = (m.status === "Paid")
-        ? (m.amount || m.paidAmount || 0)
-        : (m.paidAmount || 0);
-      received += paid;
-      const invList = m.invoices && m.invoices.length > 0 ? m.invoices : (m.invoice ? [m.invoice] : []);
-      invoicesCount += invList.length;
-    });
-
-    const pending = Math.max(0, value - received);
-    const percent = value > 0 ? Math.min(100, Math.round((received / value) * 100)) : 0;
-    return { value, received, pending, invoicesCount, percent };
-  };
 
   const currentFinancials = getProjectFinancials(selectedProject);
 

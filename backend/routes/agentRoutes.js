@@ -1,4 +1,5 @@
 import express from "express";
+import protect from "../middleware/authMiddleware.js";
 import {
   generatePairingToken,
   pairAgentDevice,
@@ -12,7 +13,7 @@ import {
 const router = express.Router();
 
 router.get("/download", downloadAgentInstaller);
-router.post("/generate-token", generatePairingToken);
+router.post("/generate-token", protect, generatePairingToken);
 router.post("/pair", pairAgentDevice);
 router.post("/heartbeat", receiveHeartbeat);
 router.post("/status", updateAgentStatus);

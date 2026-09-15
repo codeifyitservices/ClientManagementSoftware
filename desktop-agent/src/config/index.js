@@ -23,7 +23,17 @@ const config = {
   // App Metadata
   appProtocol: "desktop-agent",
   appName: "Company Desktop Agent",
-  version: pkg.version || "1.0.2",
+  version: pkg.version || "1.0.3",
+
+  setApiBaseUrl(url) {
+    if (url) {
+      this.apiBaseUrl = url;
+      try {
+        const storage = require("../utils/storage");
+        storage.setConfig({ apiBaseUrl: url });
+      } catch (e) {}
+    }
+  },
 };
 
 module.exports = config;

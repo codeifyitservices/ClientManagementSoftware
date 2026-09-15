@@ -306,10 +306,17 @@ export default function ProjectFormPage({
     }
 
     // Verify milestone sum doesn't exceed finalAmount
-    const sumMilestones = milestones.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+    const sumMilestonesTotal = milestones.reduce((sum, m) => {
+      const isTaxExempt = activeClient.isForeign || isPersonalAccount || !!m.isPersonal;
+      const rawAmt = Number(m.amount) || 0;
+      if (isTaxExempt) return sum + rawAmt;
+      if (m.isInclusive === true) return sum + rawAmt;
+      return sum + Math.round(rawAmt * 1.18 * 100) / 100;
+    }, 0);
+
     const finalAmountVal = getCalculatedFinalAmount();
-    if (sumMilestones > finalAmountVal + 0.05) {
-      const msg = `The sum of payment milestones (${formatWithINRConversion(sumMilestones, currency)}) cannot exceed the final project value (${formatWithINRConversion(finalAmountVal, currency)}).`;
+    if (sumMilestonesTotal > finalAmountVal + 0.05) {
+      const msg = `The sum of payment milestones with GST (${formatWithINRConversion(sumMilestonesTotal, currency)}) cannot exceed the final project value (${formatWithINRConversion(finalAmountVal, currency)}).`;
       setError(msg);
       if (showToast) showToast(msg, "error");
       return;
@@ -361,12 +368,23 @@ export default function ProjectFormPage({
   // Realtime calculated values
   const calcTotalValue = getCalculatedFinalAmount();
   const calcReceived = milestones.reduce((sum, m) => {
-    const paid = (m.status === "Paid")
-      ? (Number(m.amount) || Number(m.paidAmount) || 0)
-      : (Number(m.paidAmount) || 0);
-    return sum + (paid || 0);
+    const isTaxExempt = activeClient.isForeign || isPersonalAccount || !!m.isPersonal;
+    const rawAmt = Number(m.amount) || 0;
+    let mTotal = rawAmt;
+    if (!isTaxExempt && m.isInclusive !== true) {
+      mTotal = Math.round(rawAmt * 1.18 * 100) / 100;
+    }
+    const isPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
+    const paidRaw = isPaid ? m.amount : (Number(m.paidAmount) || 0);
+
+    if (isPaid) return sum + mTotal;
+    if (paidRaw > 0) {
+      const ratio = rawAmt > 0 ? Math.min(1, paidRaw / rawAmt) : 0;
+      return sum + Math.round(mTotal * ratio * 100) / 100;
+    }
+    return sum;
   }, 0);
-  const calcOutstanding = Math.max(0, calcTotalValue - calcReceived);
+  const calcOutstanding = Math.max(0, Math.round((calcTotalValue - calcReceived) * 100) / 100);
   const calcProgressPercent = calcTotalValue > 0 ? Math.min(100, Math.round((calcReceived / calcTotalValue) * 100)) : 0;
 
   const calcEstimatedCommission = () => {

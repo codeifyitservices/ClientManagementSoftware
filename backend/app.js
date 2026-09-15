@@ -17,14 +17,20 @@ import agentRoutes from "./routes/agentRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
 import protect from "./middleware/authMiddleware.js";
+import http from "http";
 import { startSubscriptionScheduler } from "./services/subscriptionScheduler.js";
 import { sendEmail } from "./services/emailService.js";
+import { initSocketServer } from "./services/socketService.js";
 import Service from "./models/serviceModel.js";
 import fs from "fs";
 import path from "path";
 
 const app = express();
+const server = http.createServer(app);
 const PORT = 5000;
+
+// Initialize Socket.io real-time engine
+initSocketServer(server);
 
 connectMongo();
 startSubscriptionScheduler();
@@ -92,7 +98,7 @@ app.use("/health", (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   // Force nodemon reload after fixing mongoose save hook
   console.log("server is running on port:", PORT);
 });
