@@ -18,10 +18,11 @@ const getNextProjectNumber = async () => {
 export const getProjects = async (req, res) => {
   try {
     const { search, clientId } = req.query;
+    const isEmployee = req.user.role === "Employee";
     let query = {};
 
     // Restrict standard employees to only see projects they are assigned to
-    if (req.user.role === "Employee") {
+    if (isEmployee) {
       query.assignedEmployees = req.user._id;
     }
 
@@ -47,6 +48,16 @@ export const getProjects = async (req, res) => {
       ];
     }
 
+    if (isEmployee) {
+      // Employees only see: project identity, dates, status, teammates
+      // No financial data (value, milestones, expenses, commission) and no client billing info
+      const projects = await Project.find(query)
+        .select("projectId projectName status startDate expectedEndDate assignedEmployees")
+        .populate("assignedEmployees", "fullName employeeId department designation")
+        .sort({ createdAt: -1 });
+      return res.json(projects);
+    }
+
     const projects = await Project.find(query)
       .populate("client")
       .populate("milestones.invoice")
@@ -63,6 +74,30 @@ export const getProjects = async (req, res) => {
 // GET /api/projects/:id - Get project by ID
 export const getProjectById = async (req, res) => {
   try {
+    const isEmployee = req.user.role === "Employee";
+
+    if (isEmployee) {
+      // Fetch only safe fields — no financial data
+      const project = await Project.findById(req.params.id)
+        .select("projectId projectName status startDate expectedEndDate assignedEmployees")
+        .populate("assignedEmployees", "fullName employeeId department designation");
+
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      // Employees may only view projects they are assigned to
+      const isAssigned = project.assignedEmployees.some(
+        (emp) => emp._id.toString() === req.user._id.toString()
+      );
+      if (!isAssigned) {
+        return res.status(403).json({ message: "Access denied. You are not assigned to this project." });
+      }
+
+      return res.json(project);
+    }
+
+    // Admin: full project with all financial data
     await syncMilestoneInvoiceStatus(req.params.id);
     const project = await Project.findById(req.params.id)
       .populate("client")
@@ -71,16 +106,6 @@ export const getProjectById = async (req, res) => {
       .populate("assignedEmployees", "fullName employeeId companyEmail department designation");
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
-    }
-
-    // Access control: Employees can only view projects they are assigned to
-    if (req.user.role === "Employee") {
-      const isAssigned = project.assignedEmployees.some(
-        (emp) => emp._id.toString() === req.user._id.toString()
-      );
-      if (!isAssigned) {
-        return res.status(403).json({ message: "Access denied. You are not assigned to this project." });
-      }
     }
 
     res.json(project);

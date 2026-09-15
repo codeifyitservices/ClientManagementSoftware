@@ -1,6 +1,6 @@
 import { io } from "socket.io-client";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://clientmanagementsoftware.onrender.com";
 const LOCAL_AGENT_URL = "http://127.0.0.1:49152";
 
 class WebClientSocketService {

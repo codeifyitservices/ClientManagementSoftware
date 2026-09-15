@@ -51,7 +51,7 @@ export default function AgentPairingModal({ currentUser, onClose }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const backendBase = import.meta.env.VITE_BACKEND_URL || (window.location.origin.includes("localhost") ? "http://localhost:5000" : window.location.origin);
+  const backendBase = import.meta.env.VITE_BACKEND_URL || "https://clientmanagementsoftware.onrender.com";
   const deepLinkUrl = pairingToken ? `desktop-agent://pair?token=${pairingToken}&emp=${empId}&server=${encodeURIComponent(backendBase)}` : "#";
 
   return (

@@ -20,6 +20,7 @@ import {
   Users,
   AlertTriangle,
   ShieldCheck,
+  Home,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -551,6 +552,15 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
           </div>
 
           <button
+            type="button"
+            onClick={() => setShowWfhModal(true)}
+            className="flex items-center gap-2 px-4 h-11 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/80 transition cursor-pointer shadow-sm"
+          >
+            <Home className="h-4 w-4 text-[#5D5FEF]" />
+            <span>Apply for WFH</span>
+          </button>
+
+          <button
             onClick={() => setShowPairingModal(true)}
             className="flex items-center gap-2 px-4 h-11 rounded-xl text-xs font-bold text-[#5D5FEF] bg-indigo-50/70 hover:bg-indigo-50 border border-indigo-100 transition cursor-pointer shadow-sm"
           >
@@ -642,22 +652,21 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
           <div className="mt-auto pt-3">
             {!attendance?.checkInTime && isToday ? (
               <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={isRemote}
-                    onChange={(e) => setIsRemote(e.target.checked)}
-                    className="rounded border-slate-300 text-[#5D5FEF] focus:ring-[#5D5FEF] h-3.5 w-3.5"
-                  />
-                  Work Remotely
-                </label>
                 <button
                   onClick={handleCheckIn}
                   disabled={actionLoading}
-                  className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] py-2 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] py-2.5 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-50"
                 >
                   <LogIn className="h-3.5 w-3.5" />
                   <span>Check In</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowWfhModal(true)}
+                  className="w-full flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-indigo-50/80 text-slate-700 hover:text-[#5D5FEF] font-bold text-[11px] py-2 rounded-xl transition border border-slate-200 hover:border-indigo-200 cursor-pointer"
+                >
+                  <Home className="h-3.5 w-3.5 text-[#5D5FEF]" />
+                  <span>Apply for WFH</span>
                 </button>
               </div>
             ) : (

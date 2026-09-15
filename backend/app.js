@@ -17,6 +17,7 @@ import agentRoutes from "./routes/agentRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
 import protect from "./middleware/authMiddleware.js";
+import adminOnly from "./middleware/adminOnly.js";
 import http from "http";
 import { startSubscriptionScheduler } from "./services/subscriptionScheduler.js";
 import { sendEmail } from "./services/emailService.js";
@@ -46,11 +47,15 @@ app.use(express.json());
 app.use("/uploads", express.static(uploadsDir));
 
 app.use("/api/auth", authRoutes);
-app.use("/api/clients", protect, clientRoutes);
-app.use("/api/invoices", protect, invoiceRoutes);
-app.use("/api/services", protect, serviceRoutes);
-app.use("/api/backup", protect, backupRoutes);
-app.use("/api/subscriptions", protect, subscriptionRoutes);
+// ── Admin-only routes (employees are denied with 403) ─────────────────────
+app.use("/api/clients", protect, adminOnly, clientRoutes);
+app.use("/api/invoices", protect, adminOnly, invoiceRoutes);
+app.use("/api/services", protect, adminOnly, serviceRoutes);
+app.use("/api/backup", protect, adminOnly, backupRoutes);
+app.use("/api/subscriptions", protect, adminOnly, subscriptionRoutes);
+app.use("/api/leads", protect, adminOnly, leadRoutes);
+
+// ── Shared routes (employees + admin, scoped inside controllers/routes) ────
 app.use("/api/projects", protect, projectRoutes);
 app.use("/api/employees", protect, employeeRoutes);
 app.use("/api/tasks", protect, taskRoutes);
@@ -58,7 +63,6 @@ app.use("/api/tickets", protect, ticketRoutes);
 app.use("/api/notifications", protect, notificationRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/attendance", protect, attendanceRoutes);
-app.use("/api/leads", protect, leadRoutes);
 
 app.post("/api/test-email", async (req, res) => {
   const { to } = req.body;

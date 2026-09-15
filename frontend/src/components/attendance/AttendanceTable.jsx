@@ -513,6 +513,7 @@ export default function AttendanceTable({
                 >
                   <option value="All">All Departments</option>
                   <option value="Engineering">Engineering</option>
+                  <option value="IT">IT</option>
                   <option value="Design">Design</option>
                   <option value="Sales">Sales</option>
                   <option value="Marketing">Marketing</option>

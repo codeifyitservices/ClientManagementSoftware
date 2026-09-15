@@ -1,6 +1,6 @@
 import React from "react";
 import { convertToINR } from "../utils/currencyUtils";
-import { isLeadActiveInPipeline, calculatePipelineValue, getLeadFinalValue } from "../utils/leadUtils";
+import { isLeadActiveInPipeline, calculatePipelineValue, getLeadFinalValue, getLeadCurrencySymbol, isForeignCurrency } from "../utils/leadUtils";
 import {
   Eye,
   Download,
@@ -612,7 +612,7 @@ export default function DashboardView({
                     </div>
                     <div className="text-right shrink-0">
                       <span className="text-xs font-black text-slate-950 block">
-                        ₹{getLeadFinalValue(l).toLocaleString("en-IN")}
+                        {getLeadCurrencySymbol(l.currency)}{getLeadFinalValue(l).toLocaleString(isForeignCurrency(l.currency) ? "en-US" : "en-IN")}
                       </span>
                       <span className="text-[9px] text-slate-400 font-semibold">
                         Follow-up:{" "}

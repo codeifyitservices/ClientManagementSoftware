@@ -3,6 +3,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X, Check } from "lucide-react";
 import { clientSchema } from "../schemas/clientSchema";
+import PhoneInputWithCountry from "./PhoneInputWithCountry";
 
 const stateLookup = {
   "01": "Jammu & Kashmir",
@@ -84,6 +85,7 @@ export default function ClientModal({
   const gstRegistered = useWatch({ control, name: "gstRegistered" });
   const gstNumber = useWatch({ control, name: "gstNumber" }) || "";
   const isForeign = useWatch({ control, name: "isForeign" }) || false;
+  const phone = useWatch({ control, name: "phone" }) || "";
 
   // Auto detect state name & fetch GST details
   const [detectedState, setDetectedState] = useState("");
@@ -292,13 +294,11 @@ export default function ClientModal({
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Phone Number {!isForeign ? <span className="text-red-500">*</span> : <span className="text-slate-400 font-normal lowercase">(optional)</span>}
                 </label>
-                <input
-                  type="text"
-                  placeholder="Enter phone number"
-                  className={`w-full px-3 py-2 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white ${
-                    errors.phone ? "border-red-500 bg-red-50/10" : "border-slate-200 bg-slate-50/30"
-                  }`}
-                  {...register("phone")}
+                <PhoneInputWithCountry
+                  value={phone}
+                  onChange={(val) => setValue("phone", val, { shouldValidate: true, shouldDirty: true })}
+                  placeholder="98765 43210"
+                  hasError={!!errors.phone}
                 />
                 {errors.phone && (
                   <span className="text-[10px] text-red-500 mt-1 block font-semibold">{errors.phone.message}</span>

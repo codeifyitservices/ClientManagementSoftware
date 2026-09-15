@@ -1,4 +1,5 @@
 import express from "express";
+import adminOnly from "../middleware/adminOnly.js";
 import {
   getProjects,
   getProjectById,
@@ -14,30 +15,30 @@ import {
 
 const router = express.Router();
 
-// GET /api/projects - Get all projects (or assigned projects if employee)
-router.get("/", getProjects);
+// GET /api/projects - Get all projects (Admin only)
+router.get("/", adminOnly, getProjects);
 
-// GET /api/projects/:id - Get project by ID
-router.get("/:id", getProjectById);
+// GET /api/projects/:id - Get project by ID (Admin only)
+router.get("/:id", adminOnly, getProjectById);
 
-// POST /api/projects - Create a project
-router.post("/", createProject);
+// POST /api/projects - Create a project (Admin only)
+router.post("/", adminOnly, createProject);
 
-// PUT /api/projects/:id - Update project (including milestones & assigned employees)
-router.put("/:id", updateProject);
+// PUT /api/projects/:id - Update project (Admin only)
+router.put("/:id", adminOnly, updateProject);
 
-// POST /api/projects/bulk-delete - Delete multiple projects
-router.post("/bulk-delete", bulkDeleteProjects);
+// POST /api/projects/bulk-delete - Delete multiple projects (Admin only)
+router.post("/bulk-delete", adminOnly, bulkDeleteProjects);
 
-// DELETE /api/projects/:id - Delete a project
-router.delete("/:id", deleteProject);
+// DELETE /api/projects/:id - Delete a project (Admin only)
+router.delete("/:id", adminOnly, deleteProject);
 
-// Expenses endpoints
-router.post("/:id/expenses", addProjectExpense);
-router.put("/:id/expenses/:expenseId", updateProjectExpense);
-router.delete("/:id/expenses/:expenseId", deleteProjectExpense);
+// Expenses endpoints (Admin only)
+router.post("/:id/expenses", adminOnly, addProjectExpense);
+router.put("/:id/expenses/:expenseId", adminOnly, updateProjectExpense);
+router.delete("/:id/expenses/:expenseId", adminOnly, deleteProjectExpense);
 
-// Commission endpoint
-router.put("/:id/commission", updateProjectCommission);
+// Commission endpoint (Admin only)
+router.put("/:id/commission", adminOnly, updateProjectCommission);
 
 export default router;

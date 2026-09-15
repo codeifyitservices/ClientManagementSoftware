@@ -1,6 +1,13 @@
 import Lead from "../models/leadModel.js";
 import Employee from "../models/employeeModel.js";
 
+// Check if currency is non-INR (foreign currencies are tax-exempt / 0% GST)
+const isNonInrCurrency = (currencyStr) => {
+  if (!currencyStr) return false;
+  const str = String(currencyStr).trim().toUpperCase();
+  return !str.includes("INR") && !str.includes("₹");
+};
+
 // Sync cached current state on Lead document based on the latest journey stage
 const syncLeadCurrentState = (lead) => {
   if (lead.leadJourney && lead.leadJourney.length > 0) {
@@ -87,6 +94,7 @@ export const createLead = async (req, res) => {
       email,
       phone,
       source,
+      currency,
       value,
       inclusiveGst,
       isPersonalAccount,
@@ -98,14 +106,19 @@ export const createLead = async (req, res) => {
       return res.status(400).json({ message: "Lead Contact Name is required." });
     }
 
+    const leadCurrency = currency || "INR (₹)";
+    const isForeign = isNonInrCurrency(leadCurrency);
+    const isTaxExempt = isPersonalAccount || isForeign;
+
     const newLead = new Lead({
       leadName,
       companyName: companyName || "",
       email: email || "",
       phone: phone || "",
       source: source || "Website",
+      currency: leadCurrency,
       value: value !== undefined ? Number(value) : 0,
-      inclusiveGst: inclusiveGst !== undefined ? Boolean(inclusiveGst) : true,
+      inclusiveGst: isTaxExempt ? false : (inclusiveGst !== undefined ? Boolean(inclusiveGst) : true),
       isPersonalAccount: isPersonalAccount !== undefined ? Boolean(isPersonalAccount) : false,
       assignedTo: assignedTo || null,
       notes: notes || "",
@@ -122,6 +135,7 @@ export const createLead = async (req, res) => {
       probability: 10,
       notes: notes || "Lead profile initiated in CRM.",
       dealValue: value !== undefined ? Number(value) : 0,
+      currency: leadCurrency,
       assignedEmployee: assignedTo || null,
     });
 
@@ -167,6 +181,7 @@ export const updateLead = async (req, res) => {
       email,
       phone,
       source,
+      currency,
       value,
       inclusiveGst,
       isPersonalAccount,
@@ -204,8 +219,19 @@ export const updateLead = async (req, res) => {
     lead.email = email ?? lead.email;
     lead.phone = phone ?? lead.phone;
     lead.source = source ?? lead.source;
+    if (currency !== undefined) lead.currency = currency;
     lead.value = value !== undefined ? Number(value) : lead.value;
-    if (inclusiveGst !== undefined) lead.inclusiveGst = Boolean(inclusiveGst);
+
+    const currentCurrency = currency ?? lead.currency;
+    const isForeign = isNonInrCurrency(currentCurrency);
+    const willBePersonal = isPersonalAccount !== undefined ? Boolean(isPersonalAccount) : lead.isPersonalAccount;
+    const isTaxExempt = willBePersonal || isForeign;
+
+    if (isTaxExempt) {
+      lead.inclusiveGst = false;
+    } else if (inclusiveGst !== undefined) {
+      lead.inclusiveGst = Boolean(inclusiveGst);
+    }
     if (isPersonalAccount !== undefined) lead.isPersonalAccount = Boolean(isPersonalAccount);
     lead.assignedTo = assignedTo !== undefined ? assignedTo : lead.assignedTo;
     lead.notes = notes ?? lead.notes;
@@ -232,6 +258,7 @@ export const addLeadJourneyStage = async (req, res) => {
       nextFollowUp,
       notes,
       dealValue,
+      currency,
       assignedEmployee,
     } = req.body;
 
@@ -259,6 +286,8 @@ export const addLeadJourneyStage = async (req, res) => {
       });
     }
 
+    const stageCurrency = currency || lead.currency || "INR (₹)";
+
     // Push new stage update
     const newStageObj = {
       stage,
@@ -269,13 +298,18 @@ export const addLeadJourneyStage = async (req, res) => {
       nextFollowUp: nextFollowUp || null,
       notes,
       dealValue: dealValue ? Number(dealValue) : null,
+      currency: stageCurrency,
       assignedEmployee: assignedEmployee || lead.assignedTo || null,
       attachments,
     };
 
     lead.leadJourney.push(newStageObj);
 
-    // Update root deal value if updated in this stage
+    // Update root deal value & currency if updated in this stage
+    if (currency) {
+      lead.currency = currency;
+      if (isNonInrCurrency(currency)) lead.inclusiveGst = false;
+    }
     if (dealValue !== undefined && dealValue !== null && dealValue !== "") {
       lead.value = Number(dealValue);
     }
@@ -321,6 +355,7 @@ export const updateLeadJourneyStage = async (req, res) => {
       nextFollowUp,
       notes,
       dealValue,
+      currency,
       assignedEmployee,
     } = req.body;
 
@@ -360,6 +395,11 @@ export const updateLeadJourneyStage = async (req, res) => {
     latestStage.nextFollowUp = nextFollowUp !== undefined ? nextFollowUp : latestStage.nextFollowUp;
     latestStage.notes = notes ?? latestStage.notes;
     latestStage.dealValue = dealValue !== undefined ? (dealValue ? Number(dealValue) : null) : latestStage.dealValue;
+    if (currency) {
+      latestStage.currency = currency;
+      lead.currency = currency;
+      if (isNonInrCurrency(currency)) lead.inclusiveGst = false;
+    }
     latestStage.assignedEmployee = assignedEmployee !== undefined ? (assignedEmployee || null) : latestStage.assignedEmployee;
 
     if (newAttachments.length > 0) {

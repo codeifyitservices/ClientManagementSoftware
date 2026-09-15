@@ -5,7 +5,8 @@ import {
   TrendingUp, Clock, Target, Award, ChevronLeft, ChevronRight
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
-import { isLeadActiveInPipeline, calculatePipelineValue, getLeadFinalValue } from "../utils/leadUtils";
+import { isLeadActiveInPipeline, calculatePipelineValue, getLeadFinalValue, getLeadCurrencySymbol, isForeignCurrency } from "../utils/leadUtils";
+import { convertToINR, getCurrencyCode } from "../utils/currencyUtils";
 
 export default function LeadsPage({
   token,
@@ -153,7 +154,7 @@ export default function LeadsPage({
   const activeLeads = leads.filter(isLeadActiveInPipeline);
   const activeLeadsCount = activeLeads.length;
   const pipelineValue = calculatePipelineValue(leads);
-  const wonValue = leads.filter(l => l.currentStage === "Won").reduce((acc, l) => acc + (Number(l.value) || 0), 0);
+  const wonValue = leads.filter(l => l.currentStage === "Won").reduce((acc, l) => acc + convertToINR(getLeadFinalValue(l), l.currency), 0);
 
   // Paginate leads
   const indexOfLastItem = currentPage * rowsPerPage;
@@ -368,10 +369,14 @@ export default function LeadsPage({
                       </td>
                       <td className="p-4">
                         <p className="text-slate-900 font-extrabold text-xs">
-                          ₹{getLeadFinalValue(lead).toLocaleString("en-IN")}
+                          {getLeadCurrencySymbol(lead.currency)}{getLeadFinalValue(lead).toLocaleString(isForeignCurrency(lead.currency) ? "en-US" : "en-IN")}
                         </p>
                         <div className="mt-0.5">
-                          {lead.isPersonalAccount ? (
+                          {isForeignCurrency(lead.currency) ? (
+                            <span className="inline-block text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                              {getCurrencyCode(lead.currency)} (0% Tax)
+                            </span>
+                          ) : lead.isPersonalAccount ? (
                             <span className="inline-block text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.2 rounded">
                               Personal
                             </span>

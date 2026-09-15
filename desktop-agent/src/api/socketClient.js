@@ -14,9 +14,9 @@ class SocketClient extends EventEmitter {
   getServerUrl() {
     try {
       const url = new URL(config.apiBaseUrl);
-      return url.origin; // e.g. http://localhost:5000
+      return url.origin; // e.g. https://clientmanagementsoftware.onrender.com
     } catch (err) {
-      return "http://localhost:5000";
+      return "https://clientmanagementsoftware.onrender.com";
     }
   }
 

@@ -367,9 +367,9 @@ export const createEmployee = async (req, res) => {
     }
 
     if (phoneNumber && String(phoneNumber).trim() !== "") {
-      const cleanPhone = String(phoneNumber).replace(/\D/g, "");
-      if (cleanPhone.length !== 10) {
-        return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+      const digitsOnly = String(phoneNumber).replace(/\D/g, "");
+      if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+        return res.status(400).json({ message: "Please enter a valid phone number (7 to 15 digits)." });
       }
     }
 
@@ -450,6 +450,7 @@ export const updateEmployee = async (req, res) => {
 
     // Prevent standard employee from editing core fields
     if (!hasEditPermission && isEditingSelf) {
+      delete updates.companyEmail;
       delete updates.department;
       delete updates.designation;
       delete updates.reportingManager;
@@ -518,9 +519,10 @@ export const updateEmployee = async (req, res) => {
 
     if (updates.phoneNumber !== undefined) {
       if (String(updates.phoneNumber).trim() !== "") {
-        const cleanPhone = String(updates.phoneNumber).replace(/\D/g, "");
-        if (cleanPhone.length !== 10) {
-          return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+        const cleanPhone = String(updates.phoneNumber).trim();
+        const digitsOnly = cleanPhone.replace(/\D/g, "");
+        if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+          return res.status(400).json({ message: "Please enter a valid phone number (7 to 15 digits)." });
         }
         updates.phoneNumber = cleanPhone;
       } else {
@@ -540,7 +542,7 @@ export const updateEmployee = async (req, res) => {
     // Keep track of what changed for timeline
     const changedFields = [];
     const fieldsToTrack = [
-      "fullName", "phoneNumber", "department", "designation", "reportingManager",
+      "fullName", "companyEmail", "phoneNumber", "department", "designation", "reportingManager",
       "employmentType", "joiningDate", "status", "personalEmail", "workLocation"
     ];
 

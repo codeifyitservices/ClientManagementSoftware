@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, User, Phone, Mail, TrendingUp, Save, Briefcase, FileText } from "lucide-react";
-import { SUPPORTED_CURRENCIES, getCurrencySymbol } from "../utils/currencyUtils";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol, getCurrencyCode } from "../utils/currencyUtils";
+import { isForeignCurrency } from "../utils/leadUtils";
+import PhoneInputWithCountry from "./PhoneInputWithCountry";
 
 export default function LeadFormPage({
   token,
@@ -59,6 +61,7 @@ export default function LeadFormPage({
           setEmail(lead.email || "");
           setPhone(lead.phone || "");
           setSource(lead.source || "Website");
+          setCurrency(lead.currency || "INR (₹)");
           setValue(lead.value !== undefined ? String(lead.value) : "");
           setInclusiveGst(lead.inclusiveGst !== false);
           setIsPersonalAccount(lead.isPersonalAccount === true);
@@ -81,6 +84,9 @@ export default function LeadFormPage({
     }
   }, [id, token, isEdit]);
 
+  const isForeign = isForeignCurrency(currency);
+  const isTaxExempt = isPersonalAccount || isForeign;
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -99,8 +105,9 @@ export default function LeadFormPage({
       email,
       phone,
       source,
+      currency,
       value: value ? Number(value) : 0,
-      inclusiveGst: isPersonalAccount ? false : inclusiveGst,
+      inclusiveGst: isTaxExempt ? false : inclusiveGst,
       isPersonalAccount,
       assignedTo: assignedTo || null,
       notes,
@@ -261,16 +268,11 @@ export default function LeadFormPage({
                 <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                   Phone Number
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="e.g. +91 98765 43210"
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                  <Phone className="absolute left-3 top-3 h-3.5 w-3.5 text-slate-400" />
-                </div>
+                <PhoneInputWithCountry
+                  value={phone}
+                  onChange={(val) => setPhone(val)}
+                  placeholder="98765 43210"
+                />
               </div>
             </div>
           </div>
@@ -340,17 +342,21 @@ export default function LeadFormPage({
                   </div>
                   {value && !isNaN(Number(value)) && Number(value) > 0 && (
                     <div className="mt-1.5 text-[10px] font-semibold">
-                      {isPersonalAccount ? (
+                      {isForeign ? (
+                        <span className="text-emerald-700 font-bold">
+                          Final Amount: {getCurrencySymbol(currency)}{Number(value).toLocaleString("en-US")} ({getCurrencyCode(currency)} Export / 0% Tax)
+                        </span>
+                      ) : isPersonalAccount ? (
                         <span className="text-amber-700 font-bold">
-                          Final Amount: {getCurrencySymbol(currency)}{Number(value).toLocaleString("en-IN")}
+                          Final Amount: {getCurrencySymbol(currency)}{Number(value).toLocaleString("en-IN")} (Personal / 0% GST)
                         </span>
                       ) : inclusiveGst ? (
                         <span className="text-slate-600 font-bold">
-                          Base Amount: {getCurrencySymbol(currency)}{Math.round(Number(value) / 1.18).toLocaleString("en-IN")}
+                          Base Amount: {getCurrencySymbol(currency)}{Math.round(Number(value) / 1.18).toLocaleString("en-IN")} (GST Inclusive)
                         </span>
                       ) : (
                         <span className="text-indigo-600 font-bold">
-                          Final Amount: {getCurrencySymbol(currency)}{Math.round(Number(value) * 1.18).toLocaleString("en-IN")}
+                          Final Amount: {getCurrencySymbol(currency)}{Math.round(Number(value) * 1.18).toLocaleString("en-IN")} (+18% GST Exclusive)
                         </span>
                       )}
                     </div>
@@ -385,8 +391,16 @@ export default function LeadFormPage({
                   </label>
                 </div>
 
-                {/* GST Inclusive Checkbox — hidden for personal account */}
-                {!isPersonalAccount ? (
+                {/* GST Inclusive Checkbox — hidden for foreign or personal account */}
+                {isForeign ? (
+                  <div className="flex items-center p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 text-[11px] text-emerald-800 font-bold">
+                    {getCurrencyCode(currency)} Currency active: GST exempt (0% tax for non-INR export transactions)
+                  </div>
+                ) : isPersonalAccount ? (
+                  <div className="flex items-center p-3 rounded-xl bg-amber-50/60 border border-amber-100 text-[11px] text-amber-800 font-bold">
+                    Personal Account active: GST exempt (0% tax)
+                  </div>
+                ) : (
                   <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
                     <input
                       type="checkbox"
@@ -401,10 +415,6 @@ export default function LeadFormPage({
                         If unchecked, 18% tax will automatically be added to obtain the final deal amount.
                       </span>
                     </label>
-                  </div>
-                ) : (
-                  <div className="flex items-center p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-450 font-semibold">
-                    Personal Account active: GST exempt (0% tax)
                   </div>
                 )}
               </div>

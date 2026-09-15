@@ -6,8 +6,8 @@ import {
   Clock, Plus, ShieldAlert, Award, FileText, Download, Activity, AlertCircle, Save, Paperclip, X
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
-import { SUPPORTED_CURRENCIES, getCurrencySymbol } from "../utils/currencyUtils";
-import { getLeadFinalValue } from "../utils/leadUtils";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol, getCurrencyCode } from "../utils/currencyUtils";
+import { getLeadFinalValue, isForeignCurrency } from "../utils/leadUtils";
 
 export default function LeadDetailPage({
   token,
@@ -95,6 +95,7 @@ export default function LeadDetailPage({
     setStageNextFollowUp("");
     setStageNotes("");
     setStageDealValue("");
+    setStageCurrency(lead?.currency || "INR (₹)");
     setSelectedFiles([]);
     setIsStageModalOpen(true);
   };
@@ -129,6 +130,7 @@ export default function LeadDetailPage({
 
     setStageNotes(stageObj.notes || "");
     setStageDealValue(stageObj.dealValue !== undefined && stageObj.dealValue !== null ? String(stageObj.dealValue) : "");
+    setStageCurrency(stageObj.currency || lead?.currency || "INR (₹)");
     setSelectedFiles([]);
     setIsStageModalOpen(true);
   };
@@ -163,6 +165,7 @@ export default function LeadDetailPage({
     if (stageDealValue !== "") {
       formData.append("dealValue", stageDealValue);
     }
+    formData.append("currency", stageCurrency);
     formData.append("assignedEmployee", lead.assignedTo?._id || "");
 
     // Append attachments
@@ -361,9 +364,13 @@ export default function LeadDetailPage({
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-xl space-y-1">
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Prospective Deal Value</span>
-            <p className="text-sm font-black text-slate-900">₹{getLeadFinalValue(lead).toLocaleString("en-IN")}</p>
+            <p className="text-sm font-black text-slate-900">{getCurrencySymbol(lead.currency)}{getLeadFinalValue(lead).toLocaleString(isForeignCurrency(lead.currency) ? "en-US" : "en-IN")}</p>
             <div className="mt-0.5">
-              {lead.isPersonalAccount ? (
+              {isForeignCurrency(lead.currency) ? (
+                <span className="inline-block text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                  {getCurrencyCode(lead.currency)} (0% Tax / Export)
+                </span>
+              ) : lead.isPersonalAccount ? (
                 <span className="inline-block text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.2 rounded">
                   Personal (No GST)
                 </span>
@@ -517,7 +524,7 @@ export default function LeadDetailPage({
                         </span>
                         {item.dealValue !== undefined && item.dealValue !== null && (
                           <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50/50 border border-indigo-100 px-2 py-0.5 rounded">
-                            Value: ₹{item.dealValue.toLocaleString("en-IN")}
+                            Value: {getCurrencySymbol(item.currency || lead.currency)}{item.dealValue.toLocaleString(isForeignCurrency(item.currency || lead.currency) ? "en-US" : "en-IN")}
                           </span>
                         )}
                       </div>
@@ -622,7 +629,7 @@ export default function LeadDetailPage({
               )}
               <div className="flex justify-between border-b border-slate-50 pb-2">
                 <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Prospective Value</span>
-                <span className="font-extrabold text-slate-950">₹{(lead.value || 0).toLocaleString("en-IN")}</span>
+                <span className="font-extrabold text-slate-950">{getCurrencySymbol(lead.currency)}{(lead.value || 0).toLocaleString(isForeignCurrency(lead.currency) ? "en-US" : "en-IN")}</span>
               </div>
               <div className="flex justify-between border-b border-slate-50 pb-2">
                 <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Lead Source</span>

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { X, FileUp, Paperclip, Trash2, Eye, EyeOff, KeyRound, Sparkles } from "lucide-react";
+import PhoneInputWithCountry from "./PhoneInputWithCountry";
 
-const DEPARTMENTS = ["Engineering", "Product", "Design", "Marketing", "Sales", "HR", "Finance", "Operations"];
+const DEPARTMENTS = ["Engineering", "IT", "Product", "Design", "Marketing", "Sales", "HR", "Finance", "Operations"];
 const DESIGNATIONS = [
   "Software Engineer",
   "Senior Software Engineer",
+  "MERN Developer",
   "Tech Lead",
   "Product Manager",
   "UI/UX Designer",
@@ -41,6 +43,7 @@ export default function EmployeeModal({
 }) {
   const isEdit = !!employee;
   const isEmployee = currentUser?.role === "Employee";
+  const canEditCompanyEmail = !isEmployee || currentUser?.permissions?.includes("Edit Employees") || !isEdit;
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -82,6 +85,7 @@ export default function EmployeeModal({
   });
 
   const selectedRole = useWatch({ control, name: "role" });
+  const phoneNumber = useWatch({ control, name: "phoneNumber" }) || "";
 
   // Update form fields when editing employee
   useEffect(() => {
@@ -312,9 +316,9 @@ export default function EmployeeModal({
                 <input
                   type="email"
                   placeholder="john.doe@company.com"
-                  readOnly={isEdit}
+                  readOnly={!canEditCompanyEmail}
                   className={`w-full px-3 py-1.5 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30 ${
-                    isEdit ? "opacity-75 cursor-not-allowed bg-slate-100" : ""
+                    !canEditCompanyEmail ? "opacity-75 cursor-not-allowed bg-slate-100" : ""
                   } ${errors.companyEmail ? "border-red-500" : "border-slate-200"}`}
                   {...register("companyEmail", {
                     required: "Company email is required",
@@ -334,28 +338,13 @@ export default function EmployeeModal({
 
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Phone Number <span className="text-[9px] text-slate-400 font-normal">(10 Digits)</span>
+                  Phone Number
                 </label>
-                <input
-                  type="tel"
-                  placeholder="9876543210"
-                  maxLength={10}
-                  className={`w-full px-3 py-1.5 rounded-xl border text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 bg-slate-50/30 ${
-                    errors.phoneNumber ? "border-red-500" : "border-slate-200"
-                  }`}
-                  {...register("phoneNumber", {
-                    validate: (val) => {
-                      if (!val || val.trim() === "") return true; // optional
-                      const digits = val.replace(/\D/g, "");
-                      if (digits.length !== 10) {
-                        return "Phone number must be exactly 10 digits";
-                      }
-                      return true;
-                    },
-                  })}
-                  onInput={(e) => {
-                    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
-                  }}
+                <PhoneInputWithCountry
+                  value={phoneNumber}
+                  onChange={(val) => setValue("phoneNumber", val, { shouldValidate: true, shouldDirty: true })}
+                  placeholder="98765 43210"
+                  hasError={!!errors.phoneNumber}
                 />
                 {errors.phoneNumber && (
                   <span className="text-[9px] text-red-500 font-semibold mt-1 block">{errors.phoneNumber.message}</span>

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
-export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails }) {
+export default function AdminAttendanceDashboard({ onNavigate, onNavigateTab, onViewDetails }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
@@ -39,7 +39,8 @@ export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails 
       });
       const payload = res?.data || res;
       if (payload?.success || res?.success) {
-        setData(payload.data || payload);
+        // Backend returns { success, kpis, departmentStats } at the root level
+        setData(payload);
       }
     } catch (err) {
       console.error("Failed to load admin attendance dashboard", err);
@@ -54,6 +55,7 @@ export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails 
     return () => clearInterval(interval);
   }, [selectedDate, departmentFilter, locationFilter, shiftFilter]);
 
+  const nav = onNavigate || onNavigateTab || (() => {});
   const kpis = data?.kpis || {};
 
   const kpiCards = [
@@ -194,6 +196,7 @@ export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails 
             >
               <option value="All">All Departments</option>
               <option value="Engineering">Engineering</option>
+              <option value="IT">IT</option>
               <option value="Product">Product</option>
               <option value="Design">Design</option>
               <option value="Marketing">Marketing</option>
@@ -259,7 +262,7 @@ export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails 
           return (
             <div
               key={idx}
-              onClick={() => card.tab && onNavigateTab && onNavigateTab(card.tab)}
+              onClick={() => card.tab && nav(card.tab)}
               className={`bg-white border rounded-2xl p-4 shadow-sm transition-all relative overflow-hidden ${
                 card.tab ? "hover:border-indigo-300 hover:shadow-md cursor-pointer group" : "border-slate-200/80"
               }`}
@@ -301,7 +304,7 @@ export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails 
               <p className="text-xs text-slate-400 font-medium mt-0.5">Real-time attendance rates across business units</p>
             </div>
             <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full">
-              {data?.departmentStats?.length || 0} Units
+              {data?.departmentStats?.length || 0} Dept{(data?.departmentStats?.length || 0) !== 1 ? 's' : ''}
             </span>
           </div>
 
@@ -341,7 +344,7 @@ export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails 
 
             <div className="space-y-2.5 mt-4">
               <button
-                onClick={() => onNavigateTab("live")}
+                onClick={() => nav("live")}
                 className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/40 text-xs font-bold text-slate-700 hover:text-indigo-600 transition cursor-pointer group"
               >
                 <span className="flex items-center gap-2.5">
@@ -352,7 +355,20 @@ export default function AdminAttendanceDashboard({ onNavigateTab, onViewDetails 
               </button>
 
               <button
-                onClick={() => onNavigateTab("exceptions")}
+                onClick={() => nav("wfh")}
+                className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/40 text-xs font-bold text-slate-700 hover:text-indigo-600 transition cursor-pointer group"
+              >
+                <span className="flex items-center gap-2.5">
+                  <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                  <span>WFH Requests</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-indigo-100 text-indigo-700">
+                  {kpis.pendingWfh || 0} Pending
+                </span>
+              </button>
+
+              <button
+                onClick={() => nav("exceptions")}
                 className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-red-200 hover:bg-red-50/40 text-xs font-bold text-slate-700 hover:text-red-600 transition cursor-pointer group"
               >
                 <span className="flex items-center gap-2.5">

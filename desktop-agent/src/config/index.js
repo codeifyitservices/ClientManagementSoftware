@@ -6,9 +6,9 @@ const pkg = require("../../package.json");
 dotenv.config({ path: path.join(__dirname, "../../.env") });
 
 const config = {
-  apiBaseUrl: process.env.API_BASE_URL || "http://localhost:5000/api/agent",
-  updateUrl: process.env.UPDATE_URL || "https://updates.company.com/desktop-agent",
-  environment: process.env.ENVIRONMENT || "development",
+  apiBaseUrl: process.env.API_BASE_URL || "https://clientmanagementsoftware.onrender.com/api/agent",
+  updateUrl: process.env.UPDATE_URL || "https://clientmanagementsoftware.onrender.com/desktop-agent",
+  environment: process.env.ENVIRONMENT || "production",
   
   // Timing rules in milliseconds for intervals, seconds in config
   heartbeatIntervalMs: parseInt(process.env.HEARTBEAT_INTERVAL || "5", 10) * 1000,

@@ -22,10 +22,11 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import ConfirmDialog from "./ConfirmDialog";
 
-const DEPARTMENTS = ["Engineering", "Product", "Design", "Marketing", "Sales", "HR", "Finance", "Operations"];
+const DEPARTMENTS = ["Engineering", "IT", "Product", "Design", "Marketing", "Sales", "HR", "Finance", "Operations"];
 const DESIGNATIONS = [
   "Software Engineer",
   "Senior Software Engineer",
+  "MERN Developer",
   "Tech Lead",
   "Product Manager",
   "UI/UX Designer",
@@ -36,7 +37,7 @@ const DESIGNATIONS = [
   "Director",
 ];
 
-const COLORS = ["#5D5FEF", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#3B82F6", "#6B7280"];
+const COLORS = ["#5D5FEF", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#3B82F6", "#6B7280"];
 
 export default function EmployeeList({
   token,

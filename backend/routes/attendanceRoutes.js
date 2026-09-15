@@ -1,5 +1,6 @@
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
+import adminOnly from "../middleware/adminOnly.js";
 import {
   checkIn,
   startBreak,
@@ -93,42 +94,42 @@ router.get("/audit-logs", protect, getSecurityAuditLogs);
 // ══════════════════════════════════════════════════════════════════════════════
 
 // Dashboard & Live View
-router.get("/admin/dashboard", protect, getAdminDashboard);
-router.get("/admin/live", protect, getAdminLiveAttendance);
-router.get("/admin/records", protect, getAdminRecords);
-router.get("/admin/calendar", protect, getAdminCalendar);
+router.get("/admin/dashboard", protect, adminOnly, getAdminDashboard);
+router.get("/admin/live", protect, adminOnly, getAdminLiveAttendance);
+router.get("/admin/records", protect, adminOnly, getAdminRecords);
+router.get("/admin/calendar", protect, adminOnly, getAdminCalendar);
 
 // WFH Requests Management
-router.get("/admin/wfh-requests", protect, getAdminWfhRequests);
-router.post("/admin/wfh-requests/bulk-approve", protect, bulkApproveWfhAdmin);
+router.get("/admin/wfh-requests", protect, adminOnly, getAdminWfhRequests);
+router.post("/admin/wfh-requests/bulk-approve", protect, adminOnly, bulkApproveWfhAdmin);
 
 // Regularization Requests Management
-router.get("/admin/regularizations", protect, getAdminRegularizations);
-router.put("/admin/regularizations/:id/approve", protect, approveRegularizationAdmin);
-router.put("/admin/regularizations/:id/reject", protect, rejectRegularizationAdmin);
+router.get("/admin/regularizations", protect, adminOnly, getAdminRegularizations);
+router.put("/admin/regularizations/:id/approve", protect, adminOnly, approveRegularizationAdmin);
+router.put("/admin/regularizations/:id/reject", protect, adminOnly, rejectRegularizationAdmin);
 
 // Attendance Exceptions
-router.get("/admin/exceptions", protect, getAdminExceptions);
-router.put("/admin/exceptions/:id", protect, updateAdminExceptionStatus);
-router.post("/admin/exceptions/detect", protect, runAdminExceptionDetection);
+router.get("/admin/exceptions", protect, adminOnly, getAdminExceptions);
+router.put("/admin/exceptions/:id", protect, adminOnly, updateAdminExceptionStatus);
+router.post("/admin/exceptions/detect", protect, adminOnly, runAdminExceptionDetection);
 
 // Employee Attendance Profile
-router.get("/admin/employee-profile/:employeeId", protect, getAdminEmployeeProfile);
+router.get("/admin/employee-profile/:employeeId", protect, adminOnly, getAdminEmployeeProfile);
 
 // Reports & Data Export
-router.get("/admin/reports-data", protect, getAdminReportsData);
+router.get("/admin/reports-data", protect, adminOnly, getAdminReportsData);
 
 // Payroll Summary & Locks
-router.get("/admin/payroll-summary", protect, getAdminPayrollSummary);
-router.post("/admin/payroll-period/finalize", protect, finalizePayrollPeriod);
-router.post("/admin/payroll-period/unlock", protect, unlockPayrollPeriod);
+router.get("/admin/payroll-summary", protect, adminOnly, getAdminPayrollSummary);
+router.post("/admin/payroll-period/finalize", protect, adminOnly, finalizePayrollPeriod);
+router.post("/admin/payroll-period/unlock", protect, adminOnly, unlockPayrollPeriod);
 
 // Attendance Policies & Configuration
-router.get("/admin/policies", protect, getAdminPolicies);
-router.put("/admin/policies", protect, updateAdminPolicies);
-router.get("/admin/detect-network", protect, detectCurrentNetworkInfo);
+router.get("/admin/policies", protect, adminOnly, getAdminPolicies);
+router.put("/admin/policies", protect, adminOnly, updateAdminPolicies);
+router.get("/admin/detect-network", protect, adminOnly, detectCurrentNetworkInfo);
 
 // Traceable Audit Logs
-router.get("/admin/audit-logs", protect, getAdminAuditLogs);
+router.get("/admin/audit-logs", protect, adminOnly, getAdminAuditLogs);
 
 export default router;

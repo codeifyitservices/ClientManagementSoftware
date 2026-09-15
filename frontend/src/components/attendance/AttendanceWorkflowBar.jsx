@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check, AlertTriangle } from "lucide-react";
+import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check, AlertTriangle, Home } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
 import WfhRequestModal from "./WfhRequestModal";
@@ -210,20 +210,11 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
               <button
                 type="button"
                 onClick={() => setShowWfhModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-[#5D5FEF] transition border border-indigo-100 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-50 hover:bg-indigo-50/80 text-slate-700 hover:text-[#5D5FEF] transition border border-slate-200 hover:border-indigo-200 cursor-pointer shadow-xs"
               >
-                <ShieldCheck className="h-4 w-4" />
-                <span>Request WFH</span>
+                <Home className="h-4 w-4 text-[#5D5FEF]" />
+                <span>Apply for WFH</span>
               </button>
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={isRemote}
-                  onChange={(e) => setIsRemote(e.target.checked)}
-                  className="rounded border-slate-300 text-[#5D5FEF] focus:ring-[#5D5FEF]"
-                />
-                Working Remotely
-              </label>
               <button
                 onClick={handleCheckIn}
                 disabled={loading}

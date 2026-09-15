@@ -23,6 +23,7 @@ import {
   Sparkles,
   Check,
 } from "lucide-react";
+import PhoneInputWithCountry from "./PhoneInputWithCountry";
 
 export default function EmployeeProfile({
   employeeId,
@@ -136,9 +137,9 @@ export default function EmployeeProfile({
 
   const handleSave = async () => {
     if (form.phone && form.phone.trim()) {
-      const cleanPhone = form.phone.replace(/\D/g, "");
-      if (cleanPhone.length !== 10) {
-        showToast("Phone number must be exactly 10 digits.", "error");
+      const cleanDigits = form.phone.replace(/\D/g, "");
+      if (cleanDigits.length < 7 || cleanDigits.length > 15) {
+        showToast("Please enter a valid phone number (7 to 15 digits).", "error");
         return;
       }
     }
@@ -158,7 +159,7 @@ export default function EmployeeProfile({
           : form.street;
 
       const payload = {
-        phoneNumber: form.phone ? form.phone.replace(/\D/g, "").slice(0, 10) : "",
+        phoneNumber: form.phone ? form.phone.trim() : "",
         personalEmail: form.personalEmail ? form.personalEmail.trim().toLowerCase() : "",
         dob: form.dob || undefined,
         gender: form.gender,
@@ -458,16 +459,17 @@ export default function EmployeeProfile({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <Field label="Phone Number (10 Digits)" icon={Phone}>
-                  <input
-                    type="tel"
-                    maxLength={10}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Phone Number</span>
+                  </label>
+                  <PhoneInputWithCountry
                     value={form.phone}
-                    onChange={(e) => updateForm({ phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
-                    placeholder="9876543210"
-                    className={inputCls}
+                    onChange={(val) => updateForm({ phone: val })}
+                    placeholder="98765 43210"
                   />
-                </Field>
+                </div>
 
                 <Field label="Personal Email" icon={Mail}>
                   <input

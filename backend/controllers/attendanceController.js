@@ -2176,7 +2176,7 @@ export const getAdminDashboard = async (req, res) => {
         if (c.status === "Pending") pendingRegularizations++;
       });
     });
-    const pendingOnDuty = await OnDutyRequest.countDocuments({ status: "Pending" });
+    const pendingOnDuty = OnDutyRequest ? await OnDutyRequest.countDocuments({ status: "Pending" }) : 0;
     const totalPendingRequests = pendingWfh + pendingRegularizations + pendingOnDuty;
 
     // Open Exceptions
