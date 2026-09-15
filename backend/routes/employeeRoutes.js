@@ -54,8 +54,8 @@ router.get("/me", protect, getMyProfile);
 // GET /api/employees - Get list of employees (Admin only)
 router.get("/", protect, adminOnly, getEmployees);
 
-// GET /api/employees/:id - Fetch details of single employee (Admin only)
-router.get("/:id", protect, adminOnly, getEmployeeById);
+// GET /api/employees/:id - Fetch details of single employee (Admin or own profile)
+router.get("/:id", protect, getEmployeeById);
 
 // POST /api/employees - Add a new employee (Admin only)
 router.post("/", protect, adminOnly, upload.array("files", 20), createEmployee);
