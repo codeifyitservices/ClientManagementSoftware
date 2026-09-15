@@ -139,10 +139,10 @@ export const initSocketServer = (httpServer) => {
       // Default: Web client authenticated via JWT
       if (token) {
         try {
-          const decoded = jwt.verify(
-            token,
-            process.env.JWT_SECRET || "clientflow_secret_token_signature_key_2026"
-          );
+          if (!process.env.JWT_SECRET) {
+            return next(new Error("Authentication failed: server JWT secret not configured"));
+          }
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
           socket.data.clientType = "web";
           socket.data.userId = decoded.id;
           const emp = await resolveEmployee(decoded.id);

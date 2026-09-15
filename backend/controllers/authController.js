@@ -4,9 +4,12 @@ import Employee from "../models/employeeModel.js";
 
 // Generate a signed JWT token valid for 30 days
 const generateToken = (id) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET environment variable is not set.");
+  }
   return jwt.sign(
     { id },
-    process.env.JWT_SECRET || "clientflow_secret_token_signature_key_2026",
+    process.env.JWT_SECRET,
     { expiresIn: "30d" }
   );
 };
@@ -21,8 +24,16 @@ export const login = async (req, res) => {
     }
 
     const cleanInput = String(email).trim();
-    const cleanEmail = cleanInput.toLowerCase();
+    if (cleanInput.length > 254 || cleanInput.length === 0) {
+      return res.status(400).json({ message: "Invalid email or identifier format." });
+    }
+
     const cleanPassword = String(password).trim();
+    if (cleanPassword.length > 128 || cleanPassword.length === 0) {
+      return res.status(400).json({ message: "Invalid password format." });
+    }
+
+    const cleanEmail = cleanInput.toLowerCase();
 
     // Try finding in Admin collection first
     let user = await Admin.findOne({ email: cleanEmail });
@@ -30,11 +41,13 @@ export const login = async (req, res) => {
 
     if (!user) {
       // Find in Employee collection by companyEmail, personalEmail, or employeeId
+      // Strict regex escaping and length limitation prevents ReDoS vulnerabilities
+      const safeEscaped = cleanInput.slice(0, 64).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       user = await Employee.findOne({
         $or: [
           { companyEmail: cleanEmail },
           { personalEmail: cleanEmail },
-          { employeeId: { $regex: new RegExp(`^${cleanInput}$`, "i") } },
+          { employeeId: { $regex: new RegExp(`^${safeEscaped}$`, "i") } },
         ],
       });
       if (user) {

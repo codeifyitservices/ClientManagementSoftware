@@ -52,6 +52,7 @@ export default function TaskListPage({ token, currentUser, showToast }) {
   const isAdmin = currentUser?.role === "Admin";
 
   const fetchFiltersData = async () => {
+    if (!isAdmin) return;
     try {
       // Fetch projects
       const projRes = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/projects`, {
@@ -139,8 +140,10 @@ export default function TaskListPage({ token, currentUser, showToast }) {
   };
 
   useEffect(() => {
-    fetchFiltersData();
-  }, []);
+    if (isAdmin) {
+      fetchFiltersData();
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchTasks();

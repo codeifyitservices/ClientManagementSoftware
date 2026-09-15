@@ -58,15 +58,24 @@ export const pairAgentDevice = async (req, res) => {
       });
     }
 
-    // Resolve employee from pairing token record if available
-    let resolvedEmployeeId = employeeId && employeeId !== "EMP-DEFAULT" ? employeeId : null;
-    if (activePairingTokens.has(pairingToken)) {
-      const tokenInfo = activePairingTokens.get(pairingToken);
-      if (tokenInfo && tokenInfo.expiresAt > Date.now()) {
-        resolvedEmployeeId = tokenInfo.employeeId || tokenInfo.userId || resolvedEmployeeId;
-      }
-      activePairingTokens.delete(pairingToken);
+    if (!activePairingTokens.has(pairingToken)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired pairing token. Please generate a new pairing token from the web application.",
+      });
     }
+
+    const tokenInfo = activePairingTokens.get(pairingToken);
+    if (!tokenInfo || tokenInfo.expiresAt <= Date.now()) {
+      activePairingTokens.delete(pairingToken);
+      return res.status(401).json({
+        success: false,
+        message: "Pairing token has expired. Please generate a new pairing token from the web application.",
+      });
+    }
+
+    let resolvedEmployeeId = tokenInfo.employeeId || tokenInfo.userId || (employeeId !== "EMP-DEFAULT" ? employeeId : null);
+    activePairingTokens.delete(pairingToken);
 
     // Generate permanent device token
     const deviceToken = "DEV-" + crypto.randomBytes(32).toString("hex");
@@ -151,35 +160,18 @@ export const pairAgentDevice = async (req, res) => {
  */
 export const receiveHeartbeat = async (req, res) => {
   try {
-    const deviceTokenHeader = req.headers["x-device-token"];
-    const { deviceId, employeeId, status, idleTime, agentVersion, computerName, os, timestamp } = req.body;
+    const { employeeId, status, idleTime, agentVersion, computerName, os } = req.body;
+    const session = req.agentSession;
 
-    if (!deviceId) {
-      return res.status(400).json({
-        success: false,
-        message: "deviceId is required in heartbeat body",
-      });
-    }
-
-    let session = await AgentSession.findOne({ deviceId });
-
-    if (!session || !session.isPaired) {
-      return res.status(200).json({
-        success: false,
-        pairingValid: false,
-        message: "Device is not paired. Please pair the desktop agent from the web application first.",
-      });
-    } else {
-      session.currentStatus = (status && status !== "Offline" && status !== "Disconnected") ? status : "Active";
-      session.idleTimeSeconds = typeof idleTime === "number" ? idleTime : 0;
-      session.agentVersion = agentVersion || session.agentVersion;
-      session.computerName = computerName || session.computerName;
-      session.operatingSystem = os || session.operatingSystem;
-      if (employeeId && employeeId !== "EMP-DEFAULT") session.employeeId = employeeId;
-      session.lastHeartbeatAt = new Date();
-      session.disconnectedAt = null;
-      await session.save();
-    }
+    session.currentStatus = (status && status !== "Offline" && status !== "Disconnected") ? status : "Active";
+    session.idleTimeSeconds = typeof idleTime === "number" ? idleTime : 0;
+    session.agentVersion = agentVersion || session.agentVersion;
+    session.computerName = computerName || session.computerName;
+    session.operatingSystem = os || session.operatingSystem;
+    if (employeeId && employeeId !== "EMP-DEFAULT") session.employeeId = employeeId;
+    session.lastHeartbeatAt = new Date();
+    session.disconnectedAt = null;
+    await session.save();
 
     // Trigger sync to attendance record and get synced server status
     const syncRes = await syncAgentActivity({
@@ -222,28 +214,19 @@ export const receiveHeartbeat = async (req, res) => {
  */
 export const disconnectAgentDevice = async (req, res) => {
   try {
-    const { deviceId } = req.body;
+    const session = req.agentSession;
 
-    if (deviceId) {
-      const session = await AgentSession.findOneAndUpdate(
-        { deviceId },
-        {
-          currentStatus: "Offline",
-          disconnectedAt: new Date(),
-        },
-        { new: true }
-      );
+    session.currentStatus = "Offline";
+    session.disconnectedAt = new Date();
+    await session.save();
 
-      if (session) {
-        await syncAgentActivity({
-          deviceId: session.deviceId,
-          employeeCustomId: session.employeeId,
-          status: "Offline",
-          idleTimeSeconds: session.idleTimeSeconds || 0,
-          computerName: session.computerName,
-        });
-      }
-    }
+    await syncAgentActivity({
+      deviceId: session.deviceId,
+      employeeCustomId: session.employeeId,
+      status: "Offline",
+      idleTimeSeconds: session.idleTimeSeconds || 0,
+      computerName: session.computerName,
+    });
 
     return res.status(200).json({
       success: true,
@@ -262,27 +245,20 @@ export const disconnectAgentDevice = async (req, res) => {
 /**
  * @desc    Update employee status (Active, On Break, Idle)
  * @route   POST /api/agent/status
- * @access  Public
+ * @access  Private (Validated Device Token)
  */
 export const updateAgentStatus = async (req, res) => {
   try {
-    const { deviceId, status } = req.body;
+    const { status } = req.body;
 
-    if (!deviceId || !status) {
+    if (!status) {
       return res.status(400).json({
         success: false,
-        message: "deviceId and status are required",
+        message: "status is required",
       });
     }
 
-    const session = await AgentSession.findOne({ deviceId });
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: "Device session not found",
-      });
-    }
-
+    const session = req.agentSession;
     session.currentStatus = status;
     session.lastHeartbeatAt = new Date();
     await session.save();
@@ -305,33 +281,24 @@ export const updateAgentStatus = async (req, res) => {
 /**
  * @desc    Logout desktop agent & unpair session
  * @route   POST /api/agent/logout
- * @access  Public
+ * @access  Private (Validated Device Token)
  */
 export const logoutAgentDevice = async (req, res) => {
   try {
-    const { deviceId } = req.body;
+    const session = req.agentSession;
 
-    if (deviceId) {
-      const session = await AgentSession.findOneAndUpdate(
-        { deviceId },
-        {
-          isPaired: false,
-          currentStatus: "Offline",
-          deviceToken: "REVOKED-" + Date.now(),
-        },
-        { new: true }
-      );
+    session.isPaired = false;
+    session.currentStatus = "Offline";
+    session.deviceToken = "REVOKED-" + Date.now();
+    await session.save();
 
-      if (session) {
-        syncAgentActivity({
-          deviceId: session.deviceId,
-          employeeCustomId: session.employeeId,
-          status: "Disconnected",
-          idleTimeSeconds: 0,
-          computerName: session.computerName,
-        });
-      }
-    }
+    syncAgentActivity({
+      deviceId: session.deviceId,
+      employeeCustomId: session.employeeId,
+      status: "Disconnected",
+      idleTimeSeconds: 0,
+      computerName: session.computerName,
+    });
 
     return res.status(200).json({
       success: true,

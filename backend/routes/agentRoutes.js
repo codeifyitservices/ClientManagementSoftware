@@ -1,5 +1,6 @@
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
+import { requireAgentAuth } from "../middleware/agentAuth.js";
 import {
   generatePairingToken,
   pairAgentDevice,
@@ -15,9 +16,9 @@ const router = express.Router();
 router.get("/download", downloadAgentInstaller);
 router.post("/generate-token", protect, generatePairingToken);
 router.post("/pair", pairAgentDevice);
-router.post("/heartbeat", receiveHeartbeat);
-router.post("/status", updateAgentStatus);
-router.post("/disconnect", disconnectAgentDevice);
-router.post("/logout", logoutAgentDevice);
+router.post("/heartbeat", requireAgentAuth, receiveHeartbeat);
+router.post("/status", requireAgentAuth, updateAgentStatus);
+router.post("/disconnect", requireAgentAuth, disconnectAgentDevice);
+router.post("/logout", requireAgentAuth, logoutAgentDevice);
 
 export default router;

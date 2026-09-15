@@ -1,6 +1,7 @@
 import Employee from "../models/employeeModel.js";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 // CSV parser helper
 function parseCSV(text) {
@@ -150,6 +151,7 @@ export const importEmployees = async (req, res) => {
     let importedCount = 0;
     let skippedCount = 0;
     const errors = [];
+    const createdCredentials = [];
 
     for (let i = 0; i < parsedRows.length; i++) {
       const row = parsedRows[i];
@@ -172,6 +174,9 @@ export const importEmployees = async (req, res) => {
       }
 
       try {
+        // Generate strong random temporary password for each imported employee
+        const tempPassword = row["Password"] || `Cnp#${crypto.randomBytes(4).toString("hex")}!`;
+
         const tempEmp = new Employee({
           fullName,
           companyEmail: companyEmail.toLowerCase(),
@@ -190,18 +195,23 @@ export const importEmployees = async (req, res) => {
           aadhaarNumber: row["Aadhaar Number"],
           panNumber: row["PAN Number"],
           passportNumber: row["Passport Number"],
-          password: "Welcome123", // Default initial password
+          password: tempPassword,
           timeline: [
             {
               timestamp: new Date(),
               user: req.user.email,
-              description: "Employee profile imported via CSV.",
+              description: "Employee profile imported via CSV with secure generated password.",
             }
           ]
         });
 
         await tempEmp.save();
         importedCount++;
+        createdCredentials.push({
+          email: companyEmail.toLowerCase(),
+          fullName,
+          temporaryPassword: tempPassword,
+        });
       } catch (err) {
         errors.push(`Row ${i + 2}: Failed to save - ${err.message}`);
         skippedCount++;
@@ -214,6 +224,7 @@ export const importEmployees = async (req, res) => {
       importedCount,
       skippedCount,
       errors,
+      createdCredentials,
     });
   } catch (error) {
     res.status(500).json({ message: "Error importing employees.", error: error.message });

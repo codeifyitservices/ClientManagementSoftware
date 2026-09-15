@@ -207,7 +207,7 @@ export function useAppService() {
   };
 
   const fetchClients = async (search = "") => {
-    if (!token) return;
+    if (!token || currentUser?.role !== "Admin") return;
     try {
       setLoadingClients(true);
       const url = search
@@ -222,7 +222,7 @@ export function useAppService() {
   };
 
   const fetchInvoices = async (search = "") => {
-    if (!token) return;
+    if (!token || currentUser?.role !== "Admin") return;
     try {
       setLoadingInvoices(true);
       const url = search
@@ -237,7 +237,7 @@ export function useAppService() {
   };
 
   const fetchProjects = async () => {
-    if (!token) return;
+    if (!token || currentUser?.role !== "Admin") return;
     try {
       setLoadingProjects(true);
       const res = await authenticatedFetch(
@@ -255,7 +255,7 @@ export function useAppService() {
   };
 
   const fetchLeads = async () => {
-    if (!token) return;
+    if (!token || currentUser?.role !== "Admin") return;
     try {
       setLoadingLeads(true);
       const res = await authenticatedFetch(
@@ -275,18 +275,21 @@ export function useAppService() {
   useEffect(() => {
     if (token) {
       fetchCompanyConfig();
-      fetchClients();
-      fetchInvoices();
-      fetchActiveAlerts();
       fetchNotifications();
-      fetchEmployeesList();
-      fetchProjects();
-      fetchLeads();
+
+      if (currentUser?.role === "Admin") {
+        fetchClients();
+        fetchInvoices();
+        fetchActiveAlerts();
+        fetchEmployeesList();
+        fetchProjects();
+        fetchLeads();
+      }
     }
-  }, [token]);
+  }, [token, currentUser?.role]);
 
   const fetchActiveAlerts = async () => {
-    if (!token) return;
+    if (!token || currentUser?.role !== "Admin") return;
     try {
       const res = await authenticatedFetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/subscriptions/alerts`
@@ -359,7 +362,7 @@ export function useAppService() {
   };
 
   const fetchEmployeesList = async () => {
-    if (!token) return;
+    if (!token || currentUser?.role !== "Admin") return;
     try {
       const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/employees?limit=1000`, {
         headers: { Authorization: `Bearer ${token}` },

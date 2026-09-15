@@ -64,30 +64,30 @@ router.post("/check-out", protect, checkOut);
 router.get("/summary", protect, getTodaySummary);
 router.get("/list", protect, getAttendanceList);
 router.get("/details/:id", protect, getAttendanceDetails);
-router.post("/manual", protect, manualUpsertAttendance);
+router.post("/manual", protect, adminOnly, manualUpsertAttendance);
 router.post("/request-correction", protect, requestCorrection);
-router.post("/approve-correction", protect, approveCorrection);
+router.post("/approve-correction", protect, adminOnly, approveCorrection);
 router.get("/reports", protect, getAttendanceReports);
 router.post("/note", protect, saveAttendanceNote);
 router.get("/security-status", protect, getEmployeeSecurityStatus);
 
-// ── IP Whitelist & Locations ──
-router.get("/whitelist", protect, getWhitelists);
-router.post("/whitelist", protect, createWhitelist);
-router.put("/whitelist/:id", protect, updateWhitelist);
-router.delete("/whitelist/:id", protect, deleteWhitelist);
+// ── IP Whitelist & Locations (Admin managed) ──
+router.get("/whitelist", protect, adminOnly, getWhitelists);
+router.post("/whitelist", protect, adminOnly, createWhitelist);
+router.put("/whitelist/:id", protect, adminOnly, updateWhitelist);
+router.delete("/whitelist/:id", protect, adminOnly, deleteWhitelist);
 
-router.get("/locations", protect, getLocations);
-router.post("/locations", protect, createLocation);
-router.put("/locations/:id", protect, updateLocation);
-router.delete("/locations/:id", protect, deleteLocation);
+router.get("/locations", protect, adminOnly, getLocations);
+router.post("/locations", protect, adminOnly, createLocation);
+router.put("/locations/:id", protect, adminOnly, updateLocation);
+router.delete("/locations/:id", protect, adminOnly, deleteLocation);
 
 // ── Work From Home (WFH) Requests ──
 router.get("/wfh-requests", protect, getWfhRequests);
 router.post("/wfh-request", protect, createWfhRequest);
-router.put("/wfh-requests/:id/approve", protect, approveWfhRequest);
-router.put("/wfh-requests/:id/reject", protect, rejectWfhRequest);
-router.get("/audit-logs", protect, getSecurityAuditLogs);
+router.put("/wfh-requests/:id/approve", protect, adminOnly, approveWfhRequest);
+router.put("/wfh-requests/:id/reject", protect, adminOnly, rejectWfhRequest);
+router.get("/audit-logs", protect, adminOnly, getSecurityAuditLogs);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ── UPGRADED ADMIN ATTENDANCE ROUTES ──────────────────────────────────────────

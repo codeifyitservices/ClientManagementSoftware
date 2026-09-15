@@ -1,6 +1,7 @@
 import "./config/dotenv.js";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import connectMongo from "./config/db.js";
 import clientRoutes from "./routes/clientRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -18,6 +19,8 @@ import attendanceRoutes from "./routes/attendanceRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
 import protect from "./middleware/authMiddleware.js";
 import adminOnly from "./middleware/adminOnly.js";
+import { apiRateLimiter } from "./middleware/rateLimiter.js";
+import { serveSecureUpload } from "./middleware/secureUploads.js";
 import http from "http";
 import { startSubscriptionScheduler } from "./services/subscriptionScheduler.js";
 import { sendEmail } from "./services/emailService.js";
@@ -42,9 +45,38 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-app.use(cors());
-app.use(express.json());
-app.use("/uploads", express.static(uploadsDir));
+// Security Headers with Helmet
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false, // Managed per frontend requirements
+  })
+);
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+  : ["http://localhost:5173", "http://localhost:3000", "http://localhost:5000"];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS policy blocked request from origin: " + origin));
+      }
+    },
+    credentials: true,
+  })
+);
+
+app.use(express.json({ limit: "10mb" }));
+
+// Rate limiting for general API requests
+app.use("/api", apiRateLimiter);
+
+// Secure uploads serving: Protects sensitive employee identity docs (Aadhaar, PAN, etc.)
+app.get("/uploads/:filename", serveSecureUpload);
 
 app.use("/api/auth", authRoutes);
 // ── Admin-only routes (employees are denied with 403) ─────────────────────
@@ -64,7 +96,7 @@ app.use("/api/notifications", protect, notificationRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/attendance", protect, attendanceRoutes);
 
-app.post("/api/test-email", async (req, res) => {
+app.post("/api/test-email", protect, adminOnly, async (req, res) => {
   const { to } = req.body;
   if (!to) {
     return res.status(400).json({ success: false, message: "Please provide a 'to' email address in request body JSON." });

@@ -47,6 +47,7 @@ export default function TicketListPage({ token, currentUser, showToast }) {
   const isAdmin = currentUser?.role === "Admin";
 
   const fetchFiltersData = async () => {
+    if (!isAdmin) return;
     try {
       const projRes = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/projects`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -122,8 +123,10 @@ export default function TicketListPage({ token, currentUser, showToast }) {
   };
 
   useEffect(() => {
-    fetchFiltersData();
-  }, []);
+    if (isAdmin) {
+      fetchFiltersData();
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     fetchTickets();

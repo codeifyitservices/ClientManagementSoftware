@@ -17,10 +17,14 @@ const protect = async (req, res, next) => {
   if (token) {
     try {
 
+      if (!process.env.JWT_SECRET) {
+        throw new Error("JWT_SECRET environment variable is not defined");
+      }
+
       // Verify the JWT token signature
       const decoded = jwt.verify(
         token,
-        process.env.JWT_SECRET || "clientflow_secret_token_signature_key_2026"
+        process.env.JWT_SECRET
       );
 
       // Find the associated profile
