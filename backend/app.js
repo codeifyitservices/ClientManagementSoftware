@@ -53,22 +53,61 @@ app.use(
   })
 );
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
-  : ["http://localhost:5173", "http://localhost:3000", "http://localhost:5000"];
+const defaultOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:5000",
+  "https://client-management-software.vercel.app",
+  "https://clientmanagementsoftware.vercel.app",
+];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS policy blocked request from origin: " + origin));
-      }
-    },
-    credentials: true,
-  })
-);
+const envOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+  : [];
+
+const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
+
+const isOriginAllowed = (origin) => {
+  // Allow non-browser, server-to-server, or same-origin requests (curl, desktop agent, mobile)
+  if (!origin) return true;
+  // Exact match or wildcard in ALLOWED_ORIGINS
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) return true;
+  // Allow all Vercel deployment subdomains (production & preview branches)
+  if (/^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/.test(origin)) return true;
+  // Allow localhost on any port for development
+  if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return true;
+  // In non-production environments, allow any origin
+  if (process.env.NODE_ENV !== "production") return true;
+  return false;
+};
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Blocked request from origin: ${origin}`);
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "device-id",
+    "device-token",
+    "client-type",
+    "employee-id",
+  ],
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 
