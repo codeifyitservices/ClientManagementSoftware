@@ -38,48 +38,21 @@ export const findEmployeeAgentSession = async (employeeUser) => {
   if (!employeeUser) return null;
   const ids = [
     employeeUser._id?.toString(),
-    employeeUser._id,
     employeeUser.employeeId,
     employeeUser.companyEmail,
     employeeUser.personalEmail,
     employeeUser.email,
   ].filter(Boolean);
 
-  let fullEmp = null;
-  if (employeeUser._id) {
-    fullEmp = await Employee.findById(employeeUser._id);
-    if (fullEmp) {
-      if (fullEmp.employeeId) ids.push(fullEmp.employeeId);
-      if (fullEmp.companyEmail) ids.push(fullEmp.companyEmail);
-      if (fullEmp.personalEmail) ids.push(fullEmp.personalEmail);
-    }
-  }
-
-  const uniqueIds = [...new Set(ids.map((i) => i.toString()))];
-
   let session = await AgentSession.findOne({
-    $or: uniqueIds.map((id) => ({ employeeId: id })),
-  }).sort({ lastHeartbeatAt: -1 });
+    employeeId: { $in: ids },
+  }).sort({ lastHeartbeatAt: -1 }).lean();
 
   if (!session && employeeUser._id) {
     const todayStr = getTodayDateString();
-    const att = await Attendance.findOne({ employee: employeeUser._id, date: todayStr });
+    const att = await Attendance.findOne({ employee: employeeUser._id, date: todayStr }).select("deviceId").lean();
     if (att?.deviceId) {
-      session = await AgentSession.findOne({ deviceId: att.deviceId }).sort({ lastHeartbeatAt: -1 });
-    }
-  }
-
-  // Fallback: If there is an active paired session with recent heartbeat, link it to this user
-  if (!session) {
-    const fiveMinsAgo = new Date(Date.now() - 300000);
-    session = await AgentSession.findOne({
-      isPaired: true,
-      lastHeartbeatAt: { $gte: fiveMinsAgo },
-    }).sort({ lastHeartbeatAt: -1 });
-
-    if (session) {
-      session.employeeId = employeeUser.employeeId || employeeUser._id?.toString() || session.employeeId;
-      await session.save();
+      session = await AgentSession.findOne({ deviceId: att.deviceId }).sort({ lastHeartbeatAt: -1 }).lean();
     }
   }
 
@@ -923,7 +896,7 @@ export const getTodaySummary = async (req, res) => {
       const monthRecords = await Attendance.find({
         employee: userId,
         date: { $gte: startOfMonthStr, $lte: targetDate },
-      });
+      }).select("totalWorkingMinutes attendanceStatus").lean();
 
       let totalMonthMins = 0;
       let lateCheckInsMonth = 0;
@@ -956,7 +929,7 @@ export const getTodaySummary = async (req, res) => {
       const weekRecords = await Attendance.find({
         employee: userId,
         date: { $in: weekDates },
-      });
+      }).select("date totalWorkingMinutes checkInTime checkOutTime currentStatus totalBreakMinutes").lean();
 
       const recordsByDate = {};
       weekRecords.forEach((r) => {

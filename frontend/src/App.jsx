@@ -261,6 +261,13 @@ function AppShell({
       title: "Bug Ticket Directory",
       sub: "Log application defects, assign developers, and track resolutions",
     },
+    "/attendance": {
+      title: "Attendance Management",
+      sub:
+        currentUser?.role === "Employee"
+          ? "Track your daily punches, breaks, active hours, and apply for WFH"
+          : "Enterprise live attendance monitoring, approvals, and shift policies",
+    },
   };
 
   const isEditInvoice = /^\/invoices\/.+\/edit$/.test(path);

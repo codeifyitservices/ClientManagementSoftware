@@ -83,60 +83,52 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const selectedDateStr = getTodayDateString(selectedDate);
   const isToday = selectedDateStr === getTodayDateString(new Date());
 
-  const fetchData = async () => {
+  const fetchData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
-      // 1. Get current selected date attendance session & agent status
-      const sessionRes = await attendanceService.getMySession({
-        date: selectedDateStr,
-      });
-      if (sessionRes.success) {
+      const [sessionRes, summaryRes, listRes, wfhRes] = await Promise.all([
+        attendanceService.getMySession({ date: selectedDateStr }).catch((err) => ({ success: false, error: err })),
+        attendanceService.getSummary({ date: selectedDateStr }).catch((err) => ({ success: false, error: err })),
+        attendanceService.getList({ page: 1, limit: 5 }).catch((err) => ({ success: false, error: err })),
+        attendanceService.getWfhRequests().catch((err) => ({ success: false, error: err })),
+      ]);
+
+      if (sessionRes?.success) {
         setSessionData(sessionRes);
         setNoteText(sessionRes.attendance?.notes || "");
       }
 
-      // 2. Get today's summary metrics and weekly trends
-      const summaryRes = await attendanceService.getSummary({
-        date: selectedDateStr,
-      });
-      if (summaryRes.success) {
+      if (summaryRes?.success) {
         setSummaryData(summaryRes);
       }
 
-      // 3. Get recent records for table
-      const listRes = await attendanceService.getList({ page: 1, limit: 5 });
-      if (listRes.success) {
+      if (listRes?.success) {
         setRecentRecords(listRes.records || []);
       }
 
-      // 4. Get active or pending WFH requests
-      try {
-        const wfhRes = await attendanceService.getWfhRequests();
-        if (wfhRes?.success && Array.isArray(wfhRes.requests)) {
-          const now = new Date();
-          const activeApproved = wfhRes.requests.find(
-            (r) => r.status === "Approved" && new Date(r.endDate) >= now
-          );
-          if (activeApproved) {
+      if (wfhRes?.success && Array.isArray(wfhRes.requests)) {
+        const now = new Date();
+        const activeApproved = wfhRes.requests.find(
+          (r) => r.status === "Approved" && new Date(r.endDate) >= now
+        );
+        if (activeApproved) {
+          setWfhStatus({
+            type: "approved",
+            duration: activeApproved.duration || "24 hrs",
+            request: activeApproved,
+          });
+        } else {
+          const pendingReq = wfhRes.requests.find((r) => r.status === "Pending");
+          if (pendingReq) {
             setWfhStatus({
-              type: "approved",
-              duration: activeApproved.duration || "24 hrs",
-              request: activeApproved,
+              type: "pending",
+              duration: pendingReq.duration || "24 hrs",
+              request: pendingReq,
             });
           } else {
-            const pendingReq = wfhRes.requests.find((r) => r.status === "Pending");
-            if (pendingReq) {
-              setWfhStatus({
-                type: "pending",
-                duration: pendingReq.duration || "24 hrs",
-                request: pendingReq,
-              });
-            } else {
-              setWfhStatus(null);
-            }
+            setWfhStatus(null);
           }
         }
-      } catch (e) {
-        console.error("Failed to load WFH status", e);
       }
     } catch (err) {
       console.error("Failed to load employee dashboard data", err);
@@ -146,7 +138,6 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   };
 
   useEffect(() => {
-    setLoading(true);
     fetchData();
   }, [selectedDateStr, empId]);
 
@@ -194,7 +185,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     let fallbackInterval = null;
     if (isToday) {
       fallbackInterval = setInterval(() => {
-        fetchData();
+        fetchData(true);
         checkLocalAgent();
       }, 45000);
     }
