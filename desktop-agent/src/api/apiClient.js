@@ -22,9 +22,12 @@ const apiClient = axios.create({
   },
 });
 
-// Request Interceptor: Attach X-Device-Token if present
+// Request Interceptor: Attach dynamic baseURL + X-Device-Token if present
 apiClient.interceptors.request.use(
   (reqConfig) => {
+    if (config.apiBaseUrl) {
+      reqConfig.baseURL = config.apiBaseUrl;
+    }
     const deviceToken = storage.getDeviceToken();
     if (deviceToken) {
       reqConfig.headers["X-Device-Token"] = deviceToken;

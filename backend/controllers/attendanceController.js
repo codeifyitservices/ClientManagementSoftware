@@ -185,11 +185,12 @@ export const checkIn = async (req, res) => {
 
     // ── Attendance Security Validation (IP & Geolocation Whitelist) ──
     const clientIp = getClientIp(req);
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, accuracy } = req.body;
     const accessCheck = await validateAttendanceAccess(employee._id, {
       ip: clientIp,
       latitude,
       longitude,
+      accuracy,
     });
 
     if (!accessCheck.allowed) {
@@ -755,12 +756,16 @@ export const syncAgentActivity = async ({ deviceId, employeeCustomId, status, id
       }
     }
 
-    if (!employee) return { serverStatus: status };
+    if (!employee) return { serverStatus: "Not Checked In", notCheckedIn: true };
 
     let attendance = await Attendance.findOne({ employee: employee._id, date: todayStr });
-    if (!attendance) return { serverStatus: status }; // Attendance starts only after explicit check-in
+    if (!attendance || !attendance.checkInTime) {
+      return { serverStatus: "Not Checked In", notCheckedIn: true };
+    }
 
-    if (attendance.currentStatus === "Checked Out") return { serverStatus: "Checked Out" };
+    if (attendance.currentStatus === "Checked Out") {
+      return { serverStatus: "Checked Out", checkedOut: true };
+    }
 
     const oldStatus = attendance.currentStatus;
     const oldLastActivityAt = attendance.lastActivityAt || new Date();
@@ -1612,7 +1617,8 @@ export const getWhitelists = async (req, res) => {
     }
 
     const whitelists = await IpWhitelist.find(query)
-      .populate("employee", "fullName employeeId email designation")
+      .populate("employee", "fullName employeeId email designation department companyEmail")
+      .populate("wfhRequestId")
       .populate("addedBy", "fullName email")
       .sort({ createdAt: -1 });
 
@@ -1647,9 +1653,11 @@ export const createWhitelist = async (req, res) => {
 
     let expiresAt = null;
     const now = new Date();
-    if (expiryType === "24 Hours" || expiryType === "1 Day") {
+    if (expiryType === "24 Hours" || expiryType === "1 Day" || expiryType === "24 hrs") {
       expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    } else if (expiryType === "1 Week") {
+    } else if (expiryType === "3 days") {
+      expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+    } else if (expiryType === "1 Week" || expiryType === "1 week") {
       expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     } else if (expiryType === "1 Month") {
       expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -1742,6 +1750,18 @@ export const deleteWhitelist = async (req, res) => {
       return res.status(404).json({ success: false, message: "Whitelist entry not found" });
     }
 
+    if (whitelist.wfhRequestId) {
+      await WfhRequest.findByIdAndUpdate(whitelist.wfhRequestId, {
+        status: "Cancelled",
+        rejectionReason: "Revoked by Administrator",
+      });
+    } else if (whitelist.employee && whitelist.type === "WFH") {
+      await WfhRequest.updateMany(
+        { employee: whitelist.employee, status: "Approved" },
+        { status: "Cancelled", rejectionReason: "Revoked by Administrator" }
+      );
+    }
+
     await IpWhitelist.findByIdAndDelete(id);
 
     await logSecurityAudit({
@@ -1750,11 +1770,11 @@ export const deleteWhitelist = async (req, res) => {
       employee: whitelist.employee,
       ip: whitelist.ipAddress,
       location: whitelist.locationName,
-      reason: "Permanently deleted whitelist entry",
+      reason: "Revoked whitelist authorization",
       matchedRule: whitelist._id,
     });
 
-    return res.status(200).json({ success: true, message: "Whitelist entry deleted successfully" });
+    return res.status(200).json({ success: true, message: "Whitelist authorization and remote access revoked successfully" });
   } catch (error) {
     console.error("Error in deleteWhitelist:", error);
     return res.status(500).json({ success: false, message: "Failed to delete whitelist entry", error: error.message });
@@ -1877,19 +1897,39 @@ export const createWfhRequest = async (req, res) => {
     const employeeId = req.user?._id;
     const { startDate, endDate, duration, reason, latitude, longitude, locationName } = req.body;
 
-    if (!startDate) {
-      return res.status(400).json({ success: false, message: "Start date is required" });
+    // Enforce only one pending WFH request at a time
+    const existingPending = await WfhRequest.findOne({
+      employee: employeeId,
+      status: "Pending",
+    });
+    if (existingPending) {
+      return res.status(400).json({
+        success: false,
+        message: "You already have a pending WFH request. Please cancel it before submitting a new request.",
+        existingRequest: existingPending,
+      });
     }
 
+    const start = startDate ? new Date(startDate) : new Date();
     const clientIp = getClientIp(req);
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
+    let durationHours = 24;
+    const dur = String(duration || "").toLowerCase();
+    if (dur.includes("24") || dur.includes("1 day")) {
+      durationHours = 24;
+    } else if (dur.includes("3 day") || dur.includes("3 days")) {
+      durationHours = 3 * 24;
+    } else if (dur.includes("week")) {
+      durationHours = 7 * 24;
+    }
+
+    const end = endDate ? new Date(endDate) : new Date(start.getTime() + durationHours * 60 * 60 * 1000);
 
     const wfhReq = await WfhRequest.create({
       employee: employeeId,
       startDate: start,
       endDate: end,
-      duration: duration || "1 Day",
+      duration: duration || "24 hrs",
       reason: reason || "",
       requestIp: clientIp,
       requestLatitude: latitude !== undefined && latitude !== null ? Number(latitude) : null,
@@ -1904,7 +1944,7 @@ export const createWfhRequest = async (req, res) => {
       employee: employeeId,
       ip: clientIp,
       location: locationName || "Remote / Home Network",
-      reason: `Submitted WFH request (${duration || '1 Day'}): ${reason || 'No reason provided'}`,
+      reason: `Submitted WFH request (${duration || '24 hrs'}): ${reason || 'No reason provided'}`,
     });
 
     return res.status(201).json({
@@ -1956,7 +1996,7 @@ export const getWfhRequests = async (req, res) => {
 export const approveWfhRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { customDurationHours } = req.body;
+    const { customDurationHours, adminComments } = req.body;
 
     const wfhReq = await WfhRequest.findById(id).populate("employee");
     if (!wfhReq) {
@@ -1969,41 +2009,47 @@ export const approveWfhRequest = async (req, res) => {
 
     const now = new Date();
     let hoursToExpiry = 24; // default 24h
-    if (wfhReq.duration === "24 Hours" || wfhReq.duration === "1 Day") {
+    const dur = String(wfhReq.duration || "").toLowerCase();
+    if (dur.includes("24") || dur.includes("1 day")) {
       hoursToExpiry = 24;
-    } else if (wfhReq.duration === "1 Week") {
+    } else if (dur.includes("3 day") || dur.includes("3 days")) {
+      hoursToExpiry = 3 * 24;
+    } else if (dur.includes("week")) {
       hoursToExpiry = 7 * 24;
     } else if (customDurationHours && Number(customDurationHours) > 0) {
       hoursToExpiry = Number(customDurationHours);
     }
 
     const expiresAt = new Date(now.getTime() + hoursToExpiry * 60 * 60 * 1000);
+    const empId = wfhReq.employee?._id || wfhReq.employee;
 
     // Auto-create temporary IP whitelist entry for this employee
     const tempWhitelist = await IpWhitelist.create({
       ipAddress: wfhReq.requestIp || getClientIp(req),
       scope: "Employee",
-      employee: wfhReq.employee._id,
+      employee: empId,
       locationName: `Approved WFH: ${wfhReq.requestLocation || 'Home Network'}`,
       addedBy: req.user?._id,
-      expiryType: wfhReq.duration || "24 Hours",
+      expiryType: wfhReq.duration || "24 hrs",
       expiresAt,
       status: "Active",
       type: "WFH",
       wfhRequestId: wfhReq._id,
-      notes: `Auto-generated via WFH approval. Reason: ${wfhReq.reason || 'None'}`,
+      notes: `Auto-generated via WFH approval. Reason: ${wfhReq.reason || 'None'}${adminComments ? ` | Admin Notes: ${adminComments}` : ''}`,
     });
 
     wfhReq.status = "Approved";
+    wfhReq.endDate = expiresAt;
     wfhReq.reviewedBy = req.user?._id;
     wfhReq.reviewedAt = now;
+    if (adminComments) wfhReq.rejectionReason = adminComments;
     wfhReq.createdWhitelistId = tempWhitelist._id;
     await wfhReq.save();
 
     await logSecurityAudit({
       action: "WFH_APPROVED",
       performedBy: req.user?._id,
-      employee: wfhReq.employee._id,
+      employee: empId,
       ip: tempWhitelist.ipAddress,
       location: tempWhitelist.locationName,
       reason: `Approved WFH request until ${expiresAt.toLocaleString()}`,
@@ -2059,6 +2105,61 @@ export const rejectWfhRequest = async (req, res) => {
   } catch (error) {
     console.error("Error in rejectWfhRequest:", error);
     return res.status(500).json({ success: false, message: "Failed to reject WFH request", error: error.message });
+  }
+};
+
+/**
+ * @desc    Employee or Admin Cancel WFH Request
+ * @route   PUT /api/attendance/wfh-requests/:id/cancel
+ * @access  Private (Employee or Admin)
+ */
+export const cancelWfhRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employeeId = req.user?._id;
+
+    const wfhReq = await WfhRequest.findById(id);
+    if (!wfhReq) {
+      return res.status(404).json({ success: false, message: "WFH request not found" });
+    }
+
+    if (req.user?.role !== "Admin" && String(wfhReq.employee) !== String(employeeId)) {
+      return res.status(403).json({ success: false, message: "Unauthorized to cancel this request" });
+    }
+
+    if (wfhReq.status === "Cancelled") {
+      return res.status(400).json({ success: false, message: "Request is already cancelled" });
+    }
+
+    if (wfhReq.createdWhitelistId) {
+      try {
+        await IpWhitelist.findByIdAndUpdate(wfhReq.createdWhitelistId, {
+          status: "Expired",
+          expiresAt: new Date(),
+        });
+      } catch (e) {}
+    }
+
+    wfhReq.status = "Cancelled";
+    await wfhReq.save();
+
+    await logSecurityAudit({
+      action: "WFH_CANCELLED",
+      performedBy: employeeId,
+      employee: wfhReq.employee,
+      ip: getClientIp(req),
+      location: wfhReq.requestLocation,
+      reason: `Cancelled WFH request (${wfhReq.duration})`,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "WFH request cancelled successfully",
+      wfhRequest: wfhReq,
+    });
+  } catch (error) {
+    console.error("Error in cancelWfhRequest:", error);
+    return res.status(500).json({ success: false, message: "Failed to cancel WFH request", error: error.message });
   }
 };
 
@@ -2795,7 +2896,8 @@ export const getAdminWfhRequests = async (req, res) => {
  */
 export const bulkApproveWfhAdmin = async (req, res) => {
   try {
-    const { ids, comment } = req.body;
+    const ids = req.body.ids || req.body.requestIds;
+    const comment = req.body.comment || req.body.adminComments;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, message: "No request IDs provided" });
     }
@@ -2807,38 +2909,48 @@ export const bulkApproveWfhAdmin = async (req, res) => {
 
     let approvedCount = 0;
     for (const wfhReq of wfhRequests) {
-      wfhReq.status = "Approved";
-      wfhReq.reviewedBy = adminId;
-      wfhReq.reviewedAt = now;
-      if (comment) wfhReq.rejectionReason = comment;
-      await wfhReq.save();
+      const dur = String(wfhReq.duration || "").toLowerCase();
+      let hours = 24;
+      if (dur.includes("24") || dur.includes("1 day")) hours = 24;
+      else if (dur.includes("3 day") || dur.includes("3 days")) hours = 72;
+      else if (dur.includes("week")) hours = 168;
 
-      // Ensure IP whitelist or WFH allowance is logged
+      const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
+      const empId = wfhReq.employee?._id || wfhReq.employee;
+
+      let tempWhitelist = null;
       if (wfhReq.requestIp && wfhReq.requestIp !== "Unknown") {
         try {
-          const whitelist = new IpWhitelist({
-            name: `WFH - ${wfhReq.employee?.fullName || 'Employee'} (${wfhReq.startDate.toISOString().split('T')[0]})`,
+          tempWhitelist = await IpWhitelist.create({
             ipAddress: wfhReq.requestIp,
-            type: "Dynamic (WFH)",
-            assignedEmployee: wfhReq.employee?._id,
-            validFrom: wfhReq.startDate,
-            validUntil: wfhReq.endDate,
-            reason: `Bulk approved WFH request: ${wfhReq.reason}`,
-            isActive: true,
-            createdBy: adminId,
+            scope: "Employee",
+            employee: empId,
+            locationName: `Approved WFH: ${wfhReq.requestLocation || 'Home Network'}`,
+            addedBy: adminId,
+            expiryType: wfhReq.duration || "24 hrs",
+            expiresAt,
+            status: "Active",
+            type: "WFH",
+            wfhRequestId: wfhReq._id,
+            notes: `Bulk approved WFH request: ${wfhReq.reason || 'None'}${comment ? ` | Admin Notes: ${comment}` : ''}`,
           });
-          await whitelist.save();
-          wfhReq.createdWhitelistId = whitelist._id;
-          await wfhReq.save();
         } catch (e) {
           console.warn("Could not create whitelist record on bulk WFH approval:", e.message);
         }
       }
 
+      wfhReq.status = "Approved";
+      wfhReq.endDate = expiresAt;
+      wfhReq.reviewedBy = adminId;
+      wfhReq.reviewedAt = now;
+      if (comment) wfhReq.rejectionReason = comment;
+      if (tempWhitelist) wfhReq.createdWhitelistId = tempWhitelist._id;
+      await wfhReq.save();
+
       await logSecurityAudit({
         action: "Bulk Approved WFH",
         performedBy: adminId,
-        employee: wfhReq.employee?._id,
+        employee: empId,
         ip: wfhReq.requestIp,
         reason: `Bulk approved WFH request (${comment || 'No comment'})`,
       });

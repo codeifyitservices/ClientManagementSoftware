@@ -119,19 +119,16 @@ export default function AdminAttendanceConfiguration() {
   };
 
   // ── Geolocation Detection ──
-  const detectLocationForIndex = (index) => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser");
-      return;
-    }
+  const detectLocationForIndex = async (index) => {
     setDetectingGpsIndex(index);
-    setFeedbackMessage({ text: "Requesting high-precision GPS coordinates...", type: "info" });
+    setFeedbackMessage({ text: "Detecting current office coordinates...", type: "info" });
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = Number(pos.coords.latitude.toFixed(6));
-        const lng = Number(pos.coords.longitude.toFixed(6));
-        const accuracy = Math.round(pos.coords.accuracy || 10);
+    try {
+      const res = await attendanceService.getCurrentPositionAsync();
+      if (res.latitude && res.longitude) {
+        const lat = res.latitude;
+        const lng = res.longitude;
+        const accuracy = res.accuracy || 10;
         const updated = [...policy.locations];
         updated[index].latitude = lat;
         updated[index].longitude = lng;
@@ -140,29 +137,26 @@ export default function AdminAttendanceConfiguration() {
           text: `Exact office coordinates detected: ${lat}, ${lng} (±${accuracy}m accuracy)`,
           type: "success"
         });
-        setDetectingGpsIndex(null);
-      },
-      (err) => {
-        setFeedbackMessage({ text: `GPS detection failed: ${err.message}`, type: "error" });
-        setDetectingGpsIndex(null);
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-    );
+      } else {
+        setFeedbackMessage({ text: `Location detection failed: ${res.error || "Unknown error"}`, type: "error" });
+      }
+    } catch (err) {
+      setFeedbackMessage({ text: `GPS detection failed: ${err.message}`, type: "error" });
+    } finally {
+      setDetectingGpsIndex(null);
+    }
   };
 
-  const addLocationWithAutoDetect = () => {
-    if (!navigator.geolocation) {
-      addLocation();
-      return;
-    }
+  const addLocationWithAutoDetect = async () => {
     setIsDetectingNewLocation(true);
     setFeedbackMessage({ text: "Detecting current office GPS position...", type: "info" });
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = Number(pos.coords.latitude.toFixed(6));
-        const lng = Number(pos.coords.longitude.toFixed(6));
-        const accuracy = Math.round(pos.coords.accuracy || 10);
+    try {
+      const res = await attendanceService.getCurrentPositionAsync();
+      if (res.latitude && res.longitude) {
+        const lat = res.latitude;
+        const lng = res.longitude;
+        const accuracy = res.accuracy || 10;
         setPolicy({
           ...policy,
           locations: [
@@ -171,15 +165,16 @@ export default function AdminAttendanceConfiguration() {
           ]
         });
         setFeedbackMessage({ text: `Added new office with detected coordinates: ${lat}, ${lng} (±${accuracy}m)`, type: "success" });
-        setIsDetectingNewLocation(false);
-      },
-      (err) => {
+      } else {
         addLocation();
-        setFeedbackMessage({ text: `Added location manually (${err.message})`, type: "info" });
-        setIsDetectingNewLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-    );
+        setFeedbackMessage({ text: `Added location manually (${res.error || "Location detection failed"})`, type: "info" });
+      }
+    } catch (err) {
+      addLocation();
+      setFeedbackMessage({ text: `Added location manually (${err.message})`, type: "info" });
+    } finally {
+      setIsDetectingNewLocation(false);
+    }
   };
 
   const addLocation = () => {

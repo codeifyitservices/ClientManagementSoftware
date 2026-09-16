@@ -262,6 +262,13 @@ export const attendanceService = {
     });
     return res.json();
   },
+  cancelWfhRequest: async (id) => {
+    const res = await fetch(`${API_BASE}/wfh-requests/${id}/cancel`, {
+      method: "PUT",
+      headers: getHeaders(),
+    });
+    return res.json();
+  },
 
   // Security Audit Logs
   getSecurityAuditLogs: async (params = {}) => {
@@ -309,6 +316,14 @@ export const attendanceService = {
     return res.json();
   },
   bulkApproveWfh: async (data) => {
+    const res = await fetch(`${API_BASE}/admin/wfh-requests/bulk-approve`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  bulkApproveWfhAdmin: async (data) => {
     const res = await fetch(`${API_BASE}/admin/wfh-requests/bulk-approve`, {
       method: "POST",
       headers: getHeaders(),
@@ -445,5 +460,87 @@ export const attendanceService = {
       // fallback
     }
     return "127.0.0.1";
+  },
+
+  // ── Robust 2-Tier Geolocation Helper with Fallback ──
+  getCurrentPositionAsync: async () => {
+    if (typeof window === "undefined" || !navigator?.geolocation) {
+      return {
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+        error: "Geolocation is not supported by your browser.",
+        errorType: "NOT_SUPPORTED",
+      };
+    }
+
+    const queryPosition = (options) => {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            resolve({
+              latitude: parseFloat(pos.coords.latitude.toFixed(6)),
+              longitude: parseFloat(pos.coords.longitude.toFixed(6)),
+              accuracy: Math.round(pos.coords.accuracy || 0),
+            });
+          },
+          (err) => reject(err),
+          options
+        );
+      });
+    };
+
+    // Tier 1: Try high accuracy with a 3.5s timeout and 30s cache
+    try {
+      const pos = await queryPosition({
+        enableHighAccuracy: true,
+        timeout: 3500,
+        maximumAge: 30000,
+      });
+      return { ...pos, error: null, errorType: null };
+    } catch (errHigh) {
+      // If user explicitly clicked "Block / Deny" in browser, don't retry
+      if (errHigh.code === 1) {
+        return {
+          latitude: null,
+          longitude: null,
+          accuracy: null,
+          error: "Location permission was denied in your browser. Please allow location access in your site permissions.",
+          errorType: "PERMISSION_DENIED",
+        };
+      }
+
+      // Tier 2: Automatic fallback to standard / Wi-Fi network accuracy (low accuracy, 6s timeout, 60s cache)
+      try {
+        const pos = await queryPosition({
+          enableHighAccuracy: false,
+          timeout: 6000,
+          maximumAge: 60000,
+        });
+        return { ...pos, error: null, errorType: null };
+      } catch (errLow) {
+        let errorMsg = "Unable to retrieve device location.";
+        let errType = "UNKNOWN";
+
+        if (errLow.code === 1) {
+          errorMsg = "Location permission is blocked in your browser.";
+          errType = "PERMISSION_DENIED";
+        } else if (errLow.code === 2) {
+          errorMsg = "Location position unavailable. Please verify that Windows/OS Location Services is turned ON in system settings.";
+          errType = "POSITION_UNAVAILABLE";
+        } else if (errLow.code === 3) {
+          errorMsg = "Location acquisition timed out. Please verify Windows Location Services and network connectivity.";
+          errType = "TIMEOUT";
+        }
+
+        return {
+          latitude: null,
+          longitude: null,
+          accuracy: null,
+          error: errorMsg,
+          errorType: errType,
+        };
+      }
+    }
   },
 };

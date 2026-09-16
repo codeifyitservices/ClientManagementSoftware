@@ -5,8 +5,14 @@ const pkg = require("../../package.json");
 // Load .env file from app directory
 dotenv.config({ path: path.join(__dirname, "../../.env") });
 
+let savedBaseUrl = null;
+try {
+  const storage = require("../utils/storage");
+  savedBaseUrl = storage.getConfig()?.apiBaseUrl;
+} catch (e) {}
+
 const config = {
-  apiBaseUrl: process.env.API_BASE_URL || "https://clientmanagementsoftware.onrender.com/api/agent",
+  apiBaseUrl: savedBaseUrl || process.env.API_BASE_URL || "https://clientmanagementsoftware.onrender.com/api/agent",
   updateUrl: process.env.UPDATE_URL || "https://clientmanagementsoftware.onrender.com/desktop-agent",
   environment: process.env.ENVIRONMENT || "production",
   

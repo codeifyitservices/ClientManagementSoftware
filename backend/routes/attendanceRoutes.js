@@ -28,6 +28,7 @@ import {
   getWfhRequests,
   approveWfhRequest,
   rejectWfhRequest,
+  cancelWfhRequest,
   getSecurityAuditLogs,
   // Upgraded Admin Attendance methods
   getAdminDashboard,
@@ -87,6 +88,8 @@ router.get("/wfh-requests", protect, getWfhRequests);
 router.post("/wfh-request", protect, createWfhRequest);
 router.put("/wfh-requests/:id/approve", protect, adminOnly, approveWfhRequest);
 router.put("/wfh-requests/:id/reject", protect, adminOnly, rejectWfhRequest);
+router.put("/wfh-requests/:id/cancel", protect, cancelWfhRequest);
+router.delete("/wfh-requests/:id", protect, cancelWfhRequest);
 router.get("/audit-logs", protect, adminOnly, getSecurityAuditLogs);
 
 // ══════════════════════════════════════════════════════════════════════════════

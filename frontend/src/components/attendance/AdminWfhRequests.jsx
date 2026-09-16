@@ -14,7 +14,13 @@ import {
   AlertCircle,
   Wifi,
   MapPin,
-  ShieldCheck
+  ShieldCheck,
+  ShieldAlert,
+  Clock,
+  Trash2,
+  Copy,
+  CheckCircle2,
+  Globe
 } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
@@ -26,6 +32,123 @@ export default function AdminWfhRequests() {
   const [actionModal, setActionModal] = useState(null); // { type: 'approve' | 'reject' | 'bulk_approve', req?: object }
   const [adminComments, setAdminComments] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Active Whitelisted IPs Modal State
+  const [showActiveWhitelistsModal, setShowActiveWhitelistsModal] = useState(false);
+  const [whitelistsList, setWhitelistsList] = useState([]);
+  const [whitelistsLoading, setWhitelistsLoading] = useState(false);
+  const [whitelistSearch, setWhitelistSearch] = useState("");
+  const [revokingId, setRevokingId] = useState(null);
+  const [revokeSuccessMsg, setRevokeSuccessMsg] = useState("");
+  const [copiedIp, setCopiedIp] = useState(null);
+
+  const fetchWhitelists = async () => {
+    try {
+      setWhitelistsLoading(true);
+      const res = await attendanceService.getWhitelists();
+      if (res?.success) {
+        setWhitelistsList(res.whitelists || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch whitelists", err);
+    } finally {
+      setWhitelistsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWhitelists();
+  }, []);
+
+  const handleCopyIp = (ip) => {
+    if (!ip) return;
+    navigator.clipboard.writeText(ip);
+    setCopiedIp(ip);
+    setTimeout(() => setCopiedIp(null), 2000);
+  };
+
+  const handleRevokeWhitelist = async (id, empName) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to revoke remote access and delete the whitelisted IP/Geolocation for ${
+          empName || "this employee"
+        }? This will immediately terminate their remote check-in authorization.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setRevokingId(id);
+      const res = await attendanceService.deleteWhitelist(id);
+      if (res?.success) {
+        setRevokeSuccessMsg("Remote authorization revoked successfully.");
+        setTimeout(() => setRevokeSuccessMsg(""), 3500);
+        await fetchWhitelists();
+        await fetchRequests();
+      } else {
+        alert(res?.message || "Failed to revoke whitelist");
+      }
+    } catch (err) {
+      alert(err?.response?.data?.message || err.message || "Failed to revoke whitelist");
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const getExpiryDisplay = (wl) => {
+    if (!wl?.expiresAt) {
+      return {
+        text: "Permanent Access (No Expiry)",
+        timeLeft: "Permanent",
+        isExpired: false,
+        badge: "Permanent",
+        tone: "bg-slate-100 text-slate-700 border-slate-200",
+      };
+    }
+    const exp = new Date(wl.expiresAt);
+    const now = new Date();
+    const diffMs = exp.getTime() - now.getTime();
+    if (diffMs <= 0) {
+      return {
+        text: `Expired on ${exp.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`,
+        timeLeft: "Expired",
+        isExpired: true,
+        badge: "Expired",
+        tone: "bg-rose-50 text-rose-700 border-rose-200",
+      };
+    }
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    const timeLeft =
+      diffHours >= 24
+        ? `${Math.floor(diffHours / 24)}d ${diffHours % 24}h remaining`
+        : `${diffHours}h ${diffMins}m remaining`;
+
+    return {
+      text: `Valid until: ${exp.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`,
+      timeLeft,
+      isExpired: false,
+      badge: timeLeft,
+      tone: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    };
+  };
+
+  const activeWhitelistsCount = whitelistsList.filter((w) => {
+    if (w.status !== "Active") return false;
+    if (!w.expiresAt) return true;
+    return new Date(w.expiresAt) > new Date();
+  }).length;
+
+  const filteredWhitelists = whitelistsList.filter((w) => {
+    if (!whitelistSearch.trim()) return true;
+    const term = whitelistSearch.toLowerCase();
+    const empName = w.employee?.fullName?.toLowerCase() || "";
+    const empId = w.employee?.employeeId?.toLowerCase() || "";
+    const ip = w.ipAddress?.toLowerCase() || "";
+    const loc = w.locationName?.toLowerCase() || "";
+    return empName.includes(term) || empId.includes(term) || ip.includes(term) || loc.includes(term);
+  });
 
   const fetchRequests = async () => {
     try {
@@ -67,20 +190,26 @@ export default function AdminWfhRequests() {
     if (!actionModal?.req?._id) return;
     try {
       setActionLoading(true);
+      let res;
       if (actionModal.type === "approve") {
-        await attendanceService.approveWfhRequest(actionModal.req._id, {
+        res = await attendanceService.approveWfhRequest(actionModal.req._id, {
           adminComments
         });
       } else {
-        await attendanceService.rejectWfhRequest(actionModal.req._id, {
+        res = await attendanceService.rejectWfhRequest(actionModal.req._id, {
           rejectionReason: adminComments || "Rejected by administrator"
         });
+      }
+      if (res && !res.success) {
+        alert(res.message || `Failed to ${actionModal.type} request`);
+        return;
       }
       setActionModal(null);
       setAdminComments("");
       fetchRequests();
+      fetchWhitelists();
     } catch (err) {
-      alert(err.response?.data?.message || `Failed to ${actionModal.type} request`);
+      alert(err.response?.data?.message || err.message || `Failed to ${actionModal.type} request`);
     } finally {
       setActionLoading(false);
     }
@@ -90,16 +219,21 @@ export default function AdminWfhRequests() {
     if (selectedIds.length === 0) return;
     try {
       setActionLoading(true);
-      await attendanceService.bulkApproveWfhAdmin({
+      const res = await attendanceService.bulkApproveWfhAdmin({
         requestIds: selectedIds,
         adminComments
       });
+      if (res && !res.success) {
+        alert(res.message || "Bulk approval failed");
+        return;
+      }
       setActionModal(null);
       setAdminComments("");
       setSelectedIds([]);
       fetchRequests();
+      fetchWhitelists();
     } catch (err) {
-      alert(err.response?.data?.message || "Bulk approval failed");
+      alert(err.response?.data?.message || err.message || "Bulk approval failed");
     } finally {
       setActionLoading(false);
     }
@@ -146,7 +280,10 @@ export default function AdminWfhRequests() {
             </button>
           )}
           <button
-            onClick={fetchRequests}
+            onClick={() => {
+              fetchRequests();
+              fetchWhitelists();
+            }}
             className="flex items-center gap-1 px-3.5 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 transition-colors cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -155,21 +292,41 @@ export default function AdminWfhRequests() {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-2 border-b border-slate-200 pb-2">
-        {["Pending", "Approved", "Rejected", "all"].map((status) => (
-          <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
-              statusFilter === status
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            {status === "all" ? "All Requests" : status}
-          </button>
-        ))}
+      {/* Filter Tabs & Whitelisted IP Action Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {["Pending", "Approved", "Rejected", "all"].map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                statusFilter === status
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {status === "all" ? "All Requests" : status}
+            </button>
+          ))}
+        </div>
+
+        {/* Right Action Button (in the red highlighted area) */}
+        <button
+          type="button"
+          onClick={() => {
+            fetchWhitelists();
+            setShowActiveWhitelistsModal(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-[#5D5FEF] border border-indigo-200 transition shadow-xs cursor-pointer self-start sm:self-auto"
+        >
+          <ShieldCheck className="w-4 h-4 text-[#5D5FEF]" />
+          <span>Whitelisted IP & Geolocation</span>
+          {activeWhitelistsCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#5D5FEF] text-white">
+              {activeWhitelistsCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Table */}
@@ -367,6 +524,247 @@ export default function AdminWfhRequests() {
                 }`}
               >
                 {actionLoading ? "Processing..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ACTIVE WHITELISTED IPS & GEOLOCATION MODAL ── */}
+      {showActiveWhitelistsModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] animate-fade-in">
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                  <ShieldCheck size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-tight">
+                    Whitelisted IPs & Remote Geolocation
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                    Live authorized employee networks, office GPS geofences, and remote access expiration windows
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowActiveWhitelistsModal(false)}
+                className="p-1.5 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <div className="relative w-full sm:w-80">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={whitelistSearch}
+                  onChange={(e) => setWhitelistSearch(e.target.value)}
+                  placeholder="Search employee, IP, or location..."
+                  className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#5D5FEF]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="text-xs font-bold text-slate-500">
+                  Total Whitelists: <span className="text-[#5D5FEF] font-black">{filteredWhitelists.length}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchWhitelists}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer shadow-xs"
+                >
+                  <RefreshCw size={12} className={whitelistsLoading ? "animate-spin" : ""} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Revoke Success Notice */}
+            {revokeSuccessMsg && (
+              <div className="mx-6 mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 animate-fade-in">
+                <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                <span>{revokeSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Whitelists Content List */}
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
+              {whitelistsLoading && whitelistsList.length === 0 ? (
+                <div className="text-center py-16 text-slate-400">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-[#5D5FEF]" />
+                  <p className="text-xs font-bold">Loading whitelisted IPs & locations...</p>
+                </div>
+              ) : filteredWhitelists.length === 0 ? (
+                <div className="text-center py-16 text-slate-400 space-y-2">
+                  <div className="w-12 h-12 mx-auto rounded-2xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center shadow-xs">
+                    <Globe size={24} />
+                  </div>
+                  <p className="text-xs font-bold text-slate-700">No whitelisted IP entries found</p>
+                  <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                    When employees request WFH and their requests are approved, their authorized IP and geolocation will appear here with live expiration countdowns.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredWhitelists.map((wl) => {
+                    const empName = wl.employee?.fullName || "Organization-Wide";
+                    const empDept = wl.employee?.department || "All Departments";
+                    const empEmail = wl.employee?.companyEmail || wl.employee?.email || "";
+                    const empId = wl.employee?.employeeId || "";
+                    const expiry = getExpiryDisplay(wl);
+                    const isRevoking = revokingId === wl._id;
+
+                    return (
+                      <div
+                        key={wl._id}
+                        className={`bg-white rounded-2xl border p-5 transition-all shadow-xs hover:shadow-md ${
+                          expiry.isExpired
+                            ? "border-slate-200 opacity-60 bg-slate-50"
+                            : "border-slate-200 hover:border-indigo-200"
+                        }`}
+                      >
+                        {/* Top Row: Employee on Left, Status + Revoke Button on Right */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-[#5D5FEF] flex items-center justify-center font-black text-xs shrink-0">
+                              {wl.employee?.fullName ? (
+                                wl.employee.fullName.substring(0, 2).toUpperCase()
+                              ) : (
+                                <Globe size={18} />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-sm font-black text-slate-800 truncate">{empName}</h4>
+                                <span
+                                  className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border ${
+                                    wl.type === "WFH"
+                                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                                      : wl.scope === "Employee"
+                                      ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                      : "bg-blue-50 text-blue-700 border-blue-200"
+                                  }`}
+                                >
+                                  {wl.type === "WFH" ? "WFH Pass" : wl.scope}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 font-medium truncate mt-0.5">
+                                {empDept} {empId ? `• ${empId}` : ""} {empEmail ? `• ${empEmail}` : ""}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Expiration Tag + Revoke Action */}
+                          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+                            <span
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${expiry.tone}`}
+                            >
+                              <Clock size={12} />
+                              <span>{expiry.badge}</span>
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeWhitelist(wl._id, empName)}
+                              disabled={isRevoking}
+                              className="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                            >
+                              {isRevoking ? (
+                                <>
+                                  <RefreshCw size={12} className="animate-spin" />
+                                  <span>Revoking...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 size={13} />
+                                  <span>Revoke Access</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Bottom Row: IP and Geolocation details grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3.5">
+                          {/* Whitelisted IP */}
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="p-2 rounded-lg bg-indigo-50 text-[#5D5FEF] shrink-0">
+                                <Wifi size={14} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] uppercase font-bold text-slate-400">Whitelisted IP Address</p>
+                                <p className="text-xs font-black text-slate-800 font-mono truncate mt-0.5">
+                                  {wl.ipAddress || "--"}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyIp(wl.ipAddress)}
+                              title="Copy IP"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer shrink-0"
+                            >
+                              {copiedIp === wl.ipAddress ? (
+                                <Check size={14} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={14} />
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Geolocation */}
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5 min-w-0">
+                            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
+                              <MapPin size={14} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] uppercase font-bold text-slate-400">Authorized Geolocation / Network</p>
+                              <p
+                                className="text-xs font-bold text-slate-800 truncate mt-0.5"
+                                title={wl.locationName || "Approved Network"}
+                              >
+                                {wl.locationName || "Approved Network"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Sub-footer timestamp */}
+                        <div className="pt-2.5 mt-2 flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                          <span>{expiry.text}</span>
+                          {wl.notes && (
+                            <span className="truncate max-w-xs text-slate-500" title={wl.notes}>
+                              Notes: {wl.notes}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-500 font-medium shrink-0">
+              <span className="flex items-center gap-1.5 text-[11px]">
+                <ShieldCheck size={14} className="text-[#5D5FEF]" />
+                Revoking an access whitelist will immediately prevent the employee from remote check-in.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowActiveWhitelistsModal(false)}
+                className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+              >
+                Close
               </button>
             </div>
           </div>

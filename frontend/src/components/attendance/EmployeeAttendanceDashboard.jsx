@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   Home,
+  CheckCircle2,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -75,6 +76,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
   const [showWfhModal, setShowWfhModal] = useState(false);
+  const [wfhStatus, setWfhStatus] = useState(null); // { type: 'approved' | 'pending', duration: string, request: object }
   const [localAgentInfo, setLocalAgentInfo] = useState({ checked: false, isRunning: false });
 
   const empId = currentUser?.employeeId || currentUser?._id || currentUser?.id;
@@ -104,6 +106,37 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
       const listRes = await attendanceService.getList({ page: 1, limit: 5 });
       if (listRes.success) {
         setRecentRecords(listRes.records || []);
+      }
+
+      // 4. Get active or pending WFH requests
+      try {
+        const wfhRes = await attendanceService.getWfhRequests();
+        if (wfhRes?.success && Array.isArray(wfhRes.requests)) {
+          const now = new Date();
+          const activeApproved = wfhRes.requests.find(
+            (r) => r.status === "Approved" && new Date(r.endDate) >= now
+          );
+          if (activeApproved) {
+            setWfhStatus({
+              type: "approved",
+              duration: activeApproved.duration || "24 hrs",
+              request: activeApproved,
+            });
+          } else {
+            const pendingReq = wfhRes.requests.find((r) => r.status === "Pending");
+            if (pendingReq) {
+              setWfhStatus({
+                type: "pending",
+                duration: pendingReq.duration || "24 hrs",
+                request: pendingReq,
+              });
+            } else {
+              setWfhStatus(null);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load WFH status", e);
       }
     } catch (err) {
       console.error("Failed to load employee dashboard data", err);
@@ -202,23 +235,6 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     return () => clearInterval(timer);
   }, [sessionData, isToday]);
 
-  const getPositionAsync = () => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        return resolve(null);
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = parseFloat(pos.coords.latitude.toFixed(6));
-          const lng = parseFloat(pos.coords.longitude.toFixed(6));
-          resolve({ latitude: lat, longitude: lng });
-        },
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    });
-  };
-
   const handlePrevDay = () => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() - 1);
@@ -237,22 +253,26 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
     setActionLoading(true);
     setSecurityCheckMsg(null);
     try {
-      const [currentCoords, currentWifiIp] = await Promise.all([
-        getPositionAsync().catch(() => null),
+      const [geoResult, currentWifiIp] = await Promise.all([
+        attendanceService.getCurrentPositionAsync().catch(() => null),
         attendanceService.detectNetworkInfo().catch(() => null),
       ]);
 
       const res = await attendanceService.checkIn({
         employeeId: empId,
         isRemote,
-        latitude: currentCoords?.latitude,
-        longitude: currentCoords?.longitude,
+        latitude: geoResult?.latitude,
+        longitude: geoResult?.longitude,
+        accuracy: geoResult?.accuracy,
         clientIp: currentWifiIp,
       });
       if (res.success) {
         fetchData();
       } else {
-        const msg = res.message || "Failed to check in";
+        let msg = res.message || "Failed to check in";
+        if (res.validation?.reason === "GPS_UNAVAILABLE" && geoResult?.error) {
+          msg = `${msg}\n\n• Device Diagnostics: ${geoResult.error}`;
+        }
         setSecurityCheckMsg(msg);
       }
     } catch (err) {
@@ -553,11 +573,32 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
 
           <button
             type="button"
-            onClick={() => setShowWfhModal(true)}
-            className="flex items-center gap-2 px-4 h-11 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/80 transition cursor-pointer shadow-sm"
+            disabled={wfhStatus?.type === "approved"}
+            onClick={wfhStatus?.type === "approved" ? undefined : () => setShowWfhModal(true)}
+            className={`flex items-center gap-2 px-4 h-11 rounded-xl text-xs font-bold transition shadow-sm ${
+              wfhStatus?.type === "approved"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default pointer-events-none select-none"
+                : wfhStatus?.type === "pending"
+                ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 cursor-pointer"
+                : "text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/80 cursor-pointer"
+            }`}
           >
-            <Home className="h-4 w-4 text-[#5D5FEF]" />
-            <span>Apply for WFH</span>
+            {wfhStatus?.type === "approved" ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span>WFH Approved ({wfhStatus.duration})</span>
+              </>
+            ) : wfhStatus?.type === "pending" ? (
+              <>
+                <Clock className="h-4 w-4 text-amber-600" />
+                <span>Request Submitted ({wfhStatus.duration})</span>
+              </>
+            ) : (
+              <>
+                <Home className="h-4 w-4 text-[#5D5FEF]" />
+                <span>Apply for WFH</span>
+              </>
+            )}
           </button>
 
           <button
@@ -571,7 +612,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
       </div>
 
       {/* Security Check Failure Banner */}
-      {securityCheckMsg && (
+      {securityCheckMsg && wfhStatus?.type !== "approved" && (
         <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start justify-between gap-3 text-rose-900 shadow-sm animate-fade-in">
           <div className="flex items-start gap-3">
             <div className="p-2 bg-rose-100 text-rose-600 rounded-xl shrink-0 mt-0.5">
@@ -662,11 +703,32 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowWfhModal(true)}
-                  className="w-full flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-indigo-50/80 text-slate-700 hover:text-[#5D5FEF] font-bold text-[11px] py-2 rounded-xl transition border border-slate-200 hover:border-indigo-200 cursor-pointer"
+                  disabled={wfhStatus?.type === "approved"}
+                  onClick={wfhStatus?.type === "approved" ? undefined : () => setShowWfhModal(true)}
+                  className={`w-full flex items-center justify-center gap-1.5 font-bold text-[11px] py-2 rounded-xl transition ${
+                    wfhStatus?.type === "approved"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs cursor-default pointer-events-none select-none"
+                      : wfhStatus?.type === "pending"
+                      ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 shadow-xs cursor-pointer"
+                      : "bg-slate-50 hover:bg-indigo-50/80 text-slate-700 hover:text-[#5D5FEF] border border-slate-200 hover:border-indigo-200 cursor-pointer"
+                  }`}
                 >
-                  <Home className="h-3.5 w-3.5 text-[#5D5FEF]" />
-                  <span>Apply for WFH</span>
+                  {wfhStatus?.type === "approved" ? (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>WFH Approved ({wfhStatus.duration})</span>
+                    </>
+                  ) : wfhStatus?.type === "pending" ? (
+                    <>
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
+                      <span>Request Submitted ({wfhStatus.duration})</span>
+                    </>
+                  ) : (
+                    <>
+                      <Home className="h-3.5 w-3.5 text-[#5D5FEF]" />
+                      <span>Apply for WFH</span>
+                    </>
+                  )}
                 </button>
               </div>
             ) : (
@@ -1257,6 +1319,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
       <WfhRequestModal
         isOpen={showWfhModal}
         onClose={() => setShowWfhModal(false)}
+        activeRequest={wfhStatus?.request}
         onSuccess={() => {
           setSecurityCheckMsg(null);
           fetchData();

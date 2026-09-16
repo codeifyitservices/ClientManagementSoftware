@@ -30,8 +30,7 @@ const ipWhitelistSchema = new mongoose.Schema(
     },
     expiryType: {
       type: String,
-      enum: ["1 Day", "1 Week", "1 Month", "24 Hours", "Custom", "Never"],
-      default: "Never",
+      default: "24 hrs",
     },
     expiresAt: {
       type: Date,

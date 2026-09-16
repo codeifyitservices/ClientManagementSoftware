@@ -124,6 +124,12 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
     requestContext.longitude !== ""
       ? Number(requestContext.longitude)
       : null;
+  const userAccuracy =
+    requestContext.accuracy !== undefined &&
+    requestContext.accuracy !== null &&
+    requestContext.accuracy !== ""
+      ? Number(requestContext.accuracy)
+      : 0;
 
   // 1. Fetch Policy to check enforcement flags
   const policy = await AttendancePolicy.findOne({ companyId: "default_company" });
@@ -249,23 +255,7 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
       }
     }
 
-    // Ensure 103.160.234.194 is in active rules
-    if (!allIpRules.some(r => r.ipAddress === "103.160.234.194")) {
-      allIpRules.push({
-        ipAddress: "103.160.234.194",
-        locationName: "Current Office Network",
-        scope: "Organization",
-      });
-      // Also persist to collection
-      IpWhitelist.create({
-        locationName: "Current Office Network",
-        ipAddress: "103.160.234.194",
-        scope: "Organization",
-        type: "Permanent",
-        status: "Active",
-      }).catch(() => {});
-    }
-
+    // Use strictly the active whitelists and policy rules configured by admin
     matchedIpRule = allIpRules.find((rule) => {
       if (!rule?.ipAddress) return false;
       if (rule.ipAddress.trim() !== currentIp.trim()) return false;
@@ -302,9 +292,13 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
           continue;
         }
         const dist = calculateDistanceMeters(userLat, userLng, Number(loc.latitude), Number(loc.longitude));
-        const maxRadius = loc.radiusMeters !== undefined && loc.radiusMeters !== null 
+        const baseRadius = loc.radiusMeters !== undefined && loc.radiusMeters !== null 
           ? Number(loc.radiusMeters) 
           : (policy?.defaultGeofenceRadiusMeters || 100);
+
+        // Account for Wi-Fi / device accuracy jitter (provide a sensible buffer up to 100m)
+        const accuracyTolerance = userAccuracy > 0 ? Math.min(userAccuracy, 100) : 0;
+        const maxRadius = baseRadius + accuracyTolerance;
 
         if (dist < minDistanceMeters) {
           minDistanceMeters = dist;
@@ -331,9 +325,9 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
         allowed: true,
         reason: "ALLOWED_IP_AND_LOCATION_MATCH",
         ip: currentIp,
-        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m from center, within 100m allowed, IP: ${currentIp})`,
+        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m from center, within allowed radius, IP: ${currentIp})`,
         matchedRule: matchedLocationRule._id,
-        message: `Check-in verified: Authorized IP (${currentIp}) & Verified GPS location (${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m, within allowed 100m).`,
+        message: `Check-in verified: Authorized IP (${currentIp}) & Verified GPS location (${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m).`,
       };
     }
 
@@ -341,7 +335,7 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
       const closestName = closestLocation?.locationName ? ` from ${closestLocation.locationName}` : "";
       const locText =
         userLat === null || userLng === null
-          ? "GPS coordinates not provided"
+          ? "Device location was not provided. Please ensure browser location permissions and Windows/OS Location Services are enabled."
           : `Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)} (${minDistanceMeters === Infinity ? "outside office bounds" : Math.round(minDistanceMeters) + "m away" + closestName + ", max 100m allowed"})`;
       return {
         allowed: false,
@@ -363,9 +357,9 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
         reason: "IP_NOT_WHITELISTED",
         failedChecks: ["IP Address"],
         ip: currentIp,
-        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m away, within 100m allowed)`,
+        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m away)`,
         matchedRule: matchedLocationRule._id,
-        message: `Check-in Blocked: IP validation failed.\n• Geolocation Check: Passed (Verified at ${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m away, within 100m allowed)\n• IP Check: Failed (Attempted IP: ${currentIp} is not in the authorized office network whitelist)\n• Please connect to the official office Wi-Fi network to check in.`,
+        message: `Check-in Blocked: IP validation failed.\n• Geolocation Check: Passed (Verified at ${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m away)\n• IP Check: Failed (Attempted IP: ${currentIp} is not in the authorized office network whitelist)\n• Please connect to the official office Wi-Fi network to check in.`,
       };
     }
 
@@ -373,7 +367,7 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
       const closestName = closestLocation?.locationName ? ` of ${closestLocation.locationName}` : "";
       const locText =
         userLat === null || userLng === null
-          ? "Device GPS coordinates were not provided. Please enable GPS/Location in your browser."
+          ? "Device location was not provided. Please ensure browser location permissions and Windows/OS Location Services are turned ON."
           : `Coordinates (Lat ${userLat.toFixed(4)}, Lng ${userLng.toFixed(4)}) are outside authorized office geofence (${minDistanceMeters === Infinity ? "no matching office location" : Math.round(minDistanceMeters) + "m away" + closestName + ", max 100m allowed"}).`;
       return {
         allowed: false,
@@ -423,9 +417,9 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
         allowed: true,
         reason: "ALLOWED_LOCATION_MATCH",
         ip: currentIp,
-        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m from center, within 100m allowed)`,
+        location: `${matchedLocationRule.locationName || "Office"} (${Math.round(minDistanceMeters)}m from center)`,
         matchedRule: matchedLocationRule._id,
-        message: `Check-in allowed via verified office location (${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m, within allowed 100m)`,
+        message: `Check-in allowed via verified office location (${matchedLocationRule.locationName || "Office"} - ${Math.round(minDistanceMeters)}m)`,
       };
     }
 
@@ -437,7 +431,7 @@ export const validateAttendanceAccess = async (employeeId, requestContext = {}) 
         ip: currentIp,
         location: "GPS Unavailable",
         matchedRule: null,
-        message: "Check-in Blocked: Geolocation is required by policy, but device GPS was not provided. Please allow location permissions in your browser.",
+        message: "Check-in Blocked: Geolocation is required by policy, but device location was not provided. If browser location is allowed, please ensure Windows/OS Location Services is enabled in your system settings.",
       };
     }
 

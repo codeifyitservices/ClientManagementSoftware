@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check, AlertTriangle, Home } from "lucide-react";
+import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check, AlertTriangle, Home, CheckCircle2 } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
 import WfhRequestModal from "./WfhRequestModal";
@@ -13,24 +13,40 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
   const [breakReason, setBreakReason] = useState("Lunch Break");
   const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
   const [showWfhModal, setShowWfhModal] = useState(false);
+  const [wfhStatus, setWfhStatus] = useState(null);
 
   const empId = currentUser?._id || currentUser?.id;
 
-  const getPositionAsync = () => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        return resolve(null);
+  const fetchWfhStatus = async () => {
+    try {
+      const wfhRes = await attendanceService.getWfhRequests();
+      if (wfhRes?.success && Array.isArray(wfhRes.requests)) {
+        const now = new Date();
+        const activeApproved = wfhRes.requests.find(
+          (r) => r.status === "Approved" && new Date(r.endDate) >= now
+        );
+        if (activeApproved) {
+          setWfhStatus({
+            type: "approved",
+            duration: activeApproved.duration || "24 hrs",
+            request: activeApproved,
+          });
+        } else {
+          const pendingReq = wfhRes.requests.find((r) => r.status === "Pending");
+          if (pendingReq) {
+            setWfhStatus({
+              type: "pending",
+              duration: pendingReq.duration || "24 hrs",
+              request: pendingReq,
+            });
+          } else {
+            setWfhStatus(null);
+          }
+        }
       }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = parseFloat(pos.coords.latitude.toFixed(6));
-          const lng = parseFloat(pos.coords.longitude.toFixed(6));
-          resolve({ latitude: lat, longitude: lng });
-        },
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    });
+    } catch (e) {
+      console.error("Failed to fetch WFH status", e);
+    }
   };
 
   const fetchCurrentSession = async () => {
@@ -46,8 +62,13 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
 
   useEffect(() => {
     fetchCurrentSession();
+    fetchWfhStatus();
     const interval = setInterval(fetchCurrentSession, 1000); // 1-second instant polling
-    return () => clearInterval(interval);
+    const wfhInterval = setInterval(fetchWfhStatus, 30000); // 30s WFH polling
+    return () => {
+      clearInterval(interval);
+      clearInterval(wfhInterval);
+    };
   }, [empId]);
 
   // Live timer tick
@@ -74,16 +95,17 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
     setLoading(true);
     setSecurityCheckMsg(null);
     try {
-      const [currentCoords, currentWifiIp] = await Promise.all([
-        getPositionAsync().catch(() => null),
+      const [geoResult, currentWifiIp] = await Promise.all([
+        attendanceService.getCurrentPositionAsync().catch(() => null),
         attendanceService.detectNetworkInfo().catch(() => null),
       ]);
 
       const payload = {
         employeeId: empId,
         isRemote,
-        latitude: currentCoords?.latitude,
-        longitude: currentCoords?.longitude,
+        latitude: geoResult?.latitude,
+        longitude: geoResult?.longitude,
+        accuracy: geoResult?.accuracy,
         clientIp: currentWifiIp,
       };
       const res = await attendanceService.checkIn(payload);
@@ -91,7 +113,10 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
         setCurrentAttendance(res.attendance);
         if (onStatusChanged) onStatusChanged();
       } else {
-        const msg = res.message || "Failed to check in";
+        let msg = res.message || "Failed to check in";
+        if (res.validation?.reason === "GPS_UNAVAILABLE" && geoResult?.error) {
+          msg = `${msg}\n\n• Device Diagnostics: ${geoResult.error}`;
+        }
         setSecurityCheckMsg(msg);
       }
     } catch (err) {
@@ -209,11 +234,32 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
             <>
               <button
                 type="button"
-                onClick={() => setShowWfhModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-50 hover:bg-indigo-50/80 text-slate-700 hover:text-[#5D5FEF] transition border border-slate-200 hover:border-indigo-200 cursor-pointer shadow-xs"
+                disabled={wfhStatus?.type === "approved"}
+                onClick={wfhStatus?.type === "approved" ? undefined : () => setShowWfhModal(true)}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition shadow-xs ${
+                  wfhStatus?.type === "approved"
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default pointer-events-none select-none"
+                    : wfhStatus?.type === "pending"
+                    ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 cursor-pointer"
+                    : "bg-slate-50 hover:bg-indigo-50/80 text-slate-700 hover:text-[#5D5FEF] border border-slate-200 hover:border-indigo-200 cursor-pointer"
+                }`}
               >
-                <Home className="h-4 w-4 text-[#5D5FEF]" />
-                <span>Apply for WFH</span>
+                {wfhStatus?.type === "approved" ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>WFH Approved ({wfhStatus.duration})</span>
+                  </>
+                ) : wfhStatus?.type === "pending" ? (
+                  <>
+                    <Clock className="h-4 w-4 text-amber-600" />
+                    <span>Request Submitted ({wfhStatus.duration})</span>
+                  </>
+                ) : (
+                  <>
+                    <Home className="h-4 w-4 text-[#5D5FEF]" />
+                    <span>Apply for WFH</span>
+                  </>
+                )}
               </button>
               <button
                 onClick={handleCheckIn}
@@ -386,7 +432,7 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
       )}
 
       {/* Security Validation Warning Banner */}
-      {securityCheckMsg && (
+      {securityCheckMsg && wfhStatus?.type !== "approved" && (
         <div className="mt-4 p-4 rounded-2xl bg-red-50 border border-red-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-center gap-3 text-red-800 text-xs font-semibold">
             <ShieldCheck size={20} className="shrink-0 text-red-600" />
@@ -409,9 +455,10 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
       <WfhRequestModal
         isOpen={showWfhModal}
         onClose={() => setShowWfhModal(false)}
+        activeRequest={wfhStatus?.request}
         onSuccess={() => {
-          setSecurityCheckMsg(null);
-          if (onStatusChanged) onStatusChanged();
+          fetchWfhStatus();
+          fetchCurrentSession();
         }}
       />
     </div>

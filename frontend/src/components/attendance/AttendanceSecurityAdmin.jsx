@@ -64,34 +64,31 @@ export default function AttendanceSecurityAdmin({ token }) {
     address: "",
   });
 
-  const handleDetectLocationForModal = () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser");
-      return;
-    }
+  const handleDetectLocationForModal = async () => {
     setDetectingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setDetectingLocation(false);
-        const lat = parseFloat(pos.coords.latitude.toFixed(6));
-        const lng = parseFloat(pos.coords.longitude.toFixed(6));
-        const acc = Math.round(pos.coords.accuracy || 50);
+    try {
+      const res = await attendanceService.getCurrentPositionAsync();
+      setDetectingLocation(false);
+      if (res.latitude && res.longitude) {
+        const lat = res.latitude;
+        const lng = res.longitude;
+        const acc = res.accuracy || 50;
         setLocForm(prev => ({
           ...prev,
           latitude: lat,
           longitude: lng,
           radiusMeters: prev.radiusMeters || Math.max(100, acc + 50)
         }));
-        setDetectNotice({ type: "success", text: `Detected GPS: ${lat}, ${lng} (±${acc}m accuracy)` });
-        setTimeout(() => setDetectNotice(null), 5000);
-      },
-      (err) => {
-        setDetectingLocation(false);
-        setDetectNotice({ type: "error", text: `Location detection failed: ${err.message}` });
-        setTimeout(() => setDetectNotice(null), 5000);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+        setDetectNotice({ type: "success", text: `Detected Location: ${lat}, ${lng} (±${acc}m accuracy)` });
+      } else {
+        setDetectNotice({ type: "error", text: res.error || "Location detection failed" });
+      }
+      setTimeout(() => setDetectNotice(null), 5000);
+    } catch (err) {
+      setDetectingLocation(false);
+      setDetectNotice({ type: "error", text: `Location detection failed: ${err.message}` });
+      setTimeout(() => setDetectNotice(null), 5000);
+    }
   };
 
   const handleDetectIpForModal = async () => {

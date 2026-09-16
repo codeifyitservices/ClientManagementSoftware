@@ -195,7 +195,6 @@ export const initSocketServer = (httpServer) => {
 
       // Handle real-time activity changes from desktop agent (idle / active)
       socket.on("agent:activity-change", async (payload) => {
-        console.log(`[SocketService] Received agent:activity-change from ${canonicalEmpId}:`, payload);
         try {
           const { status, idleSeconds } = payload || {};
           const { syncAgentActivity } = await import("../controllers/attendanceController.js");
@@ -208,13 +207,15 @@ export const initSocketServer = (httpServer) => {
             computerName,
           });
 
-          // Instantly broadcast synced attendance status to Web UI
-          broadcastToEmployee(canonicalEmpId, "attendance:update", {
-            currentStatus: syncRes?.serverStatus || status,
-            idleTimeSeconds: idleSeconds || 0,
-            isAgentConnected: true,
-            inGracePeriod: false,
-          });
+          // Only broadcast working/break/idle status to Web UI if employee is actually checked in
+          if (syncRes && !syncRes.notCheckedIn && syncRes.serverStatus !== "Not Checked In") {
+            broadcastToEmployee(canonicalEmpId, "attendance:update", {
+              currentStatus: syncRes?.serverStatus || status,
+              idleTimeSeconds: idleSeconds || 0,
+              isAgentConnected: true,
+              inGracePeriod: false,
+            });
+          }
         } catch (actErr) {
           console.error("[SocketService] Error handling agent:activity-change:", actErr);
         }

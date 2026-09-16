@@ -25,6 +25,18 @@ export const generatePairingToken = async (req, res) => {
       expiresAt: expiresAt.getTime(),
     });
 
+    // Also persist pairing token in MongoDB so server restarts (nodemon) don't invalidate it
+    try {
+      if (resolvedEmpId) {
+        await AgentSession.updateMany(
+          { employeeId: resolvedEmpId },
+          { pairingToken, pairingTokenExpiresAt: expiresAt }
+        );
+      }
+    } catch (e) {
+      console.warn("Could not persist pairing token to Mongo:", e.message);
+    }
+
     return res.status(200).json({
       success: true,
       message: "Pairing token generated successfully",
@@ -58,19 +70,28 @@ export const pairAgentDevice = async (req, res) => {
       });
     }
 
-    if (!activePairingTokens.has(pairingToken)) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired pairing token. Please generate a new pairing token from the web application.",
+    let tokenInfo = activePairingTokens.get(pairingToken);
+
+    // Fallback: check MongoDB if memory token map was cleared by server reload
+    if (!tokenInfo) {
+      const dbSession = await AgentSession.findOne({
+        pairingToken,
+        pairingTokenExpiresAt: { $gt: new Date() },
       });
+      if (dbSession) {
+        tokenInfo = {
+          token: pairingToken,
+          employeeId: dbSession.employeeId,
+          expiresAt: dbSession.pairingTokenExpiresAt.getTime(),
+        };
+      }
     }
 
-    const tokenInfo = activePairingTokens.get(pairingToken);
     if (!tokenInfo || tokenInfo.expiresAt <= Date.now()) {
       activePairingTokens.delete(pairingToken);
       return res.status(401).json({
         success: false,
-        message: "Pairing token has expired. Please generate a new pairing token from the web application.",
+        message: "Invalid or expired pairing token. Please generate a new pairing token from the web application.",
       });
     }
 

@@ -18,8 +18,8 @@ const wfhRequestSchema = new mongoose.Schema(
     },
     duration: {
       type: String,
-      enum: ["24 Hours", "1 Day", "1 Week", "Custom"],
-      default: "1 Day",
+      enum: ["24 Hours", "24 hrs", "1 Day", "3 Days", "3 days", "1 Week", "1 week", "Custom"],
+      default: "24 hrs",
     },
     reason: {
       type: String,
@@ -43,7 +43,7 @@ const wfhRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Pending", "Approved", "Rejected"],
+      enum: ["Pending", "Approved", "Rejected", "Cancelled"],
       default: "Pending",
       index: true,
     },
