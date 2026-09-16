@@ -52,6 +52,12 @@ import {
   updateAdminPolicies,
   getAdminAuditLogs,
   detectCurrentNetworkInfo,
+  // Bulk Delete Controllers
+  bulkDeleteAdminRecords,
+  bulkDeleteAdminRegularizations,
+  bulkDeleteAdminWfhRequests,
+  bulkDeleteAdminExceptions,
+  bulkDeleteAdminAuditLogs,
 } from "../controllers/attendanceController.js";
 
 const router = express.Router();
@@ -100,21 +106,25 @@ router.get("/audit-logs", protect, adminOnly, getSecurityAuditLogs);
 router.get("/admin/dashboard", protect, adminOnly, getAdminDashboard);
 router.get("/admin/live", protect, adminOnly, getAdminLiveAttendance);
 router.get("/admin/records", protect, adminOnly, getAdminRecords);
+router.post("/admin/records/bulk-delete", protect, adminOnly, bulkDeleteAdminRecords);
 router.get("/admin/calendar", protect, adminOnly, getAdminCalendar);
 
 // WFH Requests Management
 router.get("/admin/wfh-requests", protect, adminOnly, getAdminWfhRequests);
 router.post("/admin/wfh-requests/bulk-approve", protect, adminOnly, bulkApproveWfhAdmin);
+router.post("/admin/wfh-requests/bulk-delete", protect, adminOnly, bulkDeleteAdminWfhRequests);
 
 // Regularization Requests Management
 router.get("/admin/regularizations", protect, adminOnly, getAdminRegularizations);
 router.put("/admin/regularizations/:id/approve", protect, adminOnly, approveRegularizationAdmin);
 router.put("/admin/regularizations/:id/reject", protect, adminOnly, rejectRegularizationAdmin);
+router.post("/admin/regularizations/bulk-delete", protect, adminOnly, bulkDeleteAdminRegularizations);
 
 // Attendance Exceptions
 router.get("/admin/exceptions", protect, adminOnly, getAdminExceptions);
 router.put("/admin/exceptions/:id", protect, adminOnly, updateAdminExceptionStatus);
 router.post("/admin/exceptions/detect", protect, adminOnly, runAdminExceptionDetection);
+router.post("/admin/exceptions/bulk-delete", protect, adminOnly, bulkDeleteAdminExceptions);
 
 // Employee Attendance Profile
 router.get("/admin/employee-profile/:employeeId", protect, adminOnly, getAdminEmployeeProfile);
@@ -134,5 +144,6 @@ router.get("/admin/detect-network", protect, adminOnly, detectCurrentNetworkInfo
 
 // Traceable Audit Logs
 router.get("/admin/audit-logs", protect, adminOnly, getAdminAuditLogs);
+router.post("/admin/audit-logs/bulk-delete", protect, adminOnly, bulkDeleteAdminAuditLogs);
 
 export default router;

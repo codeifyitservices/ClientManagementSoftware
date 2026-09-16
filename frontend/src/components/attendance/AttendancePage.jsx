@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Radio,
@@ -15,6 +15,7 @@ import {
   Plus,
   Layers
 } from "lucide-react";
+import { attendanceService } from "../../services/attendanceService";
 
 import EmployeeAttendanceDashboard from "./EmployeeAttendanceDashboard";
 import AdminAttendanceDashboard from "./AdminAttendanceDashboard";
@@ -45,15 +46,43 @@ export default function AttendancePage({ currentUser }) {
   const [showManualModal, setShowManualModal] = useState(false);
   const [showAgentPairingModal, setShowAgentPairingModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [badgeCounts, setBadgeCounts] = useState({
+    wfh: 0,
+    regularization: 0,
+    exceptions: 0,
+  });
+
+  const fetchBadgeCounts = async () => {
+    try {
+      const res = await attendanceService.getAdminDashboard();
+      if (res?.success && res.kpis) {
+        setBadgeCounts({
+          wfh: res.kpis.pendingWfh || 0,
+          regularization: res.kpis.pendingRegularizations || 0,
+          exceptions: res.kpis.attendanceExceptions || 0,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load attendance badge counts", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isManager) {
+      fetchBadgeCounts();
+      const interval = setInterval(fetchBadgeCounts, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isManager, refreshKey, activeTab]);
 
   const tabs = [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "live", label: "Live Monitor", icon: Radio },
     { id: "records", label: "Master Records", icon: ListFilter },
     { id: "calendar", label: "Calendar View", icon: Calendar },
-    { id: "wfh", label: "WFH Requests", icon: Home },
-    { id: "regularization", label: "Regularization", icon: Clock },
-    { id: "exceptions", label: "Exceptions", icon: AlertTriangle },
+    { id: "wfh", label: "WFH Requests", icon: Home, count: badgeCounts.wfh, badgeColor: "bg-amber-500 text-white" },
+    { id: "regularization", label: "Regularization", icon: Clock, count: badgeCounts.regularization, badgeColor: "bg-rose-500 text-white" },
+    { id: "exceptions", label: "Exceptions", icon: AlertTriangle, count: badgeCounts.exceptions, badgeColor: "bg-orange-500 text-white" },
     { id: "profiles", label: "Employee Profile", icon: UserCheck },
     { id: "reports", label: "Reports & Analytics", icon: FileSpreadsheet },
     { id: "config", label: "Shift & Geofence Policy", icon: Settings },
@@ -110,7 +139,7 @@ export default function AttendancePage({ currentUser }) {
       {/* ── Navigation Pill Tabs ─────────────────────────────────── */}
       <div className="overflow-x-auto pb-1 scrollbar-thin">
         <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm min-w-max">
-          {tabs.map(({ id, label, icon: Icon }) => {
+          {tabs.map(({ id, label, icon: Icon, count, badgeColor }) => {
             const isActive = activeTab === id;
             return (
               <button
@@ -124,6 +153,17 @@ export default function AttendancePage({ currentUser }) {
               >
                 <Icon className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-slate-400"}`} />
                 <span>{label}</span>
+                {count > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 min-w-[18px] text-[10px] font-black rounded-full text-center leading-tight shadow-xs ${
+                      isActive
+                        ? "bg-white text-indigo-700"
+                        : badgeColor || "bg-rose-500 text-white"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}

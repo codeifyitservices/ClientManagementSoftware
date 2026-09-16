@@ -127,10 +127,33 @@ export const attendanceService = {
     return res.json();
   },
 
-  // Approve Correction Request
+  // Approve Correction Request (Legacy)
   approveCorrection: async (data) => {
     const res = await fetch(`${API_BASE}/approve-correction`, {
       method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+
+  // Admin Regularization Requests
+  getAdminRegularizations: async (params = {}) => {
+    const query = buildQueryString(params);
+    const res = await fetch(`${API_BASE}/admin/regularizations?${query}`, { headers: getHeaders() });
+    return res.json();
+  },
+  approveRegularizationAdmin: async (id, data = {}) => {
+    const res = await fetch(`${API_BASE}/admin/regularizations/${id}/approve`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  rejectRegularizationAdmin: async (id, data = {}) => {
+    const res = await fetch(`${API_BASE}/admin/regularizations/${id}/reject`, {
+      method: "PUT",
       headers: getHeaders(),
       body: JSON.stringify(data),
     });
@@ -301,6 +324,14 @@ export const attendanceService = {
     const res = await fetch(`${API_BASE}/admin/records?${query}`, { headers: getHeaders() });
     return res.json();
   },
+  bulkDeleteAdminRecords: async (recordIds = []) => {
+    const res = await fetch(`${API_BASE}/admin/records/bulk-delete`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ recordIds }),
+    });
+    return res.json();
+  },
 
   // Admin Calendar
   getAdminCalendar: async (params = {}) => {
@@ -331,6 +362,14 @@ export const attendanceService = {
     });
     return res.json();
   },
+  bulkDeleteAdminWfhRequests: async (requestIds = []) => {
+    const res = await fetch(`${API_BASE}/admin/wfh-requests/bulk-delete`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ requestIds }),
+    });
+    return res.json();
+  },
 
   // Admin Regularization Requests
   getAdminRegularizations: async (params = {}) => {
@@ -346,11 +385,35 @@ export const attendanceService = {
     });
     return res.json();
   },
+  approveRegularizationAdmin: async (id, data = {}) => {
+    const res = await fetch(`${API_BASE}/admin/regularizations/${id}/approve`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
   rejectRegularization: async (id, data = {}) => {
     const res = await fetch(`${API_BASE}/admin/regularizations/${id}/reject`, {
       method: "PUT",
       headers: getHeaders(),
       body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  rejectRegularizationAdmin: async (id, data = {}) => {
+    const res = await fetch(`${API_BASE}/admin/regularizations/${id}/reject`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  bulkDeleteAdminRegularizations: async (ids = []) => {
+    const res = await fetch(`${API_BASE}/admin/regularizations/bulk-delete`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ ids }),
     });
     return res.json();
   },
@@ -374,6 +437,14 @@ export const attendanceService = {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  bulkDeleteAdminExceptions: async (exceptionIds = []) => {
+    const res = await fetch(`${API_BASE}/admin/exceptions/bulk-delete`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ exceptionIds }),
     });
     return res.json();
   },
@@ -433,6 +504,14 @@ export const attendanceService = {
   getAdminAuditLogs: async (params = {}) => {
     const query = buildQueryString(params);
     const res = await fetch(`${API_BASE}/admin/audit-logs?${query}`, { headers: getHeaders() });
+    return res.json();
+  },
+  bulkDeleteAdminAuditLogs: async (logIds = []) => {
+    const res = await fetch(`${API_BASE}/admin/audit-logs/bulk-delete`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ logIds }),
+    });
     return res.json();
   },
 

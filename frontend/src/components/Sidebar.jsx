@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -15,12 +15,38 @@ import {
   Clock,
   TrendingUp,
 } from "lucide-react";
+import { attendanceService } from "../services/attendanceService";
 
 export default function Sidebar({
   companyName = "Codenap IT Services",
   companyLogo = "",
   currentUser = null,
 }) {
+  const [pendingAttendanceCount, setPendingAttendanceCount] = useState(0);
+
+  useEffect(() => {
+    if (currentUser?.role === "Employee") return;
+
+    const fetchPendingAttendance = async () => {
+      try {
+        const res = await attendanceService.getAdminDashboard();
+        if (res?.success && res.kpis) {
+          const total =
+            (res.kpis.pendingWfh || 0) +
+            (res.kpis.pendingRegularizations || 0) +
+            (res.kpis.attendanceExceptions || 0);
+          setPendingAttendanceCount(total);
+        }
+      } catch (err) {
+        // silently ignore error on background count fetch
+      }
+    };
+
+    fetchPendingAttendance();
+    const interval = setInterval(fetchPendingAttendance, 30000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
   const mainItems =
     currentUser?.role === "Employee"
       ? [
@@ -101,7 +127,16 @@ export default function Sidebar({
                   {({ isActive }) => (
                     <>
                       <Icon className={iconClass(isActive)} />
-                      <span>{item.name}</span>
+                      <span className="flex-1 text-left">{item.name}</span>
+                      {item.to === "/attendance" && pendingAttendanceCount > 0 && currentUser?.role !== "Employee" && (
+                        <span
+                          className={`ml-auto px-1.5 py-0.5 min-w-[18px] text-[10px] font-black rounded-full text-center leading-none shadow-xs ${
+                            isActive ? "bg-white text-[#5D5FEF]" : "bg-rose-500 text-white"
+                          }`}
+                        >
+                          {pendingAttendanceCount}
+                        </span>
+                      )}
                     </>
                   )}
                 </NavLink>

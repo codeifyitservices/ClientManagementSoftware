@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Attendance from "../models/attendanceModel.js";
 import Employee from "../models/employeeModel.js";
 import AgentSession from "../models/agentSessionModel.js";
@@ -1312,7 +1313,7 @@ export const manualUpsertAttendance = async (req, res) => {
 export const requestCorrection = async (req, res) => {
   try {
     const employeeId = req.user?.role === "Admin" && req.body.employeeId ? req.body.employeeId : req.user?._id;
-    const { attendanceId, date, checkInTime, checkOutTime, reason } = req.body;
+    const { attendanceId, date, checkInTime, checkOutTime, reason, requestType = "Time Adjustment" } = req.body;
 
     if (!reason) {
       return res.status(400).json({ success: false, message: "Reason for correction is required" });
@@ -1341,19 +1342,26 @@ export const requestCorrection = async (req, res) => {
       }
     }
 
+    const isRevertCheckout = requestType === "Revert Checkout";
+
     attendance.correctionRequests.push({
       requestedBy: employeeId,
+      requestType: isRevertCheckout ? "Revert Checkout" : requestType,
       checkInTime: checkInTime ? new Date(checkInTime) : null,
-      checkOutTime: checkOutTime ? new Date(checkOutTime) : null,
+      checkOutTime: isRevertCheckout ? null : checkOutTime ? new Date(checkOutTime) : null,
       reason,
       status: "Pending",
       requestedAt: new Date(),
     });
 
+    attendance.regularizationStatus = "Pending";
+
     attendance.timeline.push({
       eventType: "Correction Submitted",
       timestamp: new Date(),
-      description: `Correction request submitted: ${reason}`,
+      description: isRevertCheckout
+        ? `Revert checkout request submitted: ${reason}`
+        : `Correction request submitted: ${reason}`,
       source: "Web App",
     });
 
@@ -1361,7 +1369,9 @@ export const requestCorrection = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Correction request submitted successfully",
+      message: isRevertCheckout
+        ? "Checkout revert request submitted successfully for Admin review"
+        : "Correction request submitted successfully",
       attendance,
     });
   } catch (error) {
@@ -2253,11 +2263,13 @@ export const getAdminDashboard = async (req, res) => {
     const pendingCorrectionDocs = await Attendance.find({ "correctionRequests.status": "Pending" });
     let pendingRegularizations = 0;
     pendingCorrectionDocs.forEach((d) => {
-      d.correctionRequests.forEach((c) => {
-        if (c.status === "Pending") pendingRegularizations++;
+      (d.correctionRequests || []).forEach((c) => {
+        if (c && c.status === "Pending") pendingRegularizations++;
       });
     });
-    const pendingOnDuty = OnDutyRequest ? await OnDutyRequest.countDocuments({ status: "Pending" }) : 0;
+    const pendingOnDuty = (OnDutyRequest && typeof OnDutyRequest.countDocuments === "function") 
+      ? await OnDutyRequest.countDocuments({ status: "Pending" }) 
+      : 0;
     const totalPendingRequests = pendingWfh + pendingRegularizations + pendingOnDuty;
 
     // Open Exceptions
@@ -2961,8 +2973,8 @@ export const getAdminRegularizations = async (req, res) => {
     const flatList = [];
     attendances.forEach((att) => {
       (att.correctionRequests || []).forEach((cr) => {
-        if (!status || status === "All" || cr.status === status) {
-          if (!department || department === "All" || att.employee?.department === department) {
+        if (!status || status === "All" || status === "all" || cr.status === status) {
+          if (!department || department === "All" || department === "all" || att.employee?.department === department) {
             if (
               !search ||
               att.employee?.fullName?.toLowerCase().includes(search.toLowerCase()) ||
@@ -2974,16 +2986,24 @@ export const getAdminRegularizations = async (req, res) => {
                 attendanceId: att._id,
                 date: att.date,
                 employee: att.employee,
+                requestType: cr.requestType || "Time Adjustment",
                 existingCheckIn: att.checkInTime,
                 existingCheckOut: att.checkOutTime,
+                clockInTime: att.checkInTime,
+                clockOutTime: att.checkOutTime,
                 requestedCheckIn: cr.checkInTime,
                 requestedCheckOut: cr.checkOutTime,
+                requestedClockIn: cr.checkInTime,
+                requestedClockOut: cr.checkOutTime,
                 reason: cr.reason,
+                regularizationReason: cr.reason,
                 status: cr.status,
+                regularizationStatus: cr.status,
                 requestedAt: cr.requestedAt,
                 reviewedBy: cr.reviewedBy,
                 reviewedAt: cr.reviewedAt,
                 adminComment: cr.adminComment,
+                adminComments: cr.adminComment,
               });
             }
           }
@@ -3004,6 +3024,7 @@ export const getAdminRegularizations = async (req, res) => {
       page: pageNum,
       pages: Math.ceil(total / limitNum) || 1,
       requests: paginated,
+      data: paginated,
     });
   } catch (error) {
     console.error("Error in getAdminRegularizations:", error);
@@ -3018,18 +3039,26 @@ export const getAdminRegularizations = async (req, res) => {
  */
 export const approveRegularizationAdmin = async (req, res) => {
   try {
-    const { id } = req.params; // correctionRequest _id
-    const { comment } = req.body;
+    const { id } = req.params; // correctionRequest _id or attendance _id
+    const comment = req.body.comment || req.body.adminComments || req.body.adminComment || "";
     const adminId = req.user?._id;
+    const validAdminId = adminId && mongoose.Types.ObjectId.isValid(adminId) ? adminId : null;
 
-    const attendance = await Attendance.findOne({ "correctionRequests._id": id }).populate("employee");
-    if (!attendance) {
-      return res.status(404).json({ success: false, message: "Regularization request not found" });
+    let attendance = await Attendance.findOne({ "correctionRequests._id": id }).populate("employee");
+    let cr = null;
+
+    if (attendance) {
+      cr = attendance.correctionRequests.id(id);
+    } else if (mongoose.Types.ObjectId.isValid(id)) {
+      // Fallback: check if id passed was the attendanceId
+      attendance = await Attendance.findById(id).populate("employee");
+      if (attendance && attendance.correctionRequests?.length) {
+        cr = attendance.correctionRequests.find((r) => r.status === "Pending") || attendance.correctionRequests[attendance.correctionRequests.length - 1];
+      }
     }
 
-    const cr = attendance.correctionRequests.id(id);
-    if (!cr) {
-      return res.status(404).json({ success: false, message: "Correction item not found" });
+    if (!attendance || !cr) {
+      return res.status(404).json({ success: false, message: "Regularization request not found" });
     }
 
     if (cr.status !== "Pending") {
@@ -3041,38 +3070,55 @@ export const approveRegularizationAdmin = async (req, res) => {
       checkOutTime: attendance.checkOutTime,
       totalWorkingMinutes: attendance.totalWorkingMinutes,
       attendanceStatus: attendance.attendanceStatus,
+      currentStatus: attendance.currentStatus,
     };
 
-    // Apply corrected times
-    if (cr.checkInTime) attendance.checkInTime = cr.checkInTime;
-    if (cr.checkOutTime) attendance.checkOutTime = cr.checkOutTime;
+    const isRevertCheckout = cr.requestType === "Revert Checkout" || cr.reason?.toLowerCase().includes("revert");
 
-    // Recalculate durations
-    let grossMinutes = 0;
-    if (attendance.checkInTime && attendance.checkOutTime) {
-      grossMinutes = Math.max(0, Math.floor((new Date(attendance.checkOutTime) - new Date(attendance.checkInTime)) / 60000));
-    }
-    const totalBreakMin = attendance.totalBreakMinutes || 0;
-    const netWorkingMin = Math.max(0, grossMinutes - totalBreakMin);
-
-    attendance.totalWorkingMinutes = netWorkingMin;
-
-    // Standard policy evaluation (8h = full, 4h = half day)
-    if (netWorkingMin >= 480) {
+    if (isRevertCheckout) {
+      attendance.checkOutTime = null;
+      attendance.currentStatus = "Working";
+      attendance.isEarlyCheckout = false;
+      attendance.earlyCheckoutMinutes = 0;
       attendance.attendanceStatus = "Present";
-      attendance.overtimeMinutes = Math.max(0, netWorkingMin - 480);
-    } else if (netWorkingMin >= 240) {
-      attendance.attendanceStatus = "Half Day";
-      attendance.overtimeMinutes = 0;
+
+      if (attendance.checkInTime) {
+        const grossMinutes = Math.max(0, Math.floor((new Date() - new Date(attendance.checkInTime)) / 60000));
+        const totalBreakMin = attendance.totalBreakMinutes || 0;
+        attendance.totalWorkingMinutes = Math.max(0, grossMinutes - totalBreakMin);
+      }
     } else {
-      attendance.attendanceStatus = "Present";
+      // Apply corrected times
+      if (cr.checkInTime) attendance.checkInTime = cr.checkInTime;
+      if (cr.checkOutTime) attendance.checkOutTime = cr.checkOutTime;
+
+      // Recalculate durations
+      let grossMinutes = 0;
+      if (attendance.checkInTime && attendance.checkOutTime) {
+        grossMinutes = Math.max(0, Math.floor((new Date(attendance.checkOutTime) - new Date(attendance.checkInTime)) / 60000));
+      }
+      const totalBreakMin = attendance.totalBreakMinutes || 0;
+      const netWorkingMin = Math.max(0, grossMinutes - totalBreakMin);
+
+      attendance.totalWorkingMinutes = netWorkingMin;
+
+      // Standard policy evaluation (8h = full, 4h = half day)
+      if (netWorkingMin >= 480) {
+        attendance.attendanceStatus = "Present";
+        attendance.overtimeMinutes = Math.max(0, netWorkingMin - 480);
+      } else if (netWorkingMin >= 240) {
+        attendance.attendanceStatus = "Half Day";
+        attendance.overtimeMinutes = 0;
+      } else {
+        attendance.attendanceStatus = "Present";
+      }
     }
 
     attendance.regularizationStatus = "Approved";
 
     // Mark correction request status
     cr.status = "Approved";
-    cr.reviewedBy = adminId;
+    cr.reviewedBy = validAdminId;
     cr.reviewedAt = new Date();
     cr.adminComment = comment || "";
 
@@ -3080,13 +3126,15 @@ export const approveRegularizationAdmin = async (req, res) => {
     attendance.timeline.push({
       eventType: "Correction Approved",
       timestamp: new Date(),
-      description: `Regularization approved by ${req.user?.fullName || 'Admin'}. Net hours: ${(netWorkingMin / 60).toFixed(1)}h. Reason: ${cr.reason}`,
+      description: isRevertCheckout
+        ? `Accidental check-out reverted by ${req.user?.fullName || 'Admin'}. Session reopened. Reason: ${cr.reason}`
+        : `Regularization approved by ${req.user?.fullName || 'Admin'}. Net hours: ${(attendance.totalWorkingMinutes / 60).toFixed(1)}h. Reason: ${cr.reason}`,
       source: "Admin System",
     });
 
     attendance.auditLogs.push({
-      action: "Regularization Approved",
-      updatedBy: adminId,
+      action: isRevertCheckout ? "Checkout Revert Approved" : "Regularization Approved",
+      updatedBy: validAdminId,
       adminName: req.user?.fullName || "Admin",
       reason: comment || cr.reason,
       previousData,
@@ -3095,15 +3143,26 @@ export const approveRegularizationAdmin = async (req, res) => {
         checkOutTime: attendance.checkOutTime,
         totalWorkingMinutes: attendance.totalWorkingMinutes,
         attendanceStatus: attendance.attendanceStatus,
+        currentStatus: attendance.currentStatus,
       },
       timestamp: new Date(),
     });
 
     await attendance.save();
 
+    try {
+      if (attendance.employee?._id || attendance.employee) {
+        broadcastAttendanceUpdate(attendance.employee._id || attendance.employee, attendance);
+      }
+    } catch (sockErr) {
+      console.error("Socket broadcast error:", sockErr);
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Regularization approved and attendance recalculated successfully.",
+      message: isRevertCheckout
+        ? "Accidental check-out reverted successfully and working session reopened."
+        : "Regularization approved and attendance recalculated successfully.",
       attendance,
     });
   } catch (error) {
@@ -3120,23 +3179,31 @@ export const approveRegularizationAdmin = async (req, res) => {
 export const rejectRegularizationAdmin = async (req, res) => {
   try {
     const { id } = req.params;
-    const { comment } = req.body;
+    const comment = req.body.comment || req.body.adminComments || req.body.adminComment || "Rejected by administrator";
     const adminId = req.user?._id;
+    const validAdminId = adminId && mongoose.Types.ObjectId.isValid(adminId) ? adminId : null;
 
-    const attendance = await Attendance.findOne({ "correctionRequests._id": id }).populate("employee");
-    if (!attendance) {
+    let attendance = await Attendance.findOne({ "correctionRequests._id": id }).populate("employee");
+    let cr = null;
+
+    if (attendance) {
+      cr = attendance.correctionRequests.id(id);
+    } else if (mongoose.Types.ObjectId.isValid(id)) {
+      // Fallback: check if id passed was the attendanceId
+      attendance = await Attendance.findById(id).populate("employee");
+      if (attendance && attendance.correctionRequests?.length) {
+        cr = attendance.correctionRequests.find((r) => r.status === "Pending") || attendance.correctionRequests[attendance.correctionRequests.length - 1];
+      }
+    }
+
+    if (!attendance || !cr) {
       return res.status(404).json({ success: false, message: "Regularization request not found" });
     }
 
-    const cr = attendance.correctionRequests.id(id);
-    if (!cr) {
-      return res.status(404).json({ success: false, message: "Correction item not found" });
-    }
-
     cr.status = "Rejected";
-    cr.reviewedBy = adminId;
+    cr.reviewedBy = validAdminId;
     cr.reviewedAt = new Date();
-    cr.adminComment = comment || "Rejected by administrator";
+    cr.adminComment = comment;
 
     attendance.regularizationStatus = "Rejected";
 
@@ -3149,9 +3216,17 @@ export const rejectRegularizationAdmin = async (req, res) => {
 
     await attendance.save();
 
+    try {
+      if (attendance.employee?._id || attendance.employee) {
+        broadcastAttendanceUpdate(attendance.employee._id || attendance.employee, attendance);
+      }
+    } catch (sockErr) {
+      console.error("Socket broadcast error:", sockErr);
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Regularization request rejected.",
+      message: "Regularization request rejected",
       attendance,
     });
   } catch (error) {
@@ -4190,4 +4265,149 @@ export const detectCurrentNetworkInfo = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to detect network info", error: error.message });
   }
 };
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * ── BULK DELETE CONTROLLERS FOR ADMIN ATTENDANCE MODULE ───────────────────────
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * @desc    Bulk Delete Master Attendance Records
+ * @route   POST /api/attendance/admin/records/bulk-delete
+ * @access  Private (Admin)
+ */
+export const bulkDeleteAdminRecords = async (req, res) => {
+  try {
+    const { recordIds } = req.body;
+    if (!Array.isArray(recordIds) || recordIds.length === 0) {
+      return res.status(400).json({ success: false, message: "No record IDs provided for deletion" });
+    }
+
+    const validIds = recordIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const result = await Attendance.deleteMany({ _id: { $in: validIds } });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} attendance record(s).`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error in bulkDeleteAdminRecords:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete attendance records", error: error.message });
+  }
+};
+
+/**
+ * @desc    Bulk Delete Regularization Requests
+ * @route   POST /api/attendance/admin/regularizations/bulk-delete
+ * @access  Private (Admin)
+ */
+export const bulkDeleteAdminRegularizations = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: "No regularization IDs provided for deletion" });
+    }
+
+    const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+
+    // Remove correction requests matching these IDs from all Attendance documents
+    const pullResult = await Attendance.updateMany(
+      { "correctionRequests._id": { $in: validIds } },
+      {
+        $pull: { correctionRequests: { _id: { $in: validIds } } },
+        $set: { regularizationStatus: "None" },
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully removed ${ids.length} regularization request(s).`,
+      modifiedCount: pullResult.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error in bulkDeleteAdminRegularizations:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete regularization requests", error: error.message });
+  }
+};
+
+/**
+ * @desc    Bulk Delete WFH Requests
+ * @route   POST /api/attendance/admin/wfh-requests/bulk-delete
+ * @access  Private (Admin)
+ */
+export const bulkDeleteAdminWfhRequests = async (req, res) => {
+  try {
+    const { requestIds } = req.body;
+    if (!Array.isArray(requestIds) || requestIds.length === 0) {
+      return res.status(400).json({ success: false, message: "No WFH request IDs provided for deletion" });
+    }
+
+    const validIds = requestIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const result = await WfhRequest.deleteMany({ _id: { $in: validIds } });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} WFH request(s).`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error in bulkDeleteAdminWfhRequests:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete WFH requests", error: error.message });
+  }
+};
+
+/**
+ * @desc    Bulk Delete Attendance Exceptions
+ * @route   POST /api/attendance/admin/exceptions/bulk-delete
+ * @access  Private (Admin)
+ */
+export const bulkDeleteAdminExceptions = async (req, res) => {
+  try {
+    const { exceptionIds } = req.body;
+    if (!Array.isArray(exceptionIds) || exceptionIds.length === 0) {
+      return res.status(400).json({ success: false, message: "No exception IDs provided for deletion" });
+    }
+
+    const validIds = exceptionIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const result = await AttendanceException.deleteMany({ _id: { $in: validIds } });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} exception(s).`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error in bulkDeleteAdminExceptions:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete exceptions", error: error.message });
+  }
+};
+
+/**
+ * @desc    Bulk Delete Audit Trail Logs
+ * @route   POST /api/attendance/admin/audit-logs/bulk-delete
+ * @access  Private (Admin)
+ */
+export const bulkDeleteAdminAuditLogs = async (req, res) => {
+  try {
+    const { logIds } = req.body;
+    if (!Array.isArray(logIds) || logIds.length === 0) {
+      return res.status(400).json({ success: false, message: "No audit log IDs provided for deletion" });
+    }
+
+    const validIds = logIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const result = await AttendanceSecurityAudit.deleteMany({ _id: { $in: validIds } });
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} audit log(s).`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error in bulkDeleteAdminAuditLogs:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete audit logs", error: error.message });
+  }
+};
+
 

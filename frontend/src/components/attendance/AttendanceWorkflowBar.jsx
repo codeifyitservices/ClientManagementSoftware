@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check, AlertTriangle, Home, CheckCircle2 } from "lucide-react";
+import { LogIn, LogOut, Coffee, Play, Monitor, ShieldCheck, Clock, Utensils, User, Users, X, Check, AlertTriangle, Home, CheckCircle2, RotateCcw } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
 import WfhRequestModal from "./WfhRequestModal";
+import RevertCheckoutModal from "./RevertCheckoutModal";
 
 export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, onOpenAgentPairing }) {
   const [currentAttendance, setCurrentAttendance] = useState(null);
@@ -10,6 +11,7 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
   const [isRemote, setIsRemote] = useState(false);
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
   const [showBreakModal, setShowBreakModal] = useState(false);
+  const [showRevertModal, setShowRevertModal] = useState(false);
   const [breakReason, setBreakReason] = useState("Lunch Break");
   const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
   const [showWfhModal, setShowWfhModal] = useState(false);
@@ -305,6 +307,18 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
             </>
           )}
 
+          {currentAttendance?.checkInTime && currentAttendance?.checkOutTime && (
+            <button
+              type="button"
+              onClick={() => setShowRevertModal(true)}
+              className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-xs px-3.5 py-2.5 rounded-xl transition cursor-pointer shadow-xs"
+              title="Accidentally checked out? Request a revert from Admin"
+            >
+              <RotateCcw className="h-4 w-4 text-amber-600" />
+              <span>Accidental Check-out? Revert</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenAgentPairing}
             className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 transition cursor-pointer"
@@ -459,6 +473,17 @@ export default function AttendanceWorkflowBar({ currentUser, onStatusChanged, on
         onSuccess={() => {
           fetchWfhStatus();
           fetchCurrentSession();
+        }}
+      />
+
+      {/* Revert Checkout Modal */}
+      <RevertCheckoutModal
+        isOpen={showRevertModal}
+        onClose={() => setShowRevertModal(false)}
+        attendance={currentAttendance}
+        onSuccess={() => {
+          fetchCurrentSession();
+          if (onStatusChanged) onStatusChanged();
         }}
       />
     </div>

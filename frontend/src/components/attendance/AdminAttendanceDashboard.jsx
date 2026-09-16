@@ -362,8 +362,21 @@ export default function AdminAttendanceDashboard({ onNavigate, onNavigateTab, on
                   <ShieldCheck className="h-4 w-4 text-indigo-500" />
                   <span>WFH Requests</span>
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-indigo-100 text-indigo-700">
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-200">
                   {kpis.pendingWfh || 0} Pending
+                </span>
+              </button>
+
+              <button
+                onClick={() => nav("regularization")}
+                className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/40 text-xs font-bold text-slate-700 hover:text-indigo-600 transition cursor-pointer group"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Clock className="h-4 w-4 text-[#5D5FEF]" />
+                  <span>Regularization Requests</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-200">
+                  {kpis.pendingRegularizations || 0} Pending
                 </span>
               </button>
 
@@ -375,7 +388,7 @@ export default function AdminAttendanceDashboard({ onNavigate, onNavigateTab, on
                   <AlertTriangle className="h-4 w-4 text-red-500" />
                   <span>Audit Attendance Exceptions</span>
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-red-100 text-red-700">
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-orange-100 text-orange-800 border border-orange-200">
                   {kpis.attendanceExceptions || 0} Open
                 </span>
               </button>

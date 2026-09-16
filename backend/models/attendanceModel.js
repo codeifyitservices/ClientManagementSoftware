@@ -62,6 +62,11 @@ const correctionRequestSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Employee",
   },
+  requestType: {
+    type: String,
+    enum: ["Time Adjustment", "Revert Checkout", "Missed Punch"],
+    default: "Time Adjustment",
+  },
   checkInTime: {
     type: Date,
   },

@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Home,
   CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -37,6 +38,7 @@ import { attendanceService } from "../../services/attendanceService";
 import socketService from "../../services/socketService";
 import AgentPairingModal from "./AgentPairingModal";
 import WfhRequestModal from "./WfhRequestModal";
+import RevertCheckoutModal from "./RevertCheckoutModal";
 
 const getTodayDateString = (dateObj = new Date()) => {
   const d = new Date(dateObj);
@@ -76,6 +78,7 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [securityCheckMsg, setSecurityCheckMsg] = useState(null);
   const [showWfhModal, setShowWfhModal] = useState(false);
+  const [showRevertModal, setShowRevertModal] = useState(false);
   const [wfhStatus, setWfhStatus] = useState(null); // { type: 'approved' | 'pending', duration: string, request: object }
   const [localAgentInfo, setLocalAgentInfo] = useState({ checked: false, isRunning: false });
 
@@ -372,6 +375,9 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
 
   // Calculations & constants
   const attendance = sessionData?.attendance;
+  const hasPendingRevert =
+    attendance?.correctionRequests?.some((c) => c.status === "Pending") ||
+    attendance?.regularizationStatus === "Pending";
   const summary = summaryData?.summary;
   const isAgentConnected = sessionData?.isAgentConnected;
   const inGracePeriod = sessionData?.inGracePeriod;
@@ -797,6 +803,23 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
                 <LogOut className="h-3.5 w-3.5" />
                 <span>Check Out</span>
               </button>
+            ) : attendance?.checkInTime && attendance?.checkOutTime && isToday ? (
+              hasPendingRevert ? (
+                <div className="w-full flex items-center justify-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 font-bold text-[10px] py-2 rounded-xl text-center">
+                  <Clock className="h-3 w-3 shrink-0 animate-spin" />
+                  <span>Revert Pending</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowRevertModal(true)}
+                  className="w-full flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 font-bold text-[11px] py-2 rounded-xl transition shadow-xs cursor-pointer"
+                  title="Accidentally checked out? Submit a request to revert checkout and restore active session"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Undo Check-Out</span>
+                </button>
+              )
             ) : (
               <div className="h-[2px]"></div>
             )}
@@ -1313,6 +1336,16 @@ export default function EmployeeAttendanceDashboard({ currentUser }) {
         activeRequest={wfhStatus?.request}
         onSuccess={() => {
           setSecurityCheckMsg(null);
+          fetchData();
+        }}
+      />
+
+      {/* ── REVERT ACCIDENTAL CHECKOUT MODAL ────────────────────────────── */}
+      <RevertCheckoutModal
+        isOpen={showRevertModal}
+        onClose={() => setShowRevertModal(false)}
+        attendance={attendance}
+        onSuccess={() => {
           fetchData();
         }}
       />

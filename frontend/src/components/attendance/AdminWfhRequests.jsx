@@ -32,6 +32,8 @@ export default function AdminWfhRequests() {
   const [actionModal, setActionModal] = useState(null); // { type: 'approve' | 'reject' | 'bulk_approve', req?: object }
   const [adminComments, setAdminComments] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Active Whitelisted IPs Modal State
   const [showActiveWhitelistsModal, setShowActiveWhitelistsModal] = useState(false);
@@ -134,6 +136,25 @@ export default function AdminWfhRequests() {
     };
   };
 
+  const formatDateDisplay = (req) => {
+    if (!req) return "--";
+    if (req.startDate && req.endDate) {
+      const s = new Date(req.startDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+      const e = new Date(req.endDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+      return s === e ? s : `${s} → ${e}`;
+    }
+    if (req.startDate) {
+      return new Date(req.startDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    }
+    if (req.date) {
+      return new Date(req.date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    }
+    if (req.createdAt) {
+      return new Date(req.createdAt).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    }
+    return "--";
+  };
+
   const activeWhitelistsCount = whitelistsList.filter((w) => {
     if (w.status !== "Active") return false;
     if (!w.expiresAt) return true;
@@ -150,6 +171,27 @@ export default function AdminWfhRequests() {
     return empName.includes(term) || empId.includes(term) || ip.includes(term) || loc.includes(term);
   });
 
+  const [wfhCounts, setWfhCounts] = useState({ Pending: 0, Approved: 0, Rejected: 0, all: 0 });
+
+  const fetchWfhCounts = async () => {
+    try {
+      const res = await attendanceService.getAdminWfhRequests({ status: "all" });
+      const payload = res?.data || res;
+      const allReqs = payload?.data || payload?.requests || (Array.isArray(payload) ? payload : []);
+      const pCount = allReqs.filter((r) => r.status === "Pending").length;
+      const aCount = allReqs.filter((r) => r.status === "Approved").length;
+      const rCount = allReqs.filter((r) => r.status === "Rejected").length;
+      setWfhCounts({
+        Pending: pCount,
+        Approved: aCount,
+        Rejected: rCount,
+        all: allReqs.length,
+      });
+    } catch (err) {
+      console.error("Failed to load WFH counts", err);
+    }
+  };
+
   const fetchRequests = async () => {
     try {
       setLoading(true);
@@ -161,6 +203,7 @@ export default function AdminWfhRequests() {
         setRequests(payload?.data || payload?.requests || (Array.isArray(payload) ? payload : []));
         setSelectedIds([]);
       }
+      fetchWfhCounts();
     } catch (err) {
       console.error("Failed to fetch WFH requests", err);
     } finally {
@@ -170,6 +213,7 @@ export default function AdminWfhRequests() {
 
   useEffect(() => {
     fetchRequests();
+    fetchWfhCounts();
   }, [statusFilter]);
 
   const toggleSelect = (id) => {
@@ -239,22 +283,26 @@ export default function AdminWfhRequests() {
     }
   };
 
-  const formatDateDisplay = (req) => {
-    if (!req) return "--";
-    const start = req.startDate || req.date;
-    const end = req.endDate;
-    if (!start) return "--";
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
     try {
-      const startStr = new Date(start).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
-      if (end && new Date(end).toDateString() !== new Date(start).toDateString()) {
-        const endStr = new Date(end).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
-        return `${startStr} - ${endStr}`;
+      setBulkDeleting(true);
+      const res = await attendanceService.bulkDeleteAdminWfhRequests(selectedIds);
+      if (res?.success) {
+        setSelectedIds([]);
+        setShowDeleteModal(false);
+        fetchRequests();
+        fetchWfhCounts();
+      } else {
+        alert(res?.message || "Failed to delete selected WFH requests");
       }
-      return startStr;
-    } catch {
-      return String(start);
+    } catch (err) {
+      alert(err.response?.data?.message || err?.message || "Error deleting WFH requests");
+    } finally {
+      setBulkDeleting(false);
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -269,7 +317,7 @@ export default function AdminWfhRequests() {
             Review, approve, or reject employee requests for remote attendance and 24-hour network IP whitelisting.
           </p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {statusFilter === "Pending" && selectedIds.length > 0 && (
             <button
               onClick={() => setActionModal({ type: "bulk_approve" })}
@@ -277,6 +325,15 @@ export default function AdminWfhRequests() {
             >
               <Check className="w-4 h-4" />
               Approve Selected ({selectedIds.length})
+            </button>
+          )}
+          {selectedIds.length > 0 && (
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors cursor-pointer animate-fade-in"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Selected ({selectedIds.length})
             </button>
           )}
           <button
@@ -295,19 +352,36 @@ export default function AdminWfhRequests() {
       {/* Filter Tabs & Whitelisted IP Action Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          {["Pending", "Approved", "Rejected", "all"].map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
-                statusFilter === status
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {status === "all" ? "All Requests" : status}
-            </button>
-          ))}
+          {[
+            { id: "Pending", label: "Pending", showCount: true, badgeColor: "bg-amber-500 text-white" },
+            { id: "Approved", label: "Approved" },
+            { id: "Rejected", label: "Rejected" },
+            { id: "all", label: "All Requests" },
+          ].map(({ id, label, showCount, badgeColor }) => {
+            const count = wfhCounts.Pending || 0;
+            return (
+              <button
+                key={id}
+                onClick={() => setStatusFilter(id)}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                  statusFilter === id
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100 border border-slate-200 bg-white"
+                }`}
+              >
+                <span>{label}</span>
+                {showCount && count > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 min-w-[18px] text-[10px] font-black rounded-full text-center leading-tight shadow-xs ${
+                      statusFilter === id ? "bg-white text-indigo-700" : badgeColor
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Right Action Button (in the red highlighted area) */}
@@ -329,23 +403,64 @@ export default function AdminWfhRequests() {
         </button>
       </div>
 
+      {/* Floating Selection Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-indigo-50/90 border border-indigo-200 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-fade-in shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-bold text-indigo-950">
+              {selectedIds.length} of {requests.length} WFH request{selectedIds.length > 1 ? "s" : ""} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-lg hover:bg-white/80 transition cursor-pointer"
+            >
+              Deselect All
+            </button>
+            {statusFilter === "Pending" && (
+              <button
+                onClick={() => setActionModal({ type: "bulk_approve" })}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Approve Selected ({selectedIds.length})</span>
+              </button>
+            )}
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition shadow-rose-200 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
               <tr>
-                {statusFilter === "Pending" && (
-                  <th className="px-4 py-3.5 w-10">
-                    <button onClick={toggleSelectAll} className="text-slate-500 hover:text-indigo-600 cursor-pointer">
-                      {selectedIds.length === requests.length && requests.length > 0 ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-600" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
-                  </th>
-                )}
+                <th className="px-4 py-3.5 w-10 text-center">
+                  <button 
+                    type="button"
+                    onClick={toggleSelectAll} 
+                    className="p-1 text-slate-400 hover:text-indigo-600 transition cursor-pointer"
+                    title={requests.length > 0 && selectedIds.length === requests.length ? "Deselect all" : "Select all visible"}
+                  >
+                    {requests.length > 0 && selectedIds.length === requests.length ? (
+                      <CheckSquare className="w-4 h-4 text-indigo-600" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </th>
                 <th className="px-5 py-3.5">Employee</th>
                 <th className="px-4 py-3.5">Date & Duration</th>
                 <th className="px-4 py-3.5">IP & Geolocation</th>
@@ -359,14 +474,14 @@ export default function AdminWfhRequests() {
             <tbody className="divide-y divide-slate-100">
               {loading && requests.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-10 text-slate-400">
+                  <td colSpan={statusFilter === "Pending" ? 9 : 8} className="text-center py-10 text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
                     Loading WFH requests...
                   </td>
                 </tr>
               ) : requests.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-10 text-slate-400 text-sm">
+                  <td colSpan={statusFilter === "Pending" ? 9 : 8} className="text-center py-10 text-slate-400 text-sm">
                     No {statusFilter === "all" ? "" : statusFilter.toLowerCase()} WFH requests found.
                   </td>
                 </tr>
@@ -383,13 +498,15 @@ export default function AdminWfhRequests() {
 
                   return (
                     <tr key={r._id} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? "bg-indigo-50/40" : ""}`}>
-                      {statusFilter === "Pending" && (
-                        <td className="px-4 py-3.5">
-                          <button onClick={() => toggleSelect(r._id)} className="text-slate-400 hover:text-indigo-600 cursor-pointer">
-                            {isSelected ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4" />}
-                          </button>
-                        </td>
-                      )}
+                      <td className="px-4 py-3.5 text-center">
+                        <button 
+                          type="button"
+                          onClick={() => toggleSelect(r._id)} 
+                          className="p-1 text-slate-400 hover:text-indigo-600 transition cursor-pointer"
+                        >
+                          {isSelected ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4 text-slate-300" />}
+                        </button>
+                      </td>
                       <td className="px-5 py-3.5">
                         <div className="font-semibold text-slate-800">{employeeName}</div>
                         <div className="text-xs text-slate-400">{employeeDept} • {employeeEmail}</div>
@@ -765,6 +882,63 @@ export default function AdminWfhRequests() {
                 className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer shadow-xs"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl border border-rose-200">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Delete {selectedIds.length} WFH Request{selectedIds.length > 1 ? "s" : ""}?
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  This action is permanent and cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-slate-600 space-y-1">
+              <p>
+                You are about to permanently delete <strong>{selectedIds.length}</strong> selected Work From Home request{selectedIds.length > 1 ? "s" : ""}.
+              </p>
+              <p className="text-slate-500">
+                Any pending approvals or attached IP whitelisting requests will be discarded.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={bulkDeleting}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold rounded-xl text-white bg-rose-600 hover:bg-rose-700 transition shadow-sm shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+              >
+                {bulkDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

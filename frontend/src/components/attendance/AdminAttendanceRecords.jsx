@@ -14,7 +14,12 @@ import {
   AlertCircle,
   XCircle,
   MapPin,
-  Lock
+  Lock,
+  Trash2,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  X
 } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
 
@@ -25,6 +30,11 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
   const [locations, setLocations] = useState([]);
   const [shifts, setShifts] = useState([]);
   
+  // Selection State
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   // Filters & Pagination
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -79,12 +89,46 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
 
   useEffect(() => {
     fetchRecords();
+    setSelectedIds([]);
   }, [page, startDate, endDate, status, department, locationMode, isLate, regularizationStatus]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     setPage(1);
     fetchRecords();
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === records.length && records.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(records.map((r) => r._id));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      setBulkDeleting(true);
+      const res = await attendanceService.bulkDeleteAdminRecords(selectedIds);
+      if (res?.success) {
+        setSelectedIds([]);
+        setShowDeleteModal(false);
+        fetchRecords();
+      } else {
+        alert(res?.message || "Failed to delete selected records");
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || err?.message || "Error deleting selected records");
+    } finally {
+      setBulkDeleting(false);
+    }
   };
 
   const exportCSV = () => {
@@ -118,102 +162,120 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Attendance_Records_${startDate}_to_${endDate}.csv`);
+    link.setAttribute("download", `attendance_records_${startDate}_to_${endDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const getStatusBadge = (r) => {
-    switch (r.status) {
+  const getStatusBadge = (rec) => {
+    const st = rec.attendanceStatus || rec.status;
+    switch (st) {
       case "Present":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Present</span>;
       case "Completed":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">Completed</span>;
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Present</span>;
       case "Half-Day":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">Half Day</span>;
+      case "Half Day":
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">Half-Day</span>;
       case "Absent":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">Absent</span>;
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">Absent</span>;
       case "On Leave":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">On Leave</span>;
+      case "Leave":
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">On Leave</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">{r.status || "Unknown"}</span>;
+        return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 border border-slate-200">{st || "Not Checked In"}</span>;
     }
   };
 
+  const isAllSelected = records.length > 0 && selectedIds.length === records.length;
+
   return (
     <div className="space-y-6">
-      {/* Header & Export */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-800">Master Attendance Records</h2>
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-xl font-bold text-slate-800">Master Attendance Records</h2>
+          </div>
           <p className="text-xs text-slate-500 mt-1">
-            Browse, search, and audit all employee daily attendance logs, work hours, breaks, and compliance records.
+            Browse, filter, audit, and manage full employee attendance logs and punch history across all departments.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {selectedIds.length > 0 && (
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition shadow-sm cursor-pointer animate-fade-in"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          )}
+
+          <button
+            onClick={exportCSV}
+            disabled={!records.length}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition disabled:opacity-50 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+
           <button
             onClick={fetchRecords}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
-          </button>
-          <button
-            onClick={exportCSV}
-            disabled={records.length === 0}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV ({totalRecords})
           </button>
         </div>
       </div>
 
       {/* Filter Section */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search by employee name or email..."
+              placeholder="Search by employee name, email, employee ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:bg-white"
+              className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:bg-white"
             />
           </div>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-indigo-50 text-indigo-600 font-medium text-xs rounded-xl hover:bg-indigo-100 transition-colors"
-          >
-            Search
-          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+                className="bg-transparent text-xs text-slate-700 focus:outline-none"
+              />
+              <span className="text-slate-400">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+                className="bg-transparent text-xs text-slate-700 focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+            >
+              Search
+            </button>
+          </div>
         </form>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-2 border-t border-slate-100">
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase block mb-1">From Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-              className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase block mb-1">To Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-              className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
           <div>
             <label className="text-[11px] font-semibold text-slate-500 uppercase block mb-1">Department</label>
             <select
@@ -272,34 +334,73 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
         </div>
       </div>
 
+      {/* Selected Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="bg-indigo-50/90 border border-indigo-200 p-3 rounded-2xl flex items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-center gap-2 text-xs text-indigo-950 font-bold">
+            <CheckSquare className="w-4 h-4 text-indigo-600" />
+            <span>{selectedIds.length} of {records.length} records selected on this page</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="text-xs text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded-lg hover:bg-indigo-100/60 transition cursor-pointer"
+            >
+              Deselect All
+            </button>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600">
+          <table className="w-full text-left text-sm text-slate-600 border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
               <tr>
-                <th className="px-5 py-3.5">Date</th>
-                <th className="px-5 py-3.5">Employee</th>
-                <th className="px-4 py-3.5">Shift & Mode</th>
-                <th className="px-4 py-3.5">Status</th>
-                <th className="px-4 py-3.5">Clock In / Out</th>
-                <th className="px-4 py-3.5">Gross / Net Hours</th>
-                <th className="px-4 py-3.5">Breaks</th>
-                <th className="px-4 py-3.5">Punctuality & OT</th>
-                <th className="px-4 py-3.5 text-right">Actions</th>
+                <th className="px-4 py-3.5 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="p-1 text-slate-400 hover:text-indigo-600 transition cursor-pointer"
+                    title={isAllSelected ? "Deselect all" : "Select all visible"}
+                  >
+                    {isAllSelected ? (
+                      <CheckSquare className="w-4 h-4 text-indigo-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-3.5 min-w-[110px]">Date</th>
+                <th className="px-5 py-3.5 min-w-[200px]">Employee</th>
+                <th className="px-4 py-3.5 min-w-[120px]">Shift & Mode</th>
+                <th className="px-4 py-3.5 min-w-[110px]">Status</th>
+                <th className="px-4 py-3.5 min-w-[160px]">Clock In / Out</th>
+                <th className="px-4 py-3.5 min-w-[140px]">Gross / Net Hours</th>
+                <th className="px-4 py-3.5 min-w-[120px]">Breaks</th>
+                <th className="px-4 py-3.5 min-w-[130px]">Punctuality & OT</th>
+                <th className="px-4 py-3.5 text-right min-w-[90px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && records.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-10 text-slate-400">
+                  <td colSpan="10" className="text-center py-10 text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
                     Loading attendance records...
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-10 text-slate-400">
+                  <td colSpan="10" className="text-center py-10 text-slate-400">
                     No attendance records found matching the criteria.
                   </td>
                 </tr>
@@ -313,10 +414,30 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
                   const empName = r.employee?.fullName || r.user?.name || r.user?.fullName || r.name || "Unknown";
                   const empDept = r.employee?.department || r.user?.department || "General";
                   const netHours = r.totalHours !== undefined ? r.totalHours : (r.totalWorkingMinutes ? r.totalWorkingMinutes / 60 : 0);
+                  const isSelected = selectedIds.includes(r._id);
 
                   return (
-                    <tr key={r._id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-3.5 font-medium text-slate-800 whitespace-nowrap">
+                    <tr
+                      key={r._id}
+                      className={`hover:bg-slate-50/80 transition-colors ${
+                        isSelected ? "bg-indigo-50/40" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectOne(r._id)}
+                          className="p-1 text-slate-400 hover:text-indigo-600 transition cursor-pointer"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-indigo-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300" />
+                          )}
+                        </button>
+                      </td>
+
+                      <td className="px-4 py-3.5 font-medium text-slate-800 whitespace-nowrap">
                         {dateStr}
                       </td>
 
@@ -334,7 +455,7 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
                         {getStatusBadge(r)}
                       </td>
 
-                      <td className="px-4 py-3.5 text-xs font-mono">
+                      <td className="px-4 py-3.5 text-xs font-mono whitespace-nowrap">
                         <span className="text-emerald-700 font-medium">{inTime}</span>
                         <span className="text-slate-400 mx-1">→</span>
                         <span className="text-slate-700 font-medium">{outTime}</span>
@@ -366,7 +487,7 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
                       <td className="px-4 py-3.5 text-right">
                         <button
                           onClick={() => onSelectRecord && onSelectRecord(r)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg border border-indigo-200 transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg border border-indigo-200 transition-colors cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           View
@@ -392,7 +513,7 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1 || loading}
-              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-40"
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-40 cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -402,13 +523,70 @@ export default function AdminAttendanceRecords({ onSelectRecord }) {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages || loading}
-              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-40"
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-40 cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       </div>
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl border border-rose-200">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Delete {selectedIds.length} Attendance Record{selectedIds.length > 1 ? "s" : ""}?
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  This action is permanent and cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-slate-600 space-y-1">
+              <p>
+                You are about to permanently delete <strong>{selectedIds.length}</strong> selected attendance log{selectedIds.length > 1 ? "s" : ""}.
+              </p>
+              <p className="text-slate-500">
+                Associated time entries, break records, and audit events for these dates will be removed.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={bulkDeleting}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold rounded-xl text-white bg-rose-600 hover:bg-rose-700 transition shadow-sm shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+              >
+                {bulkDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
