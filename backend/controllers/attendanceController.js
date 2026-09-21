@@ -3601,12 +3601,19 @@ export const getAdminEmployeeProfile = async (req, res) => {
     const targetYear = parseInt(year, 10) || new Date().getFullYear();
 
     const employee = await Employee.findById(employeeId).select(
-      "fullName employeeId companyEmail department designation workLocation employmentType joiningDate status"
+      "fullName employeeId companyEmail department designation workLocation employmentType joiningDate status createdAt"
     );
 
     if (!employee) {
       return res.status(404).json({ success: false, message: "Employee not found" });
     }
+
+    // Retrieve attendance policy and working shift workingDays
+    const policy = await AttendancePolicy.findOne({ companyId: "default_company" });
+    const defaultShift = policy?.shifts?.find((s) => s.isDefault && s.isActive) || policy?.shifts?.[0] || {};
+    const configuredWorkingDays = Array.isArray(defaultShift.workingDays) && defaultShift.workingDays.length > 0
+      ? defaultShift.workingDays
+      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     const startDate = `${targetYear}-01-01`;
     const endDate = `${targetYear}-12-31`;
@@ -3615,6 +3622,94 @@ export const getAdminEmployeeProfile = async (req, res) => {
       employee: employeeId,
       date: { $gte: startDate, $lte: endDate },
     }).sort({ date: -1 });
+
+    const recordMap = new Map();
+    records.forEach((r) => {
+      recordMap.set(r.date, r);
+    });
+
+    const DAY_KEYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const todayStr = getTodayDateString();
+    const currentYear = new Date().getFullYear();
+
+    // Determine evaluation date range for the employee
+    let joinDateStr = startDate;
+    if (employee.joiningDate) {
+      const jd = new Date(employee.joiningDate);
+      if (!isNaN(jd.getTime())) {
+        const jdYear = jd.getFullYear();
+        if (jdYear === targetYear) {
+          joinDateStr = jd.toISOString().split("T")[0];
+        } else if (jdYear > targetYear) {
+          joinDateStr = `${targetYear}-12-31`;
+        }
+      }
+    }
+
+    const effectiveEndStr = targetYear === currentYear 
+      ? (todayStr < endDate ? todayStr : endDate) 
+      : (targetYear < currentYear ? endDate : startDate);
+
+    const combinedRecords = [];
+    const processedDates = new Set();
+
+    // Generate date sequence if start <= effectiveEnd
+    if (joinDateStr <= effectiveEndStr) {
+      const [sY, sM, sD] = joinDateStr.split("-").map(Number);
+      const [eY, eM, eD] = effectiveEndStr.split("-").map(Number);
+      const curDate = new Date(sY, sM - 1, sD);
+      const endDateObj = new Date(eY, eM - 1, eD);
+
+      while (curDate <= endDateObj) {
+        const y = curDate.getFullYear();
+        const m = String(curDate.getMonth() + 1).padStart(2, "0");
+        const d = String(curDate.getDate()).padStart(2, "0");
+        const dateStr = `${y}-${m}-${d}`;
+        const dayOfWeekKey = DAY_KEYS[curDate.getDay()];
+
+        processedDates.add(dateStr);
+
+        const existingRecord = recordMap.get(dateStr);
+        if (existingRecord) {
+          combinedRecords.push(existingRecord);
+        } else {
+          // If it's a designated shift working day and no record exists, mark as Absent
+          if (configuredWorkingDays.includes(dayOfWeekKey)) {
+            combinedRecords.push({
+              _id: `absent_${employeeId}_${dateStr}`,
+              date: dateStr,
+              attendanceStatus: "Absent",
+              status: "Absent",
+              locationMode: "--",
+              checkInTime: null,
+              clockInTime: null,
+              checkOutTime: null,
+              clockOutTime: null,
+              totalWorkingMinutes: 0,
+              overtimeMinutes: 0,
+              totalBreakMinutes: 0,
+              breaks: [],
+              isLate: false,
+              isAbsent: true,
+              isSynthesizedAbsent: true,
+            });
+          }
+        }
+
+        curDate.setDate(curDate.getDate() + 1);
+      }
+    }
+
+    // Also include any recorded attendance that may fall outside the loop (e.g. future pre-approved leave or logs)
+    records.forEach((r) => {
+      if (!processedDates.has(r.date)) {
+        combinedRecords.push(r);
+        processedDates.add(r.date);
+      }
+    });
+
+    // Sort descending (latest dates first)
+    combinedRecords.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
 
     let presentDays = 0;
     let absentDays = 0;
@@ -3638,7 +3733,7 @@ export const getAdminEmployeeProfile = async (req, res) => {
       overtime: 0,
     }));
 
-    records.forEach((r) => {
+    combinedRecords.forEach((r) => {
       const monthIdx = parseInt(r.date.split("-")[1], 10) - 1;
       const hours = (r.totalWorkingMinutes || 0) / 60;
       const ot = (r.overtimeMinutes || 0) / 60;
@@ -3676,8 +3771,10 @@ export const getAdminEmployeeProfile = async (req, res) => {
       }
     });
 
-    const totalDaysRecorded = records.length || 1;
-    const attendancePercentage = Math.round((presentDays / totalDaysRecorded) * 100) || 0;
+    const totalWorkingDaysRecorded = presentDays + absentDays + (halfDays * 0.5) + leaveDays;
+    const attendancePercentage = totalWorkingDaysRecorded > 0
+      ? Math.round((presentDays / totalWorkingDaysRecorded) * 100)
+      : 0;
     const avgWorkingHours = presentDays > 0 ? (totalWorkingMinutes / 60 / presentDays).toFixed(1) : "0.0";
 
     return res.status(200).json({
@@ -3697,10 +3794,10 @@ export const getAdminEmployeeProfile = async (req, res) => {
         lateArrivals,
         earlyCheckouts,
         regularizations,
-        totalRecordsCount: records.length,
+        totalRecordsCount: combinedRecords.length,
       },
       monthlyBreakdown,
-      recentRecords: records.slice(0, 30),
+      recentRecords: combinedRecords.slice(0, 100),
     });
   } catch (error) {
     console.error("Error in getAdminEmployeeProfile:", error);
@@ -4077,6 +4174,14 @@ export const getAdminPolicies = async (req, res) => {
     }
 
     const policyObj = policy.toObject();
+    if (policyObj.shifts && Array.isArray(policyObj.shifts)) {
+      policyObj.shifts = policyObj.shifts.map((s) => ({
+        ...s,
+        workingDays: Array.isArray(s.workingDays) && s.workingDays.length > 0
+          ? s.workingDays
+          : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      }));
+    }
     policyObj.rules = {
       ...(policyObj.rules || {}),
       enableGeofencing: policy.enforceGeofence,
@@ -4105,8 +4210,12 @@ export const updateAdminPolicies = async (req, res) => {
       policy = new AttendancePolicy({ companyId: "default_company" });
     }
 
+    if (Array.isArray(updates.shifts)) {
+      policy.shifts = updates.shifts;
+    }
+
     Object.keys(updates).forEach((k) => {
-      if (k !== "_id" && k !== "companyId") {
+      if (k !== "_id" && k !== "companyId" && k !== "shifts") {
         policy[k] = updates[k];
       }
     });

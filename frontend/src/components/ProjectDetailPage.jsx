@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { formatWithINRConversion } from "../utils/currencyUtils";
+import { formatWithINRConversion, formatCurrencyOnly, getCurrencyCode, getCurrencySymbol, SUPPORTED_CURRENCIES, convertCurrency } from "../utils/currencyUtils";
 import {
   ChevronLeft,
   ChevronDown,
@@ -60,6 +60,7 @@ export default function ProjectDetailPage({
     title: "",
     category: "Software / Tools",
     amount: "",
+    currency: "INR (₹)",
     date: new Date().toISOString().split("T")[0],
     paidBy: "Company Account",
     notes: "",
@@ -245,6 +246,7 @@ export default function ProjectDetailPage({
         title: expense.title,
         category: expense.category || "Software / Tools",
         amount: expense.amount,
+        currency: expense.currency || project.currency || "INR (₹)",
         date: expense.date ? new Date(expense.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
         paidBy: expense.paidBy || "Company Account",
         notes: expense.notes || "",
@@ -255,6 +257,7 @@ export default function ProjectDetailPage({
         title: "",
         category: "Software / Tools",
         amount: "",
+        currency: project.currency || "INR (₹)",
         date: new Date().toISOString().split("T")[0],
         paidBy: "Company Account",
         notes: "",
@@ -395,9 +398,10 @@ export default function ProjectDetailPage({
   }
 
   // --- Financial Stats Aggregation ---
+  const isINR = getCurrencyCode(project.currency) === "INR";
   const isForeignClient = project.client?.isForeign === true;
   const isPersonalAcc = project.isPersonalAccount === true;
-  const hasGst = !isForeignClient && !isPersonalAcc;
+  const hasGst = isINR && !isForeignClient && !isPersonalAcc;
 
   // Base Project Value & Tax Values
   let totalBaseValue = Number(project.projectValue) || 0;
@@ -425,7 +429,7 @@ export default function ProjectDetailPage({
 
   // Calculate detailed milestone metrics
   const milestoneDetails = (project.milestones || []).map((m) => {
-    const isMExempt = isForeignClient || isPersonalAcc || !!m.isPersonal;
+    const isMExempt = !isINR || isForeignClient || isPersonalAcc || !!m.isPersonal;
     const isMIncl = isMExempt ? true : !!m.isInclusive;
     const rawAmt = Number(m.amount) || 0;
 
@@ -541,9 +545,14 @@ export default function ProjectDetailPage({
   const baseProgressPercent = totalBaseValue > 0 ? Math.min(100, Math.round((baseReceived / totalBaseValue) * 100)) : 0;
   const taxProgressPercent = (hasGst && totalTaxValue > 0) ? Math.min(100, Math.round((taxReceived / totalTaxValue) * 100)) : 0;
 
-  // Expenses Aggregation
+  // Expenses Aggregation (converted to project currency if multi-currency)
   const expensesList = project.expenses || [];
-  const totalExpenses = expensesList.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const totalExpenses = expensesList.reduce((sum, e) => {
+    const amt = Number(e.amount) || 0;
+    const expCurrency = e.currency || project.currency || "INR (₹)";
+    const converted = convertCurrency(amt, expCurrency, project.currency);
+    return sum + converted;
+  }, 0);
 
   // Profitability Calculations
   const operationalRevenue = totalReceived; 
@@ -592,10 +601,15 @@ export default function ProjectDetailPage({
   // ── DEDICATED FULL-PAGE ADD / EDIT EXPENSE VIEW (IN NORMAL DOCUMENT FLOW, NO INNER SCROLLBAR) ──
   if (showExpenseModal) {
     const typedAmt = Number(expenseForm.amount) || 0;
-    const existingAmt = editingExpenseId
-      ? Number(project.expenses?.find((e) => e._id === editingExpenseId)?.amount) || 0
+    const typedCurrency = expenseForm.currency || project.currency || "INR (₹)";
+    const typedAmtConverted = convertCurrency(typedAmt, typedCurrency, project.currency);
+
+    const existingExp = editingExpenseId ? project.expenses?.find((e) => e._id === editingExpenseId) : null;
+    const existingAmtConverted = existingExp
+      ? convertCurrency(Number(existingExp.amount) || 0, existingExp.currency || project.currency || "INR (₹)", project.currency)
       : 0;
-    const newTotalExpenses = Math.max(0, totalExpenses - existingAmt + typedAmt);
+
+    const newTotalExpenses = Math.max(0, totalExpenses - existingAmtConverted + typedAmtConverted);
     const newGrossProfit = operationalRevenue - newTotalExpenses;
 
     let newCommission = 0;
@@ -777,7 +791,28 @@ export default function ProjectDetailPage({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                  {/* Currency Selector */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Currency <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={expenseForm.currency || project.currency || "INR (₹)"}
+                        onChange={(e) => setExpenseForm({ ...expenseForm, currency: e.target.value })}
+                        className="w-full h-11 px-3.5 pr-8 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 bg-slate-50/40 focus:bg-white focus:border-[#5D5FEF] focus:ring-2 focus:ring-indigo-500/10 transition-all outline-none appearance-none cursor-pointer"
+                      >
+                        {SUPPORTED_CURRENCIES.map((c) => (
+                          <option key={c.code} value={c.label}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="h-4 w-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
                   {/* Amount */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-slate-700">
@@ -785,7 +820,7 @@ export default function ProjectDetailPage({
                     </label>
                     <div className="flex rounded-xl border border-slate-200 bg-slate-50/40 focus-within:bg-white focus-within:border-[#5D5FEF] focus-within:ring-2 focus-within:ring-indigo-500/10 transition-all overflow-hidden h-11">
                       <span className="inline-flex items-center px-3.5 bg-slate-100/80 border-r border-slate-200 text-xs font-bold text-slate-600 select-none whitespace-nowrap">
-                        {project.currency || "₹"}
+                        {getCurrencySymbol(expenseForm.currency || project.currency || "INR (₹)")}
                       </span>
                       <input
                         type="number"
@@ -798,6 +833,11 @@ export default function ProjectDetailPage({
                         placeholder="0.00"
                       />
                     </div>
+                    {expenseForm.currency && getCurrencyCode(expenseForm.currency) !== getCurrencyCode(project.currency) && Number(expenseForm.amount) > 0 && (
+                      <p className="text-[10px] font-semibold text-indigo-600">
+                        ≈ {formatCurrencyOnly(convertCurrency(expenseForm.amount, expenseForm.currency, project.currency), project.currency)} in Project Currency
+                      </p>
+                    )}
                   </div>
 
                   {/* Paid By Account */}
@@ -810,7 +850,7 @@ export default function ProjectDetailPage({
                       value={expenseForm.paidBy}
                       onChange={(e) => setExpenseForm({ ...expenseForm, paidBy: e.target.value })}
                       className="w-full h-11 px-3.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800 placeholder-slate-400 bg-slate-50/40 focus:bg-white focus:border-[#5D5FEF] focus:ring-2 focus:ring-indigo-500/10 transition-all outline-none"
-                      placeholder="e.g. Company Bank Account, Corporate Card, Director Account"
+                      placeholder="e.g. Company Bank Account, Corporate Card"
                     />
 
                     {/* Quick suggestions for Paid By */}
@@ -909,7 +949,7 @@ export default function ProjectDetailPage({
                   <div className="flex items-center justify-between py-1.5 border-b border-white/5">
                     <span className="text-slate-400 font-medium">Collected Revenue</span>
                     <span className="font-bold text-white">
-                      {formatWithINRConversion(operationalRevenue, project.currency)}
+                      {formatWithINRConversion(operationalRevenue, project.currency, operationalRevenue > 0)}
                     </span>
                   </div>
 
@@ -917,11 +957,11 @@ export default function ProjectDetailPage({
                     <span className="text-slate-400 font-medium">Total Project Expenses</span>
                     <div className="text-right">
                       <span className="font-black text-rose-400">
-                        {formatWithINRConversion(newTotalExpenses, project.currency)}
+                        {formatCurrencyOnly(newTotalExpenses, project.currency)}
                       </span>
                       {typedAmt > 0 && (
                         <span className="block text-[10px] text-rose-300">
-                          (+{formatWithINRConversion(typedAmt - existingAmt, project.currency)})
+                          (+{formatCurrencyOnly(typedAmt - existingAmt, project.currency)})
                         </span>
                       )}
                     </div>
@@ -931,7 +971,7 @@ export default function ProjectDetailPage({
                     <div className="flex items-center justify-between py-1.5 border-b border-white/5">
                       <span className="text-slate-400 font-medium">Sales Commission</span>
                       <span className="font-bold text-purple-300">
-                        - {formatWithINRConversion(newCommission, project.currency)}
+                        - {formatCurrencyOnly(newCommission, project.currency)}
                       </span>
                     </div>
                   )}
@@ -942,7 +982,7 @@ export default function ProjectDetailPage({
                         Projected Net Profit
                       </span>
                       <span className={`text-sm font-black ${newNetProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                        {formatWithINRConversion(newNetProfit, project.currency)}
+                        {formatCurrencyOnly(newNetProfit, project.currency)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[11px] pt-1">
@@ -1142,36 +1182,39 @@ export default function ProjectDetailPage({
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="p-4 bg-slate-50/50 border border-slate-100 rounded-xl">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Project Value</span>
-                <h4 className="text-lg font-black text-slate-900 mt-1">{formatWithINRConversion(totalProjectValue, project.currency)}</h4>
+                <h4 className="text-lg font-black text-slate-900 mt-1">{formatCurrencyOnly(totalProjectValue, project.currency)}</h4>
                 {project.isPersonalAccount && (
                   <span className="text-[8px] text-amber-500 font-bold uppercase select-none block mt-0.5">(Personal - 0% Tax)</span>
                 )}
-                {project.client?.isForeign && (
+                {!project.isPersonalAccount && project.client?.isForeign && (
                   <span className="text-[8px] text-emerald-500 font-bold uppercase select-none block mt-0.5">(Foreign - 0% Tax)</span>
                 )}
-                {!project.isPersonalAccount && !project.client?.isForeign && project.projectValue !== undefined && (
+                {!project.isPersonalAccount && !project.client?.isForeign && !isINR && (
+                  <span className="text-[8px] text-emerald-500 font-bold uppercase select-none block mt-0.5">({getCurrencyCode(project.currency)} - 0% Tax)</span>
+                )}
+                {isINR && !project.isPersonalAccount && !project.client?.isForeign && project.projectValue !== undefined && (
                   <span className="text-[8px] text-indigo-500 font-bold uppercase select-none block mt-0.5">
-                    {project.inclusiveGst ? "(Inclusive GST)" : `(+18% GST: Base ${formatWithINRConversion(totalBaseValue, project.currency)} + Tax ${formatWithINRConversion(totalTaxValue, project.currency)})`}
+                    {project.inclusiveGst ? "(Inclusive GST)" : `(+18% GST: Base ${formatCurrencyOnly(totalBaseValue, project.currency)} + Tax ${formatCurrencyOnly(totalTaxValue, project.currency)})`}
                   </span>
                 )}
               </div>
 
               <div className="p-4 bg-emerald-50/25 border border-emerald-100/60 rounded-xl">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Received</span>
-                <h4 className="text-lg font-black text-emerald-600 mt-1">{formatWithINRConversion(totalReceived, project.currency)}</h4>
+                <h4 className="text-lg font-black text-emerald-600 mt-1">{formatWithINRConversion(totalReceived, project.currency, totalReceived > 0)}</h4>
                 {hasGst && totalReceived > 0 && (
                   <span className="text-[8px] text-emerald-600/80 font-semibold select-none block mt-0.5 truncate">
-                    Base: {formatWithINRConversion(baseReceived, project.currency)} | Tax: {formatWithINRConversion(taxReceived, project.currency)}
+                    Base: {formatWithINRConversion(baseReceived, project.currency, baseReceived > 0)} | Tax: {formatWithINRConversion(taxReceived, project.currency, taxReceived > 0)}
                   </span>
                 )}
               </div>
 
               <div className="p-4 bg-rose-50/25 border border-rose-100/60 rounded-xl">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-rose-500">Outstanding</span>
-                <h4 className="text-lg font-black text-rose-600 mt-1">{formatWithINRConversion(totalOutstanding, project.currency)}</h4>
+                <h4 className="text-lg font-black text-rose-600 mt-1">{formatCurrencyOnly(totalOutstanding, project.currency)}</h4>
                 {hasGst && totalOutstanding > 0 && (
                   <span className="text-[8px] text-rose-500/80 font-semibold select-none block mt-0.5 truncate">
-                    Base: {formatWithINRConversion(baseOutstanding, project.currency)} | Tax: {formatWithINRConversion(taxOutstanding, project.currency)}
+                    Base: {formatCurrencyOnly(baseOutstanding, project.currency)} | Tax: {formatCurrencyOnly(taxOutstanding, project.currency)}
                   </span>
                 )}
               </div>
@@ -1185,11 +1228,11 @@ export default function ProjectDetailPage({
                 <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700">Next Due</span>
                 {nextDueMilestone ? (
                   <div className="mt-0.5">
-                    <h4 className="text-sm font-black text-slate-900">{formatWithINRConversion(nextDueMilestone.totalAmt, project.currency)}</h4>
+                    <h4 className="text-sm font-black text-slate-900">{formatCurrencyOnly(nextDueMilestone.totalAmt, project.currency)}</h4>
                     <p className="text-[8px] text-slate-400 font-bold uppercase">Due {nextDueMilestone.dueDate ? new Date(nextDueMilestone.dueDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' }) : "N/A"}</p>
                     {hasGst && !nextDueMilestone.isMExempt && !nextDueMilestone.isMIncl && (
                       <span className="text-[8px] text-indigo-500 font-medium block">
-                        Base: {formatWithINRConversion(nextDueMilestone.baseAmt, project.currency)} + Tax
+                        Base: {formatCurrencyOnly(nextDueMilestone.baseAmt, project.currency)} + Tax
                       </span>
                     )}
                   </div>
@@ -1216,8 +1259,8 @@ export default function ProjectDetailPage({
                   />
                 </div>
                 <div className="text-[10px] text-slate-600 font-bold flex items-center justify-between pt-0.5">
-                  <span>{formatWithINRConversion(baseReceived, project.currency)} received</span>
-                  <span className="text-slate-400 font-medium">of {formatWithINRConversion(totalBaseValue, project.currency)}</span>
+                  <span>{formatWithINRConversion(baseReceived, project.currency, baseReceived > 0)} received</span>
+                  <span className="text-slate-400 font-medium">of {formatCurrencyOnly(totalBaseValue, project.currency)}</span>
                 </div>
               </div>
 
@@ -1240,8 +1283,8 @@ export default function ProjectDetailPage({
                 <div className="text-[10px] text-slate-600 font-bold flex items-center justify-between pt-0.5">
                   {hasGst ? (
                     <>
-                      <span>{formatWithINRConversion(taxReceived, project.currency)} tax received</span>
-                      <span className="text-slate-400 font-medium">of {formatWithINRConversion(totalTaxValue, project.currency)}</span>
+                      <span>{formatWithINRConversion(taxReceived, project.currency, taxReceived > 0)} tax received</span>
+                      <span className="text-slate-400 font-medium">of {formatCurrencyOnly(totalTaxValue, project.currency)}</span>
                     </>
                   ) : (
                     <span className="text-slate-400 font-medium italic">No Tax applicable (Personal / Foreign Account)</span>
@@ -1296,11 +1339,11 @@ export default function ProjectDetailPage({
                           </td>
                           <td className="py-3.5 text-right whitespace-nowrap">
                             <div className="font-black text-slate-900">
-                              {formatWithINRConversion(m.totalAmt, project.currency)}
+                              {formatWithINRConversion(m.totalAmt, project.currency, m.isPaid)}
                             </div>
                             {!m.isMExempt && hasGst ? (
                               <div className="text-[10px] text-slate-400 font-medium tracking-tight">
-                                Base: {formatWithINRConversion(m.baseAmt, project.currency)} + Tax: {formatWithINRConversion(m.taxAmt, project.currency)}
+                                Base: {formatCurrencyOnly(m.baseAmt, project.currency)} + Tax: {formatCurrencyOnly(m.taxAmt, project.currency)}
                                 {m.isMIncl ? " (Incl.)" : ""}
                               </div>
                             ) : (
@@ -1310,7 +1353,7 @@ export default function ProjectDetailPage({
                             )}
                             {!m.isPaid && m.invoicedRaw > 0 && m.remaining > 0 && (
                               <span className="text-[10px] font-medium text-amber-600 block">
-                                Rem: {formatWithINRConversion(m.remaining, project.currency)}
+                                Rem: {formatCurrencyOnly(m.remaining, project.currency)}
                               </span>
                             )}
                           </td>
@@ -1399,7 +1442,7 @@ export default function ProjectDetailPage({
                             {new Date(inv.invoiceDate || inv.createdAt).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
                           </td>
                           <td className="py-3.5 text-right font-black text-slate-900 whitespace-nowrap">
-                            {formatWithINRConversion(inv.totalAmount, inv.currency)}
+                            {formatWithINRConversion(inv.totalAmount, inv.currency, inv.paymentStatus === "Paid")}
                           </td>
                           <td className="py-3.5 text-center">
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
@@ -1471,7 +1514,7 @@ export default function ProjectDetailPage({
                   Total Incurred Expenses
                 </span>
                 <h4 className="text-xl font-black text-rose-600 mt-1">
-                  {formatWithINRConversion(totalExpenses, project.currency)}
+                  {formatCurrencyOnly(totalExpenses, project.currency)}
                 </h4>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">
                   Direct costs logged against project
@@ -1580,7 +1623,12 @@ export default function ProjectDetailPage({
                           {exp.paidBy || "Company Account"}
                         </td>
                         <td className="py-3.5 text-right font-black text-rose-600 whitespace-nowrap">
-                          {formatWithINRConversion(exp.amount, project.currency)}
+                          <div>{formatCurrencyOnly(exp.amount, exp.currency || project.currency)}</div>
+                          {exp.currency && getCurrencyCode(exp.currency) !== getCurrencyCode(project.currency) && (
+                            <div className="text-[10px] text-slate-400 font-medium">
+                              ≈ {formatCurrencyOnly(convertCurrency(exp.amount, exp.currency, project.currency), project.currency)}
+                            </div>
+                          )}
                         </td>
                         {currentUser?.role !== "Employee" && (
                           <td className="py-3.5 text-center pr-4">
@@ -1622,11 +1670,11 @@ export default function ProjectDetailPage({
                   Calculated Commission
                 </span>
                 <h4 className="text-xl font-black text-purple-700 mt-1">
-                  {formatWithINRConversion(calculatedCommission, project.currency)}
+                  {formatCurrencyOnly(calculatedCommission, project.currency)}
                 </h4>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">
                   {comm.enabled
-                    ? `${comm.type === "Percentage" ? `${comm.rate}% on ${comm.basis}` : `Fixed ${formatWithINRConversion(comm.rate, project.currency)}`}`
+                    ? `${comm.type === "Percentage" ? `${comm.rate}% on ${comm.basis}` : `Fixed ${formatCurrencyOnly(comm.rate, project.currency)}`}`
                     : "No active commission rule"}
                 </p>
               </div>
@@ -1872,7 +1920,7 @@ export default function ProjectDetailPage({
                   <h3 className={`text-3xl font-extrabold tracking-tight mt-1.5 ${
                     netProfit >= 0 ? "text-slate-900" : "text-rose-600"
                   }`}>
-                    {formatWithINRConversion(netProfit, project.currency)}
+                    {formatCurrencyOnly(netProfit, project.currency)}
                   </h3>
                   <p className="text-xs text-slate-500 font-medium mt-1">
                     Actual profit retained after all direct project costs and sales commissions.
@@ -1903,7 +1951,7 @@ export default function ProjectDetailPage({
                     1. Collected Revenue
                   </span>
                   <p className="text-lg font-bold text-slate-900 mt-1">
-                    {formatWithINRConversion(operationalRevenue, project.currency)}
+                    {formatWithINRConversion(operationalRevenue, project.currency, operationalRevenue > 0)}
                   </p>
                   <span className="text-[11px] text-slate-400 font-medium">Total received payments</span>
                 </div>
@@ -1914,7 +1962,7 @@ export default function ProjectDetailPage({
                     2. Direct Expenses
                   </span>
                   <p className="text-lg font-bold text-slate-900 mt-1">
-                    {formatWithINRConversion(totalExpenses, project.currency)}
+                    {formatCurrencyOnly(totalExpenses, project.currency)}
                   </p>
                   <span className="text-[11px] text-slate-400 font-medium">{expensesList.length} logged expense items</span>
                 </div>
@@ -1925,7 +1973,7 @@ export default function ProjectDetailPage({
                     3. Sales Commission
                   </span>
                   <p className="text-lg font-bold text-slate-900 mt-1">
-                    {formatWithINRConversion(calculatedCommission, project.currency)}
+                    {formatCurrencyOnly(calculatedCommission, project.currency)}
                   </p>
                   <span className="text-[11px] text-slate-400 font-medium">
                     {comm.enabled ? `${comm.type === "Percentage" ? `${comm.rate}% on ${comm.basis}` : `Fixed rule`}` : "None configured"}
@@ -1944,21 +1992,21 @@ export default function ProjectDetailPage({
                     <div
                       style={{ width: `${Math.min(100, (totalExpenses / operationalRevenue) * 100)}%` }}
                       className="bg-rose-400 h-full"
-                      title={`Expenses: ${formatWithINRConversion(totalExpenses, project.currency)}`}
+                      title={`Expenses: ${formatCurrencyOnly(totalExpenses, project.currency)}`}
                     />
                   )}
                   {calculatedCommission > 0 && operationalRevenue > 0 && (
                     <div
                       style={{ width: `${Math.min(100, (calculatedCommission / operationalRevenue) * 100)}%` }}
                       className="bg-purple-400 h-full"
-                      title={`Commission: ${formatWithINRConversion(calculatedCommission, project.currency)}`}
+                      title={`Commission: ${formatCurrencyOnly(calculatedCommission, project.currency)}`}
                     />
                   )}
                   {netProfit > 0 && operationalRevenue > 0 && (
                     <div
                       style={{ width: `${Math.min(100, (netProfit / operationalRevenue) * 100)}%` }}
                       className="bg-emerald-500 h-full"
-                      title={`Net Profit: ${formatWithINRConversion(netProfit, project.currency)}`}
+                      title={`Net Profit: ${formatCurrencyOnly(netProfit, project.currency)}`}
                     />
                   )}
                 </div>
@@ -2011,7 +2059,7 @@ export default function ProjectDetailPage({
                         Total received milestone payments
                       </td>
                       <td className="py-3.5 px-4 text-right font-bold text-slate-900">
-                        {formatWithINRConversion(operationalRevenue, project.currency)}
+                        {formatWithINRConversion(operationalRevenue, project.currency, operationalRevenue > 0)}
                       </td>
                       <td className="py-3.5 pl-4 text-right text-slate-500">100.0%</td>
                     </tr>
@@ -2025,7 +2073,7 @@ export default function ProjectDetailPage({
                         Hosting, tools, contractor costs ({expensesList.length} items)
                       </td>
                       <td className="py-3.5 px-4 text-right font-semibold text-slate-700">
-                        - {formatWithINRConversion(totalExpenses, project.currency)}
+                        - {formatCurrencyOnly(totalExpenses, project.currency)}
                       </td>
                       <td className="py-3.5 pl-4 text-right text-slate-500">
                         {operationalRevenue > 0 ? `${((totalExpenses / operationalRevenue) * 100).toFixed(1)}%` : "0%"}
@@ -2041,7 +2089,7 @@ export default function ProjectDetailPage({
                         Revenue minus Direct Expenses
                       </td>
                       <td className="py-3 px-4 text-right font-bold">
-                        {formatWithINRConversion(grossProfit, project.currency)}
+                        {formatCurrencyOnly(grossProfit, project.currency)}
                       </td>
                       <td className="py-3 pl-4 text-right text-slate-700">{grossMarginPercent}%</td>
                     </tr>
@@ -2053,11 +2101,11 @@ export default function ProjectDetailPage({
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 text-[11px]">
                         {comm.enabled
-                          ? `${comm.type === "Percentage" ? `${comm.rate}% on ${comm.basis}` : `Fixed ${formatWithINRConversion(comm.rate, project.currency)}`}`
+                          ? `${comm.type === "Percentage" ? `${comm.rate}% on ${comm.basis}` : `Fixed ${formatCurrencyOnly(comm.rate, project.currency)}`}`
                           : "No commission configured"}
                       </td>
                       <td className="py-3.5 px-4 text-right font-semibold text-slate-700">
-                        - {formatWithINRConversion(calculatedCommission, project.currency)}
+                        - {formatCurrencyOnly(calculatedCommission, project.currency)}
                       </td>
                       <td className="py-3.5 pl-4 text-right text-slate-500">
                         {operationalRevenue > 0 ? `${((calculatedCommission / operationalRevenue) * 100).toFixed(1)}%` : "0%"}
@@ -2074,7 +2122,7 @@ export default function ProjectDetailPage({
                         Bottom-line retained earnings
                       </td>
                       <td className={`py-4 px-4 text-right text-base font-extrabold ${netProfit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {formatWithINRConversion(netProfit, project.currency)}
+                        {formatCurrencyOnly(netProfit, project.currency)}
                       </td>
                       <td className="py-4 pl-4 text-right text-slate-900 font-extrabold text-sm">{netMarginPercent}%</td>
                     </tr>

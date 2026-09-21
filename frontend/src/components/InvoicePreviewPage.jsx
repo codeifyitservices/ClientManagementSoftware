@@ -9,7 +9,7 @@ import {
   Globe,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { getCurrencySymbol } from "../utils/currencyUtils";
+import { getCurrencySymbol, getCurrencyCode, convertToINR, getLiveExchangeRate } from "../utils/currencyUtils";
 
 // Helper function to convert numeric value into Indian English word format
 const numberToWords = (num) => {
@@ -363,7 +363,7 @@ export default function InvoicePreviewPage({
   );
 
   // Tax calculations
-  const isNonINR = invoiceData.currency && !invoiceData.currency.includes("INR") && !invoiceData.currency.includes("₹");
+  const isNonINR = getCurrencyCode(invoiceData.currency) !== "INR";
   const isTaxExempt = !!activeClient.isForeign || isNonINR;
 
   const items = invoiceData.items || [];
@@ -626,6 +626,22 @@ export default function InvoicePreviewPage({
                 })}
               </span>
             </div>
+            {((invoiceData.paymentStatus || "").toLowerCase() === "paid" && (invoiceData.currency && !invoiceData.currency.includes("INR") && !invoiceData.currency.includes("₹"))) && (
+              <div className="w-64 bg-emerald-50/90 p-2.5 rounded-lg border border-emerald-200 mt-1.5 text-right text-[11px] text-emerald-900 space-y-0.5">
+                <div className="flex justify-between items-center font-bold">
+                  <span>Settled in INR:</span>
+                  <span className="font-black text-emerald-700">
+                    ₹{(invoiceData.paidAmountINR || convertToINR(grandTotal, invoiceData.currency)).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+                <div className="text-[9px] text-emerald-600 font-semibold">
+                  Exchange Rate: 1 {getCurrencyCode(invoiceData.currency)} = ₹{(invoiceData.exchangeRate || getLiveExchangeRate(invoiceData.currency)).toFixed(2)}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 6. Amount in words & footer footnotes */}

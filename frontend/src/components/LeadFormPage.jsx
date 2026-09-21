@@ -342,13 +342,13 @@ export default function LeadFormPage({
                   </div>
                   {value && !isNaN(Number(value)) && Number(value) > 0 && (
                     <div className="mt-1.5 text-[10px] font-semibold">
-                      {isForeign ? (
-                        <span className="text-emerald-700 font-bold">
-                          Final Amount: {getCurrencySymbol(currency)}{Number(value).toLocaleString("en-US")} ({getCurrencyCode(currency)} Export / 0% Tax)
-                        </span>
-                      ) : isPersonalAccount ? (
+                      {isPersonalAccount ? (
                         <span className="text-amber-700 font-bold">
                           Final Amount: {getCurrencySymbol(currency)}{Number(value).toLocaleString("en-IN")} (Personal / 0% GST)
+                        </span>
+                      ) : isForeign ? (
+                        <span className="text-emerald-700 font-bold">
+                          Final Amount: {getCurrencySymbol(currency)}{Number(value).toLocaleString("en-US")} ({getCurrencyCode(currency)} Export / 0% Tax)
                         </span>
                       ) : inclusiveGst ? (
                         <span className="text-slate-600 font-bold">
@@ -365,8 +365,8 @@ export default function LeadFormPage({
               </div>
 
               {/* Personal Account & GST Inclusive Checkboxes */}
-              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                {/* Personal Account Checkbox */}
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 animate-fade-in">
+                {/* Personal Account Checkbox — available for all currencies */}
                 <div className="flex items-start gap-2 bg-amber-50/50 border border-amber-100 p-3 rounded-xl">
                   <input
                     type="checkbox"
@@ -391,16 +391,12 @@ export default function LeadFormPage({
                   </label>
                 </div>
 
-                {/* GST Inclusive Checkbox — hidden for foreign or personal account */}
-                {isForeign ? (
-                  <div className="flex items-center p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 text-[11px] text-emerald-800 font-bold">
-                    {getCurrencyCode(currency)} Currency active: GST exempt (0% tax for non-INR export transactions)
-                  </div>
-                ) : isPersonalAccount ? (
+                {/* GST Inclusive Checkbox — hidden for personal account and foreign currencies */}
+                {isPersonalAccount ? (
                   <div className="flex items-center p-3 rounded-xl bg-amber-50/60 border border-amber-100 text-[11px] text-amber-800 font-bold">
                     Personal Account active: GST exempt (0% tax)
                   </div>
-                ) : (
+                ) : !isForeign && (
                   <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
                     <input
                       type="checkbox"

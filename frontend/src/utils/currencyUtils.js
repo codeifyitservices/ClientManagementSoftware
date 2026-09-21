@@ -9,22 +9,22 @@ export const SUPPORTED_CURRENCIES = [
   { code: "AUD", label: "AUD (A$)", symbol: "A$" },
 ];
 
-// Fallback rates relative to 1 INR if API is offline
-const FALLBACK_RATES_FROM_INR = {
+// Fallback rates (INR per 1 unit of foreign currency) if API is offline
+const FALLBACK_INR_RATES = {
   INR: 1,
-  USD: 0.0116, // ~86.5 INR per USD
-  AED: 0.0426, // ~23.5 INR per AED
-  GBP: 0.0092, // ~108.5 INR per GBP
-  EUR: 0.0108, // ~92.5 INR per EUR
-  AUD: 0.0178, // ~56.0 INR per AUD
+  USD: 96.03698, // Current rate: 1 USD = 96.03698 INR
+  AED: 26.1503,  // ~26.15 INR per AED
+  EUR: 110.2232, // ~110.22 INR per EUR
+  GBP: 128.4928, // ~128.49 INR per GBP
+  AUD: 68.3734,  // ~68.37 INR per AUD
 };
 
-let cachedRates = { ...FALLBACK_RATES_FROM_INR };
+let cachedRates = { ...FALLBACK_INR_RATES };
 let lastFetchTime = 0;
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour cache
 
 /**
- * Fetch live exchange rates relative to INR from free API
+ * Fetch live exchange rates from https://open.er-api.com/v6/latest/USD
  */
 export const fetchLiveRates = async () => {
   const now = Date.now();
@@ -33,22 +33,23 @@ export const fetchLiveRates = async () => {
   }
 
   try {
-    const res = await fetch("https://open.er-api.com/v6/latest/INR");
+    const res = await fetch("https://open.er-api.com/v6/latest/USD");
     if (res.ok) {
       const data = await res.json();
-      if (data && data.rates) {
+      if (data && data.rates && data.rates.INR) {
+        const inrPerUsd = Number(data.rates.INR);
         cachedRates = {
           INR: 1,
-          USD: data.rates.USD || FALLBACK_RATES_FROM_INR.USD,
-          AED: data.rates.AED || FALLBACK_RATES_FROM_INR.AED,
-          GBP: data.rates.GBP || FALLBACK_RATES_FROM_INR.GBP,
-          EUR: data.rates.EUR || FALLBACK_RATES_FROM_INR.EUR,
-          AUD: data.rates.AUD || FALLBACK_RATES_FROM_INR.AUD,
+          USD: inrPerUsd,
+          AED: inrPerUsd / (Number(data.rates.AED) || 3.6725),
+          EUR: inrPerUsd / (Number(data.rates.EUR) || 0.871295),
+          GBP: inrPerUsd / (Number(data.rates.GBP) || 0.747411),
+          AUD: inrPerUsd / (Number(data.rates.AUD) || 1.404595),
         };
         lastFetchTime = now;
         try {
           localStorage.setItem(
-            "crm_exchange_rates",
+            "crm_exchange_rates_usd",
             JSON.stringify({ rates: cachedRates, time: now }),
           );
         } catch (e) {}
@@ -57,14 +58,14 @@ export const fetchLiveRates = async () => {
     }
   } catch (err) {
     console.warn(
-      "Could not fetch live exchange rates, using cached/fallback rates:",
+      "Could not fetch live exchange rates from open.er-api.com/v6/latest/USD, using cached/fallback:",
       err.message,
     );
   }
 
   // Try loading from localStorage
   try {
-    const stored = localStorage.getItem("crm_exchange_rates");
+    const stored = localStorage.getItem("crm_exchange_rates_usd");
     if (stored) {
       const parsed = JSON.parse(stored);
       if (parsed && parsed.rates) {
@@ -104,6 +105,14 @@ export const getCurrencySymbol = (currencyStr) => {
 };
 
 /**
+ * Get the live exchange rate (INR per 1 unit of foreign currency)
+ */
+export const getLiveExchangeRate = (currencyStr) => {
+  const code = getCurrencyCode(currencyStr);
+  return cachedRates[code] || FALLBACK_INR_RATES[code] || 1;
+};
+
+/**
  * Convert an amount in a foreign currency to INR
  */
 export const convertToINR = (amount, currencyStr) => {
@@ -112,14 +121,33 @@ export const convertToINR = (amount, currencyStr) => {
   const code = getCurrencyCode(currencyStr);
   if (code === "INR") return numericAmount;
 
-  const rateFromINR = cachedRates[code] || FALLBACK_RATES_FROM_INR[code] || 1;
-  // If 1 INR = rateFromINR units of foreign currency, then 1 foreign currency = (1 / rateFromINR) INR
-  const inrValue = numericAmount / rateFromINR;
+  const rateToINR = cachedRates[code] || FALLBACK_INR_RATES[code] || 1;
+  const inrValue = numericAmount * rateToINR;
   return Math.round(inrValue * 100) / 100;
 };
 
 /**
- * Format currency strictly in its own currency (e.g. "$1,000.00" or "AED 1,000.00")
+ * Convert an amount from one currency to another currency
+ */
+export const convertCurrency = (amount, fromCurrency, toCurrency) => {
+  const numeric = Number(amount) || 0;
+  if (!numeric) return 0;
+  const fromCode = getCurrencyCode(fromCurrency);
+  const toCode = getCurrencyCode(toCurrency);
+  if (fromCode === toCode) return numeric;
+
+  // Convert from origin currency to INR
+  const inrValue = convertToINR(numeric, fromCurrency);
+  if (toCode === "INR") return inrValue;
+
+  // Convert INR to destination currency
+  const destRateToINR = cachedRates[toCode] || FALLBACK_INR_RATES[toCode] || 1;
+  const result = inrValue / destRateToINR;
+  return Math.round(result * 100) / 100;
+};
+
+/**
+ * Format currency strictly in its own currency (e.g. "$ 100.00" or "AED 100.00")
  */
 export const formatCurrencyOnly = (amount, currencyStr) => {
   const numericAmount = Number(amount) || 0;
@@ -132,20 +160,22 @@ export const formatCurrencyOnly = (amount, currencyStr) => {
 };
 
 /**
- * Format currency with converted INR display for system UI (e.g. "$1,000 (~₹86,500)")
+ * Format currency with converted INR display (e.g. "$ 100.00 (~₹9,603.70)")
+ * ONLY when isPaid === true and amount > 0. Otherwise returns strictly the primary currency.
  */
-export const formatWithINRConversion = (amount, currencyStr) => {
+export const formatWithINRConversion = (amount, currencyStr, isPaid = false) => {
   const numericAmount = Number(amount) || 0;
   const code = getCurrencyCode(currencyStr);
   const primary = formatCurrencyOnly(numericAmount, currencyStr);
 
-  if (code === "INR") {
+  if (code === "INR" || !isPaid || numericAmount <= 0) {
     return primary;
   }
 
   const inrVal = convertToINR(numericAmount, currencyStr);
   const formattedINR = inrVal.toLocaleString("en-IN", {
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
   return `${primary} (~₹${formattedINR})`;
 };

@@ -14,6 +14,10 @@ const shiftSchema = new mongoose.Schema({
     type: String, // "18:00"
     default: "18:00",
   },
+  workingDays: {
+    type: [String],
+    default: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  },
   requiredWorkingHours: {
     type: Number, // e.g., 8
     default: 8,

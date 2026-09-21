@@ -9,6 +9,7 @@ import {
 } from "../services/pdfService.js";
 import { sendInvoiceEmail } from "../services/emailService.js";
 import Project from "../models/projectModel.js";
+import { getRateToINRBackend } from "../services/currencyService.js";
 
 // Helper to retrieve active configuration, creating one with defaults if none exists
 const getActiveConfig = async () => {
@@ -626,7 +627,12 @@ export const markPaid = async (req, res) => {
       return res.status(404).json({ message: "Invoice not found." });
     }
 
+    const rate = await getRateToINRBackend(invoice.currency);
     invoice.paymentStatus = "Paid";
+    invoice.paidAt = new Date();
+    invoice.exchangeRate = rate;
+    invoice.paidAmountINR = Math.round((Number(invoice.totalAmount) || 0) * rate * 100) / 100;
+
     await invoice.save();
 
     if (invoice.projectId) {

@@ -244,8 +244,10 @@ subscriptionSchema.pre("validate", async function () {
       }
     }
 
-    if (isForeign || this.isPersonalAccount) {
-      this.finalAmount = effectiveBase; // No GST for foreign or personal account clients
+    const isNonInr = this.currency && !this.currency.includes("INR") && !this.currency.includes("₹");
+
+    if (isForeign || this.isPersonalAccount || isNonInr) {
+      this.finalAmount = effectiveBase; // No GST for foreign, personal account, or non-INR currency
     } else if (this.inclusiveGst) {
       this.finalAmount = effectiveBase;
     } else {

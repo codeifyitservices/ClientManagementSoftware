@@ -165,7 +165,7 @@ export default function ClientProfileModal({ isOpen, onClose, client, invoices =
                         <td className="py-3 px-4 font-bold text-slate-900">{inv.invoiceNumber}</td>
                         <td className="py-3 px-4 truncate max-w-[200px]">{inv.serviceDescription}</td>
                         <td className="py-3 px-4">{new Date(inv.invoiceDate || inv.createdAt).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{formatWithINRConversion(inv.totalAmount, inv.currency)}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900">{formatWithINRConversion(inv.totalAmount, inv.currency, inv.paymentStatus === "Paid")}</td>
                         <td className="py-3 px-4 text-right">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${

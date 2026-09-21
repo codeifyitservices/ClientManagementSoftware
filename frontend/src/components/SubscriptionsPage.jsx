@@ -6,7 +6,7 @@ import {
 import ConfirmDialog from "./ConfirmDialog";
 import SubscriptionTable, { getSubscriptionStatus } from "./SubscriptionTable";
 import RenewSubscriptionModal from "./RenewSubscriptionModal";
-import { SUPPORTED_CURRENCIES, getCurrencySymbol, formatWithINRConversion } from "../utils/currencyUtils";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol, formatWithINRConversion, formatCurrencyOnly, getCurrencyCode } from "../utils/currencyUtils";
 
 export default function SubscriptionsPage({
   token,
@@ -159,8 +159,8 @@ export default function SubscriptionsPage({
       durationValue: Number(durationValue),
       durationUnit,
       amount: Number(amount),
-      isPersonalAccount,
-      inclusiveGst: (activeClient.isForeign || isPersonalAccount) ? false : inclusiveGst
+      isPersonalAccount: isPersonalAccount,
+      inclusiveGst: (activeClient.isForeign || isPersonalAccount || getCurrencyCode(currency) !== "INR") ? false : inclusiveGst
     };
 
     try {
@@ -403,11 +403,12 @@ export default function SubscriptionsPage({
   };
 
   const activeClient = clients.find((c) => c._id === clientId) || {};
+  const isINR = getCurrencyCode(currency) === "INR";
 
   const getCalculatedFinalAmount = () => {
     const amt = Number(amount);
     if (isNaN(amt) || amt <= 0) return 0;
-    if (activeClient.isForeign || isPersonalAccount) return amt;
+    if (!isINR || activeClient.isForeign || isPersonalAccount) return amt;
     if (inclusiveGst) return amt;
     return Math.round(amt * 1.18 * 100) / 100;
   };
@@ -764,9 +765,9 @@ export default function SubscriptionsPage({
                       <option value="years">Year(s)</option>
                     </select>
                   </div>
-                </div>
-
-                {/* Personal Account Checkbox */}
+                </div>              {/* Personal Account & GST Inclusive Checkboxes */}
+              <div className="space-y-3 animate-fade-in">
+                {/* Personal Account Checkbox — available for all currencies */}
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 p-3 rounded-xl">
                   <input
                     type="checkbox"
@@ -784,8 +785,8 @@ export default function SubscriptionsPage({
                   </label>
                 </div>
 
-                {/* GST Inclusive Checkbox — hidden for personal account and foreign clients */}
-                {!isPersonalAccount && !activeClient.isForeign && (
+                {/* GST Inclusive Checkbox — hidden for personal account, foreign clients and non-INR */}
+                {isINR && !isPersonalAccount && !activeClient.isForeign && (
                   <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
                     <input
                       type="checkbox"
@@ -802,17 +803,18 @@ export default function SubscriptionsPage({
                     </label>
                   </div>
                 )}
+              </div>
 
                 {/* Currency & Base Amount */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-1">
                     <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
-                      Currency *
+                      Currency
                     </label>
                     <select
                       value={currency}
                       onChange={(e) => setCurrency(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white font-bold"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
                     >
                       {SUPPORTED_CURRENCIES.map((c) => (
                         <option key={c.code} value={c.label}>
@@ -824,25 +826,26 @@ export default function SubscriptionsPage({
 
                   <div className="col-span-2">
                     <label className="block text-[10px] uppercase tracking-wider text-slate-450 font-bold mb-1.5">
-                      Base Amount ({getCurrencySymbol(currency)}) *
+                      Base Price ({getCurrencySymbol(currency)})
                     </label>
                     <div className="relative">
-                      <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-450 font-bold text-xs">
+                      <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-sm">
                         {getCurrencySymbol(currency)}
                       </span>
                       <input
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="Enter base amount"
+                        required
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
-                        className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-semibold"
-                        required
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-3.5 py-2 rounded-xl border border-slate-200 text-slate-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                       />
                     </div>
                   </div>
                 </div>
+
               </div>
 
               {/* Fixed Modal Footer */}
@@ -852,15 +855,18 @@ export default function SubscriptionsPage({
                     Total Final Amount
                   </span>
                   <span className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    {formatWithINRConversion(getCalculatedFinalAmount(), currency)}
-                    {!isPersonalAccount && !activeClient.isForeign && !inclusiveGst && amount && (
-                      <span className="text-[9px] text-[#5D5FEF] font-bold uppercase select-none">(+18% GST)</span>
-                    )}
+                    {formatCurrencyOnly(getCalculatedFinalAmount(), currency)}
                     {isPersonalAccount && (
-                      <span className="text-[9px] text-amber-500 font-bold uppercase select-none">(Personal)</span>
+                      <span className="text-[9px] text-amber-500 font-bold uppercase select-none">(Personal - 0% Tax)</span>
                     )}
-                    {activeClient.isForeign && (
-                      <span className="text-[9px] text-emerald-500 font-bold uppercase select-none">(Foreign)</span>
+                    {!isPersonalAccount && activeClient.isForeign && (
+                      <span className="text-[9px] text-emerald-500 font-bold uppercase select-none">(Foreign - 0% Tax)</span>
+                    )}
+                    {!isPersonalAccount && !activeClient.isForeign && !isINR && (
+                      <span className="text-[9px] text-emerald-500 font-bold uppercase select-none">({getCurrencyCode(currency)} - 0% Tax)</span>
+                    )}
+                    {!isPersonalAccount && !activeClient.isForeign && isINR && !inclusiveGst && amount && (
+                      <span className="text-[9px] text-[#5D5FEF] font-bold uppercase select-none">(+18% GST)</span>
                     )}
                   </span>
                 </div>

@@ -22,6 +22,7 @@ import {
   formatWithINRConversion,
   getCurrencyCode,
   convertToINR,
+  formatCurrencyOnly,
 } from "../utils/currencyUtils";
 
 export default function ProjectFormPage({
@@ -243,13 +244,15 @@ export default function ProjectFormPage({
     );
   };
 
+  const isINR = getCurrencyCode(currency) === "INR";
   const activeClient = clients.find((c) => c._id === clientId) || {};
-  const gstRate = (activeClient.isForeign || isPersonalAccount) ? 0 : 18;
+  const isTaxExempt = !isINR || activeClient.isForeign || isPersonalAccount;
+  const gstRate = isTaxExempt ? 0 : 18;
 
   const getCalculatedFinalAmount = () => {
     if (!projectValue || isNaN(projectValue)) return 0;
     const base = Number(projectValue);
-    if (activeClient.isForeign || isPersonalAccount) {
+    if (isTaxExempt) {
       return base;
     }
     if (inclusiveGst) {
@@ -307,16 +310,16 @@ export default function ProjectFormPage({
 
     // Verify milestone sum doesn't exceed finalAmount
     const sumMilestonesTotal = milestones.reduce((sum, m) => {
-      const isTaxExempt = activeClient.isForeign || isPersonalAccount || !!m.isPersonal;
+      const isMilestoneTaxExempt = isTaxExempt || !!m.isPersonal;
       const rawAmt = Number(m.amount) || 0;
-      if (isTaxExempt) return sum + rawAmt;
+      if (isMilestoneTaxExempt) return sum + rawAmt;
       if (m.isInclusive === true) return sum + rawAmt;
       return sum + Math.round(rawAmt * 1.18 * 100) / 100;
     }, 0);
 
     const finalAmountVal = getCalculatedFinalAmount();
     if (sumMilestonesTotal > finalAmountVal + 0.05) {
-      const msg = `The sum of payment milestones with GST (${formatWithINRConversion(sumMilestonesTotal, currency)}) cannot exceed the final project value (${formatWithINRConversion(finalAmountVal, currency)}).`;
+      const msg = `The sum of payment milestones with GST (${formatCurrencyOnly(sumMilestonesTotal, currency)}) cannot exceed the final project value (${formatCurrencyOnly(finalAmountVal, currency)}).`;
       setError(msg);
       if (showToast) showToast(msg, "error");
       return;
@@ -332,8 +335,8 @@ export default function ProjectFormPage({
       assignedEmployees,
       projectValue: Number(projectValue),
       currency,
-      inclusiveGst: (activeClient.isForeign || isPersonalAccount) ? false : inclusiveGst,
-      isPersonalAccount,
+      inclusiveGst: isTaxExempt ? false : inclusiveGst,
+      isPersonalAccount: isPersonalAccount,
       commission,
     };
 
@@ -368,10 +371,10 @@ export default function ProjectFormPage({
   // Realtime calculated values
   const calcTotalValue = getCalculatedFinalAmount();
   const calcReceived = milestones.reduce((sum, m) => {
-    const isTaxExempt = activeClient.isForeign || isPersonalAccount || !!m.isPersonal;
+    const isMilestoneTaxExempt = isTaxExempt || !!m.isPersonal;
     const rawAmt = Number(m.amount) || 0;
     let mTotal = rawAmt;
-    if (!isTaxExempt && m.isInclusive !== true) {
+    if (!isMilestoneTaxExempt && m.isInclusive !== true) {
       mTotal = Math.round(rawAmt * 1.18 * 100) / 100;
     }
     const isPaid = m.status === "Paid" || (m.paidAmount !== undefined && m.paidAmount >= m.amount && m.amount > 0);
@@ -547,50 +550,53 @@ export default function ProjectFormPage({
                 </div>
               </div>
 
-              {/* Personal Account Checkbox */}
-              <div className="flex items-start gap-2 bg-amber-50/50 border border-amber-100 p-3 rounded-xl">
-                <input
-                  type="checkbox"
-                  id="isPersonalAccount"
-                  checked={isPersonalAccount}
-                  disabled={activeClient.isForeign}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setIsPersonalAccount(checked);
-                    if (checked) {
-                      setInclusiveGst(false);
-                    } else {
-                      setInclusiveGst(true);
-                    }
-                  }}
-                  className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
-                />
-                <label htmlFor="isPersonalAccount" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
-                  <span>Personal Account</span>
-                  <span className="text-[10px] text-slate-450 font-semibold normal-case leading-normal font-sans">
-                    {activeClient.isForeign ? "Disabled - foreign client." : "If checked, no GST will be applied (personal/individual billing)."}
-                  </span>
-                </label>
-              </div>
-
-              {/* GST Inclusive Checkbox — hidden for personal account and foreign clients */}
-              {!isPersonalAccount && !activeClient.isForeign && (
-                <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+              {/* Personal Account & GST Inclusive Checkboxes */}
+              <div className="space-y-3 animate-fade-in">
+                {/* Personal Account Checkbox — available for all currencies */}
+                <div className="flex items-start gap-2 bg-amber-50/50 border border-amber-100 p-3 rounded-xl">
                   <input
                     type="checkbox"
-                    id="inclusiveGst"
-                    checked={inclusiveGst}
-                    onChange={(e) => setInclusiveGst(e.target.checked)}
-                    className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                    id="isPersonalAccount"
+                    checked={isPersonalAccount}
+                    disabled={activeClient.isForeign}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsPersonalAccount(checked);
+                      if (checked) {
+                        setInclusiveGst(false);
+                      } else {
+                        setInclusiveGst(true);
+                      }
+                    }}
+                    className="h-4 w-4 rounded text-amber-500 focus:ring-amber-400 border-slate-350 mt-0.5 cursor-pointer disabled:opacity-50"
                   />
-                  <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
-                    <span>Inclusive GST (18%)</span>
-                    <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal font-sans">
-                      If unchecked, 18% tax will automatically be added to obtain the final billing amount.
+                  <label htmlFor="isPersonalAccount" className={`text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5 ${activeClient.isForeign ? "opacity-50" : ""}`}>
+                    <span>Personal Account</span>
+                    <span className="text-[10px] text-slate-450 font-semibold normal-case leading-normal font-sans">
+                      {activeClient.isForeign ? "Disabled - foreign client." : "If checked, no GST will be applied (personal/individual billing)."}
                     </span>
                   </label>
                 </div>
-              )}
+
+                {/* GST Inclusive Checkbox — only for INR non-personal non-foreign */}
+                {isINR && !isPersonalAccount && !activeClient.isForeign && (
+                  <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                    <input
+                      type="checkbox"
+                      id="inclusiveGst"
+                      checked={inclusiveGst}
+                      onChange={(e) => setInclusiveGst(e.target.checked)}
+                      className="h-4 w-4 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 mt-0.5 cursor-pointer"
+                    />
+                    <label htmlFor="inclusiveGst" className="text-xs text-slate-700 font-bold select-none cursor-pointer flex flex-col gap-0.5">
+                      <span>Inclusive GST (18%)</span>
+                      <span className="text-[10px] text-slate-400 font-semibold normal-case leading-normal font-sans">
+                        If unchecked, 18% tax will automatically be added to obtain the final billing amount.
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
 
               {/* Currency & Base Amount / Project Value */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -632,9 +638,9 @@ export default function ProjectFormPage({
                       {getCurrencySymbol(currency)}
                     </span>
                   </div>
-                  {projectValue && getCurrencyCode(currency) !== "INR" && (
+                  {projectValue && !isINR && (
                     <p className="text-[11px] font-semibold text-indigo-600 mt-1">
-                      Approx. INR Value: {formatWithINRConversion(getCalculatedFinalAmount(), currency)}
+                      Approx. INR Value: {formatCurrencyOnly(projectValue, currency)} (~₹{convertToINR(Number(projectValue), currency).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                     </p>
                   )}
                 </div>
@@ -840,24 +846,27 @@ export default function ProjectFormPage({
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="p-2.5 bg-white/5 rounded-xl border border-white/5">
                 <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Final Value</p>
-                <p className="text-sm font-black mt-1">{formatWithINRConversion(calcTotalValue, currency)}</p>
-                {!isPersonalAccount && !activeClient.isForeign && !inclusiveGst && projectValue && (
-                  <span className="text-[8px] text-[#8e90ff] font-bold uppercase select-none block mt-0.5">(+18% GST)</span>
-                )}
+                <p className="text-sm font-black mt-1">{formatCurrencyOnly(calcTotalValue, currency)}</p>
                 {isPersonalAccount && (
-                  <span className="text-[8px] text-amber-400 font-bold uppercase select-none block mt-0.5">(Personal)</span>
+                  <span className="text-[8px] text-amber-400 font-bold uppercase select-none block mt-0.5">(Personal - 0% Tax)</span>
                 )}
-                {activeClient.isForeign && (
-                  <span className="text-[8px] text-emerald-400 font-bold uppercase select-none block mt-0.5">(Foreign)</span>
+                {!isPersonalAccount && activeClient.isForeign && (
+                  <span className="text-[8px] text-emerald-400 font-bold uppercase select-none block mt-0.5">(Foreign - 0% Tax)</span>
+                )}
+                {!isPersonalAccount && !activeClient.isForeign && !isINR && (
+                  <span className="text-[8px] text-emerald-400 font-bold uppercase select-none block mt-0.5">({getCurrencyCode(currency)} - 0% Tax)</span>
+                )}
+                {!isPersonalAccount && !activeClient.isForeign && isINR && !inclusiveGst && projectValue && (
+                  <span className="text-[8px] text-[#8e90ff] font-bold uppercase select-none block mt-0.5">(+18% GST)</span>
                 )}
               </div>
               <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/15">
                 <p className="text-[9px] font-bold uppercase text-emerald-450 tracking-wider">Paid</p>
-                <p className="text-sm font-black text-emerald-400 mt-1">{formatWithINRConversion(calcReceived, currency)}</p>
+                <p className="text-sm font-black text-emerald-400 mt-1">{formatWithINRConversion(calcReceived, currency, calcReceived > 0)}</p>
               </div>
               <div className="p-2.5 bg-rose-500/10 rounded-xl border border-rose-500/15">
                 <p className="text-[9px] font-bold uppercase text-rose-400 tracking-wider">Outstanding</p>
-                <p className="text-sm font-black text-rose-455 mt-1">{formatWithINRConversion(calcOutstanding, currency)}</p>
+                <p className="text-sm font-black text-rose-455 mt-1">{formatCurrencyOnly(calcOutstanding, currency)}</p>
               </div>
             </div>
 
@@ -867,13 +876,13 @@ export default function ProjectFormPage({
                 <div className="p-2 bg-purple-500/10 rounded-xl border border-purple-500/20">
                   <p className="text-[9px] font-bold uppercase text-purple-300 tracking-wider">Est. Commission</p>
                   <p className="text-xs font-black text-purple-300 mt-0.5">
-                    - {formatWithINRConversion(estimatedCommissionVal, currency)}
+                    - {formatCurrencyOnly(estimatedCommissionVal, currency)}
                   </p>
                 </div>
                 <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
                   <p className="text-[9px] font-bold uppercase text-emerald-300 tracking-wider">Net Retained Rev.</p>
                   <p className="text-xs font-black text-emerald-300 mt-0.5">
-                    {formatWithINRConversion(estimatedNetEarnings, currency)}
+                    {formatCurrencyOnly(estimatedNetEarnings, currency)}
                   </p>
                 </div>
               </div>
@@ -1056,16 +1065,18 @@ export default function ProjectFormPage({
                       {/* Milestone-level tax checkboxes */}
                       {!activeClient.isForeign && (
                         <div className="flex items-center gap-4 mt-2 select-none">
-                          <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-650 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!!m.isInclusive}
-                              disabled={m.status === "Paid" || m.status === "Invoiced" || !!m.isPersonal}
-                              onChange={(e) => handleMilestoneChange(idx, "isInclusive", e.target.checked)}
-                              className="h-3.5 w-3.5 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 cursor-pointer disabled:opacity-50"
-                            />
-                            <span>Incl. GST</span>
-                          </label>
+                          {isINR && (
+                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-650 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!!m.isInclusive}
+                                disabled={m.status === "Paid" || m.status === "Invoiced" || !!m.isPersonal}
+                                onChange={(e) => handleMilestoneChange(idx, "isInclusive", e.target.checked)}
+                                className="h-3.5 w-3.5 rounded text-[#5D5FEF] focus:ring-indigo-500 border-slate-350 cursor-pointer disabled:opacity-50"
+                              />
+                              <span>Incl. GST</span>
+                            </label>
+                          )}
 
                           <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-655 cursor-pointer">
                             <input
@@ -1086,13 +1097,13 @@ export default function ProjectFormPage({
                         </div>
                       )}
 
-                      {m.isInclusive && !m.isPersonal && !activeClient.isForeign ? (
+                      {isINR && m.isInclusive && !m.isPersonal && !activeClient.isForeign ? (
                         <span className="block mt-1 text-[9px] font-bold text-slate-400/90 text-right select-none pr-1 animate-fade-in">
-                          Base: {formatWithINRConversion(Math.round((Number(m.amount) || 0) / 1.18), currency)}
+                          Base: {formatCurrencyOnly(Math.round((Number(m.amount) || 0) / 1.18), currency)}
                         </span>
-                      ) : (!m.isInclusive && !m.isPersonal && !activeClient.isForeign) ? (
+                      ) : (isINR && !m.isInclusive && !m.isPersonal && !activeClient.isForeign) ? (
                         <span className="block mt-1 text-[9px] font-bold text-[#5D5FEF] text-right select-none pr-1 animate-fade-in">
-                          Total (with GST): {formatWithINRConversion(Math.round((Number(m.amount) || 0) * 1.18), currency)}
+                          Total (with GST): {formatCurrencyOnly(Math.round((Number(m.amount) || 0) * 1.18), currency)}
                         </span>
                       ) : null}
                     </div>

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "./ConfirmDialog";
-import { convertToINR, formatWithINRConversion } from "../utils/currencyUtils";
+import { convertToINR, formatWithINRConversion, formatCurrencyOnly, getCurrencyCode } from "../utils/currencyUtils";
 
 export default function ProjectsPage({
   token,
@@ -267,9 +267,10 @@ export default function ProjectsPage({
   const getProjectFinancials = (proj) => {
     if (!proj) return { value: 0, received: 0, pending: 0, invoicesCount: 0, percent: 0, baseValue: 0, taxValue: 0, baseReceived: 0, taxReceived: 0 };
     
+    const isINR = getCurrencyCode(proj.currency) === "INR";
     const isForeign = proj.client?.isForeign === true;
     const isPersonal = proj.isPersonalAccount === true;
-    const hasGst = !isForeign && !isPersonal;
+    const hasGst = isINR && !isForeign && !isPersonal;
 
     let totalBase = Number(proj.projectValue) || 0;
     let totalTax = 0;
@@ -296,7 +297,7 @@ export default function ProjectsPage({
 
     if (proj.milestones && proj.milestones.length > 0) {
       proj.milestones.forEach((m) => {
-        const isMExempt = isForeign || isPersonal || !!m.isPersonal;
+        const isMExempt = !isINR || isForeign || isPersonal || !!m.isPersonal;
         const rawAmt = Number(m.amount) || 0;
 
         let mBase = rawAmt;
@@ -595,13 +596,13 @@ export default function ProjectsPage({
                           {proj.startDate ? new Date(proj.startDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' }) : "N/A"}
                         </td>
                         <td className="py-3.5 text-right text-slate-900 font-semibold whitespace-nowrap">
-                          {formatWithINRConversion(financials.value, proj.currency)}
+                          {formatCurrencyOnly(financials.value, proj.currency)}
                         </td>
                         <td className="py-3.5 text-right text-emerald-600 font-semibold whitespace-nowrap">
-                          {formatWithINRConversion(financials.received, proj.currency)}
+                          {formatWithINRConversion(financials.received, proj.currency, financials.received > 0)}
                         </td>
                         <td className="py-3.5 text-right text-rose-500 font-semibold whitespace-nowrap">
-                          {formatWithINRConversion(financials.pending, proj.currency)}
+                          {formatCurrencyOnly(financials.pending, proj.currency)}
                         </td>
                         <td className="py-3.5 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${getStatusBadgeClass(proj.status)}`}>

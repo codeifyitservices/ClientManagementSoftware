@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 import ConfirmDialog from "./ConfirmDialog";
-import { formatWithINRConversion, formatCurrencyOnly, convertToINR } from "../utils/currencyUtils";
+import { formatWithINRConversion, formatCurrencyOnly, convertToINR, getCurrencyCode } from "../utils/currencyUtils";
 
 const ROWS_PER_PAGE = 10;
 
@@ -121,9 +121,10 @@ export default function InvoiceTable({
     let grand = 0;
 
     filteredInvoices.forEach((inv) => {
-      base += convertToINR(inv.amount || 0, inv.currency);
-      gst += convertToINR(inv.gstAmount || 0, inv.currency);
-      grand += convertToINR(inv.totalAmount || 0, inv.currency);
+      const isTaxExempt = getCurrencyCode(inv.currency) !== "INR" || !!inv.client?.isForeign;
+      base += convertToINR(inv.amount || inv.totalAmount || 0, inv.currency);
+      gst += isTaxExempt ? 0 : convertToINR(inv.gstAmount || 0, inv.currency);
+      grand += convertToINR(inv.totalAmount || inv.amount || 0, inv.currency);
     });
 
     return { base, gst, grand };
@@ -446,26 +447,30 @@ export default function InvoiceTable({
                     {/* Base Amount */}
                     <td className="px-3 py-2.5 text-right text-gray-700 whitespace-nowrap font-medium">
                       {invoice.amount != null
-                        ? formatCurrencyOnly(invoice.amount, invoice.currency)
+                        ? formatCurrencyOnly(getCurrencyCode(invoice.currency) !== "INR" || invoice.client?.isForeign ? (invoice.totalAmount || invoice.amount) : invoice.amount, invoice.currency)
                         : "—"}
                     </td>
 
                     {/* GST Rate */}
                     <td className="px-3 py-2.5 text-right text-gray-600 whitespace-nowrap">
-                      {invoice.gstRate != null ? `${invoice.gstRate}%` : "—"}
+                      {getCurrencyCode(invoice.currency) !== "INR" || invoice.client?.isForeign
+                        ? "0%"
+                        : (invoice.gstRate != null ? `${invoice.gstRate}%` : "—")}
                     </td>
 
                     {/* GST Amount */}
                     <td className="px-3 py-2.5 text-right text-indigo-600 whitespace-nowrap font-medium">
-                      {invoice.gstAmount != null
-                        ? formatCurrencyOnly(invoice.gstAmount, invoice.currency)
-                        : "—"}
+                      {getCurrencyCode(invoice.currency) !== "INR" || invoice.client?.isForeign
+                        ? "—"
+                        : (invoice.gstAmount != null
+                          ? formatCurrencyOnly(invoice.gstAmount, invoice.currency)
+                          : "—")}
                     </td>
 
                     {/* Grand Total */}
                     <td className="px-3 py-2.5 text-right font-black text-slate-900 whitespace-nowrap">
                       {invoice.totalAmount != null
-                        ? formatWithINRConversion(invoice.totalAmount, invoice.currency)
+                        ? formatWithINRConversion(invoice.totalAmount, invoice.currency, invoice.paymentStatus === "Paid")
                         : "—"}
                     </td>
 

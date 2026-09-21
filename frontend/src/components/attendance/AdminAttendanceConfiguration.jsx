@@ -16,9 +16,20 @@ import {
   Wifi,
   ExternalLink,
   Compass,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from "lucide-react";
 import { attendanceService } from "../../services/attendanceService";
+
+const WEEK_DAYS = [
+  { key: "Mon", label: "M", full: "Monday" },
+  { key: "Tue", label: "T", full: "Tuesday" },
+  { key: "Wed", label: "W", full: "Wednesday" },
+  { key: "Thu", label: "T", full: "Thursday" },
+  { key: "Fri", label: "F", full: "Friday" },
+  { key: "Sat", label: "S", full: "Saturday" },
+  { key: "Sun", label: "S", full: "Sunday" },
+];
 
 export default function AdminAttendanceConfiguration() {
   const [activeTab, setActiveTab] = useState("shifts"); // 'shifts' | 'locations' | 'ip' | 'rules'
@@ -32,7 +43,15 @@ export default function AdminAttendanceConfiguration() {
 
   const [policy, setPolicy] = useState({
     shifts: [
-      { name: "General Shift", startTime: "09:30", endTime: "18:30", graceMinutes: 15, halfDayHours: 4, fullDayHours: 8 }
+      { 
+        name: "General Shift", 
+        startTime: "09:30", 
+        endTime: "18:30", 
+        graceMinutes: 15, 
+        halfDayHours: 4, 
+        fullDayHours: 8,
+        workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+      }
     ],
     locations: [
       { name: "Headquarters", address: "Main Office", latitude: 28.6139, longitude: 77.2090, radiusMeters: 100, isRestricted: false }
@@ -59,8 +78,14 @@ export default function AdminAttendanceConfiguration() {
       const payload = res?.data || res;
       if (payload?.success || res?.success) {
         const d = payload.data || payload.policy || payload;
+        const normalizedShifts = (d.shifts || policy.shifts).map((s) => ({
+          ...s,
+          workingDays: Array.isArray(s.workingDays) && s.workingDays.length > 0 
+            ? s.workingDays 
+            : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        }));
         setPolicy({
-          shifts: d.shifts || policy.shifts,
+          shifts: normalizedShifts,
           locations: d.locations || policy.locations,
           ipWhitelist: d.ipWhitelist || policy.ipWhitelist,
           rules: { ...policy.rules, ...(d.rules || {}) }
@@ -100,7 +125,15 @@ export default function AdminAttendanceConfiguration() {
       ...policy,
       shifts: [
         ...policy.shifts,
-        { name: "New Shift", startTime: "09:00", endTime: "18:00", graceMinutes: 15, halfDayHours: 4, fullDayHours: 8 }
+        { 
+          name: "New Shift", 
+          startTime: "09:00", 
+          endTime: "18:00", 
+          graceMinutes: 15, 
+          halfDayHours: 4, 
+          fullDayHours: 8,
+          workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        }
       ]
     });
   };
@@ -108,6 +141,31 @@ export default function AdminAttendanceConfiguration() {
   const updateShift = (index, field, value) => {
     const updated = [...policy.shifts];
     updated[index][field] = value;
+    setPolicy({ ...policy, shifts: updated });
+  };
+
+  const toggleShiftDay = (index, dayKey) => {
+    const updated = [...policy.shifts];
+    const currentDays = updated[index].workingDays || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    if (currentDays.includes(dayKey)) {
+      if (currentDays.length > 1) {
+        updated[index].workingDays = currentDays.filter((d) => d !== dayKey);
+      }
+    } else {
+      updated[index].workingDays = [...currentDays, dayKey];
+    }
+    setPolicy({ ...policy, shifts: updated });
+  };
+
+  const setShiftDaysPreset = (index, preset) => {
+    const updated = [...policy.shifts];
+    if (preset === "5days") {
+      updated[index].workingDays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    } else if (preset === "6days") {
+      updated[index].workingDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    } else if (preset === "all") {
+      updated[index].workingDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    }
     setPolicy({ ...policy, shifts: updated });
   };
 
@@ -370,63 +428,129 @@ export default function AdminAttendanceConfiguration() {
           </div>
 
           <div className="space-y-3">
-            {policy.shifts.map((s, idx) => (
-              <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Shift Name</label>
-                  <input
-                    type="text"
-                    value={s.name}
-                    onChange={(e) => updateShift(idx, "name", e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
-                  />
+            {policy.shifts.map((s, idx) => {
+              const currentDays = s.workingDays || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+              return (
+                <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3.5">
+                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Shift Name</label>
+                      <input
+                        type="text"
+                        value={s.name}
+                        onChange={(e) => updateShift(idx, "name", e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 font-semibold text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Time</label>
+                      <input
+                        type="time"
+                        value={s.startTime}
+                        onChange={(e) => updateShift(idx, "startTime", e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 font-mono text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">End Time</label>
+                      <input
+                        type="time"
+                        value={s.endTime}
+                        onChange={(e) => updateShift(idx, "endTime", e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 font-mono text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Grace Period (Mins)</label>
+                      <input
+                        type="number"
+                        value={s.graceMinutes}
+                        onChange={(e) => updateShift(idx, "graceMinutes", parseInt(e.target.value) || 0)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 font-medium text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Full Day (Hrs)</label>
+                      <input
+                        type="number"
+                        value={s.fullDayHours}
+                        onChange={(e) => updateShift(idx, "fullDayHours", parseFloat(e.target.value) || 8)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 font-medium text-slate-800"
+                      />
+                    </div>
+                    <div className="flex justify-end pt-4 md:pt-0">
+                      <button
+                        onClick={() => removeShift(idx)}
+                        title="Delete Shift"
+                        className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Week Days Selection (Attendance Required Schedule) */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-200/80">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Working Days (Attendance Schedule):</span>
+                        <span className="text-[11px] font-bold text-indigo-600 normal-case">
+                          {currentDays.length === 7 
+                            ? "All 7 Days Required" 
+                            : `${currentDays.length} Days/Wk (${currentDays.join(", ")})`}
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        {WEEK_DAYS.map((day) => {
+                          const isSelected = currentDays.includes(day.key);
+                          return (
+                            <button
+                              key={day.key}
+                              type="button"
+                              onClick={() => toggleShiftDay(idx, day.key)}
+                              title={`${day.full} (${isSelected ? "Active Working Day" : "Weekly Off / Non-working"})`}
+                              className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center select-none ${
+                                isSelected
+                                  ? "bg-indigo-600 text-white shadow-xs hover:bg-indigo-700"
+                                  : "bg-white text-slate-400 border border-slate-200 hover:border-slate-300 hover:text-slate-600"
+                              }`}
+                            >
+                              {day.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Presets:</span>
+                      <button
+                        type="button"
+                        onClick={() => setShiftDaysPreset(idx, "5days")}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                      >
+                        Mon - Fri
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShiftDaysPreset(idx, "6days")}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                      >
+                        Mon - Sat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShiftDaysPreset(idx, "all")}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+                      >
+                        All 7 Days
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    value={s.startTime}
-                    onChange={(e) => updateShift(idx, "startTime", e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">End Time</label>
-                  <input
-                    type="time"
-                    value={s.endTime}
-                    onChange={(e) => updateShift(idx, "endTime", e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Grace Period (Mins)</label>
-                  <input
-                    type="number"
-                    value={s.graceMinutes}
-                    onChange={(e) => updateShift(idx, "graceMinutes", parseInt(e.target.value) || 0)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Full Day (Hrs)</label>
-                  <input
-                    type="number"
-                    value={s.fullDayHours}
-                    onChange={(e) => updateShift(idx, "fullDayHours", parseFloat(e.target.value) || 8)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
-                  />
-                </div>
-                <div className="flex justify-end pt-4 md:pt-0">
-                  <button
-                    onClick={() => removeShift(idx)}
-                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -149,47 +149,58 @@ export default function AdminAttendanceDetailDrawer({ record, onClose }) {
             <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Visual Activity Timeline
             </h5>
-            <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-              {timelineEvents.map((evt, idx) => (
-                <div key={idx} className="relative group">
-                  {/* Dot */}
-                  <div className={`absolute -left-6 top-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${
-                    evt.type === "CLOCK_IN" ? "bg-emerald-500" :
-                    evt.type === "CLOCK_OUT" ? "bg-slate-700" :
-                    evt.type === "BREAK_START" ? "bg-amber-500" : "bg-indigo-500"
-                  }`} />
-                  
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs text-slate-800">{evt.title}</span>
-                      <span className="text-xs font-mono font-semibold text-indigo-600">
-                        {evt.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </span>
+            {timelineEvents.length === 0 ? (
+              <div className="p-5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 text-center space-y-1">
+                <p className="font-bold text-slate-700">No Punch Logs Recorded</p>
+                <p>
+                  {record.attendanceStatus === "Absent" || record.status === "Absent"
+                    ? "The employee did not clock in on this scheduled shift working day and is marked Absent."
+                    : "No timeline activity recorded for this date."}
+                </p>
+              </div>
+            ) : (
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                {timelineEvents.map((evt, idx) => (
+                  <div key={idx} className="relative group">
+                    {/* Dot */}
+                    <div className={`absolute -left-6 top-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${
+                      evt.type === "CLOCK_IN" ? "bg-emerald-500" :
+                      evt.type === "CLOCK_OUT" ? "bg-slate-700" :
+                      evt.type === "BREAK_START" ? "bg-amber-500" : "bg-indigo-500"
+                    }`} />
+                    
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-800">{evt.title}</span>
+                        <span className="text-xs font-mono font-semibold text-indigo-600">
+                          {evt.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                      {evt.subtitle && (
+                        <p className="text-xs text-slate-500 mt-0.5">{evt.subtitle}</p>
+                      )}
+                      {evt.location && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{evt.location}</span>
+                        </div>
+                      )}
+                      {evt.coords && (
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          GPS: {evt.coords}
+                        </div>
+                      )}
+                      {evt.ip && (
+                        <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono mt-0.5">
+                          <Globe className="w-3 h-3 text-slate-400" />
+                          IP: {evt.ip}
+                        </div>
+                      )}
                     </div>
-                    {evt.subtitle && (
-                      <p className="text-xs text-slate-500 mt-0.5">{evt.subtitle}</p>
-                    )}
-                    {evt.location && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{evt.location}</span>
-                      </div>
-                    )}
-                    {evt.coords && (
-                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                        GPS: {evt.coords}
-                      </div>
-                    )}
-                    {evt.ip && (
-                      <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono mt-0.5">
-                        <Globe className="w-3 h-3 text-slate-400" />
-                        IP: {evt.ip}
-                      </div>
-                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Verification & Compliance Details */}

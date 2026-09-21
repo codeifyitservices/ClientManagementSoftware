@@ -11,7 +11,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
-import { formatWithINRConversion, getSubscriptionCode } from "../utils/currencyUtils";
+import { formatCurrencyOnly, formatWithINRConversion, getSubscriptionCode } from "../utils/currencyUtils";
 
 const PAGE_SIZE = 10;
 
@@ -354,7 +354,7 @@ export default function SubscriptionTable({
                   {/* Amount */}
                   <td className="px-3 py-2.5 text-right whitespace-nowrap">
                     <div className="font-extrabold text-slate-900 text-xs">
-                      {formatWithINRConversion(sub.finalAmount || sub.amount, sub.currency || "INR (₹)")}
+                      {formatCurrencyOnly(sub.finalAmount || sub.amount, sub.currency || "INR (₹)")}
                     </div>
                     <div className="text-[9px] text-slate-400 font-bold mt-0.5 uppercase tracking-wider">
                       {sub.client?.isForeign ? "No GST" : sub.isPersonalAccount ? "Personal" : (sub.inclusiveGst !== false ? "GST Inc" : "+18% GST")}

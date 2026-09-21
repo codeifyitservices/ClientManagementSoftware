@@ -290,7 +290,7 @@ export const deleteProject = async (req, res) => {
 // POST /api/projects/:id/expenses - Add an expense to project
 export const addProjectExpense = async (req, res) => {
   try {
-    const { title, category, amount, date, paidBy, notes } = req.body;
+    const { title, category, amount, currency, date, paidBy, notes } = req.body;
     if (!title || amount === undefined || amount === null) {
       return res.status(400).json({ message: "Title and Amount are required." });
     }
@@ -304,6 +304,7 @@ export const addProjectExpense = async (req, res) => {
       title,
       category: category || "Other",
       amount: Number(amount) || 0,
+      currency: currency || project.currency || "INR (₹)",
       date: date ? new Date(date) : new Date(),
       paidBy: paidBy || "Company Account",
       notes: notes || "",
@@ -319,7 +320,7 @@ export const addProjectExpense = async (req, res) => {
 // PUT /api/projects/:id/expenses/:expenseId - Update a project expense
 export const updateProjectExpense = async (req, res) => {
   try {
-    const { title, category, amount, date, paidBy, notes } = req.body;
+    const { title, category, amount, currency, date, paidBy, notes } = req.body;
     const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
@@ -333,6 +334,7 @@ export const updateProjectExpense = async (req, res) => {
     if (title !== undefined) expense.title = title;
     if (category !== undefined) expense.category = category;
     if (amount !== undefined) expense.amount = Number(amount);
+    if (currency !== undefined) expense.currency = currency;
     if (date !== undefined) expense.date = new Date(date);
     if (paidBy !== undefined) expense.paidBy = paidBy;
     if (notes !== undefined) expense.notes = notes;

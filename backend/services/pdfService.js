@@ -225,7 +225,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
     currentY += 4;
   });
 
-  const grandTotal = invoice.totalAmount || (subTotal + totalGst);
+  const grandTotal = isTaxExempt ? subTotal : (invoice.totalAmount || (subTotal + totalGst));
 
   // 6. Tax Breakdown & Totals Summary
   currentY += 10;

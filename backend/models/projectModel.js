@@ -80,6 +80,10 @@ const expenseSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  currency: {
+    type: String,
+    default: "INR (₹)",
+  },
   date: {
     type: Date,
     default: Date.now,
@@ -236,9 +240,11 @@ projectSchema.pre("validate", async function () {
     }
   }
 
+  const isNonInr = this.currency && !this.currency.includes("INR") && !this.currency.includes("₹");
+
   if (this.projectValue !== undefined) {
-    if (isForeign || this.isPersonalAccount) {
-      this.finalAmount = this.projectValue; // No GST for foreign or personal account clients
+    if (isForeign || this.isPersonalAccount || isNonInr) {
+      this.finalAmount = this.projectValue; // No GST for foreign, personal account, or non-INR currency
     } else if (this.inclusiveGst) {
       this.finalAmount = this.projectValue;
     } else {
@@ -249,7 +255,7 @@ projectSchema.pre("validate", async function () {
   // Validate that the sum of milestone total amounts does not exceed finalAmount
   if (this.milestones && this.milestones.length > 0) {
     const sumTotal = this.milestones.reduce((acc, m) => {
-      const isTaxExempt = isForeign || this.isPersonalAccount || !!m.isPersonal;
+      const isTaxExempt = isForeign || this.isPersonalAccount || !!m.isPersonal || isNonInr;
       if (isTaxExempt) return acc + (Number(m.amount) || 0);
       if (m.isInclusive) return acc + (Number(m.amount) || 0);
       return acc + Math.round((Number(m.amount) || 0) * 1.18 * 100) / 100;
@@ -259,7 +265,7 @@ projectSchema.pre("validate", async function () {
     if (sumTotal > (this.finalAmount || 0) + 0.05) {
       this.invalidate(
         "milestones",
-        `The sum of payment milestones with GST (₹${sumTotal.toLocaleString("en-IN")}) cannot exceed the final project value (₹${(this.finalAmount || 0).toLocaleString("en-IN")}).`
+        `The sum of payment milestones with GST (${sumTotal}) cannot exceed the final project value (${this.finalAmount || 0}).`
       );
     }
   }

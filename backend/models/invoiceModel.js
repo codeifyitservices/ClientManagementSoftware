@@ -116,6 +116,18 @@ const invoiceSchema = new mongoose.Schema(
       enum: ["Pending", "Paid"],
       default: "Pending",
     },
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+    exchangeRate: {
+      type: Number,
+      default: 1,
+    },
+    paidAmountINR: {
+      type: Number,
+      default: 0,
+    },
     projectId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Project",

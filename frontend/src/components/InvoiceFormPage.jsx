@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Calendar, Eye, ChevronLeft, RefreshCw, Hash } from "lucide-react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { SUPPORTED_CURRENCIES, getCurrencySymbol, formatWithINRConversion } from "../utils/currencyUtils";
+import { SUPPORTED_CURRENCIES, getCurrencySymbol, getCurrencyCode, formatCurrencyOnly, formatWithINRConversion } from "../utils/currencyUtils";
 
 // State lookup helper for state name from GSTIN code
 const stateLookup = {
@@ -720,7 +720,7 @@ export default function InvoiceFormPage({
     : "Intrastate";
 
   // Check if currency is not INR or client is foreign
-  const isNonINR = currency && !currency.includes("INR") && !currency.includes("₹");
+  const isNonINR = getCurrencyCode(currency) !== "INR";
   const isTaxExempt = !!activeClient.isForeign || isNonINR;
 
   // Tax calculations
@@ -1387,7 +1387,7 @@ export default function InvoiceFormPage({
               <div>
                 <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Base Amount</span>
                 <span className="text-sm font-bold text-white">
-                  {formatWithINRConversion(subTotal, currency)}
+                  {formatCurrencyOnly(subTotal, currency)}
                 </span>
               </div>
               <div>
@@ -1395,13 +1395,13 @@ export default function InvoiceFormPage({
                   {isTaxExempt ? "GST (0%)" : "GST Amount"}
                 </span>
                 <span className="text-sm font-bold text-indigo-300">
-                  {formatWithINRConversion(totalGstAmount, currency)}
+                  {formatCurrencyOnly(totalGstAmount, currency)}
                 </span>
               </div>
               <div className="pl-4 border-l border-white/10">
                 <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400 block">Grand Total</span>
                 <span className="text-base font-black text-emerald-400">
-                  {formatWithINRConversion(grandTotal, currency)}
+                  {formatCurrencyOnly(grandTotal, currency)}
                 </span>
               </div>
             </div>
