@@ -7,9 +7,20 @@ import {
   Phone,
   Mail,
   Globe,
+  CreditCard,
+  DollarSign,
+  CheckCircle,
+  CalendarCheck,
+  Building2,
+  Landmark,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { getCurrencySymbol, getCurrencyCode, convertToINR, getLiveExchangeRate } from "../utils/currencyUtils";
+import {
+  getCurrencySymbol,
+  getCurrencyCode,
+  convertToINR,
+  getLiveExchangeRate,
+} from "../utils/currencyUtils";
 
 // Helper function to convert numeric value into Indian English word format
 const numberToWords = (num) => {
@@ -172,7 +183,9 @@ export default function InvoicePreviewPage({
     ) {
       const fetchNextNum = async () => {
         try {
-          const dateParam = invoiceData?.invoiceDate ? `?date=${encodeURIComponent(invoiceData.invoiceDate)}` : "";
+          const dateParam = invoiceData?.invoiceDate
+            ? `?date=${encodeURIComponent(invoiceData.invoiceDate)}`
+            : "";
           const res = await fetch(
             `${import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"}/api/invoices/next-number${dateParam}`,
             {
@@ -370,11 +383,22 @@ export default function InvoicePreviewPage({
   let subTotal = 0;
   let totalGstAmount = 0;
   items.forEach((item) => {
-    const base = Number(item.amount !== undefined && item.amount !== null ? item.amount : ((item.qty || 1) * (item.rate || 0)));
-    const effectiveGstRate = isTaxExempt ? 0 : ((item.gstRate !== undefined && item.gstRate !== null) ? item.gstRate : 18);
-    const gst = (item.isInclusive && item.originalAmount > 0 && !isTaxExempt)
-      ? (item.originalAmount - base)
-      : (isTaxExempt ? 0 : (base * (effectiveGstRate / 100)));
+    const base = Number(
+      item.amount !== undefined && item.amount !== null
+        ? item.amount
+        : (item.qty || 1) * (item.rate || 0),
+    );
+    const effectiveGstRate = isTaxExempt
+      ? 0
+      : item.gstRate !== undefined && item.gstRate !== null
+        ? item.gstRate
+        : 18;
+    const gst =
+      item.isInclusive && item.originalAmount > 0 && !isTaxExempt
+        ? item.originalAmount - base
+        : isTaxExempt
+          ? 0
+          : base * (effectiveGstRate / 100);
 
     const roundedBase = Math.round(base * 100) / 100;
     const roundedGst = Math.round(gst * 100) / 100;
@@ -385,7 +409,11 @@ export default function InvoicePreviewPage({
   const grandTotal = subTotal + totalGstAmount;
 
   // Get active item GST rate for informational text
-  const primaryGstRate = isTaxExempt ? 0 : ((items[0]?.gstRate !== undefined && items[0]?.gstRate !== null) ? items[0].gstRate : 18);
+  const primaryGstRate = isTaxExempt
+    ? 0
+    : items[0]?.gstRate !== undefined && items[0]?.gstRate !== null
+      ? items[0].gstRate
+      : 18;
 
   const handleBack = () => {
     if (isDummyPreview) {
@@ -507,20 +535,45 @@ export default function InvoicePreviewPage({
               <table className="text-[10px]">
                 <tbody>
                   <tr>
-                    <td className="text-slate-600 font-medium pr-3 py-1 text-right">
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
                       Invoice Date :
                     </td>
-                    <td className="text-slate-900 font-normal py-1">
+                    <td className="text-slate-900 font-normal py-0.5">
                       {new Date(
                         invoiceData.invoiceDate || Date.now(),
-                      ).toLocaleDateString("en-IN")}
+                      ).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
                     </td>
                   </tr>
                   <tr>
-                    <td className="text-slate-600 font-medium pr-3 py-1 text-right">
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
+                      Due Date :
+                    </td>
+                    <td className="text-slate-900 font-normal py-0.5">
+                      {invoiceData.dueDate
+                        ? new Date(invoiceData.dueDate).toLocaleDateString(
+                            "en-IN",
+                            { day: "numeric", month: "long", year: "numeric" },
+                          )
+                        : "—"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
+                      Currency :
+                    </td>
+                    <td className="text-slate-900 font-normal py-0.5">
+                      {invoiceData.currency || "INR (Indian Rupee)"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
                       Status :
                     </td>
-                    <td className="py-1">
+                    <td className="py-0.5">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded text-[9px] font-bold border ${
                           (invoiceData.paymentStatus || "").toLowerCase() ===
@@ -545,12 +598,18 @@ export default function InvoicePreviewPage({
                 <th className="py-2.5 px-3 rounded-l w-8">#</th>
                 <th className="py-2.5 px-3">Description</th>
                 <th className="py-2.5 px-3 text-center">SAC Code</th>
-                <th className="py-2.5 px-3 text-right rounded-r">Amount ({getCurrencySymbol(invoiceData.currency)})</th>
+                <th className="py-2.5 px-3 text-right rounded-r">
+                  Amount ({getCurrencySymbol(invoiceData.currency)})
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 font-normal text-slate-800">
               {items.map((item, idx) => {
-                const lineTaxable = Number(item.amount !== undefined && item.amount !== null ? item.amount : ((item.qty || 1) * (item.rate || 0)));
+                const lineTaxable = Number(
+                  item.amount !== undefined && item.amount !== null
+                    ? item.amount
+                    : (item.qty || 1) * (item.rate || 0),
+                );
                 return (
                   <tr key={idx}>
                     <td className="py-3 px-3 text-slate-500 font-normal">
@@ -563,7 +622,9 @@ export default function InvoicePreviewPage({
                       {item.sacCode || "998314"}
                     </td>
                     <td className="py-3 px-3 text-right text-slate-900 font-bold">
-                      {lineTaxable.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      {lineTaxable.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                      })}
                     </td>
                   </tr>
                 );
@@ -617,7 +678,19 @@ export default function InvoicePreviewPage({
                 </>
               )}
             </div>
-            <div className="w-64 bg-slate-100 p-2.5 rounded-lg border border-slate-200 mt-2 grid grid-cols-2 text-right text-xs">
+          </div>
+
+          {/* Amount in Words + Total Box — horizontal row */}
+          <div className="flex items-end justify-between gap-4 pt-3 border-t border-slate-200">
+            <div>
+              <p className="text-[10px] font-bold text-slate-900">
+                Amount in Words:
+              </p>
+              <p className="text-[10px] text-slate-600 font-normal mt-0.5 max-w-[360px]">
+                {numberToWords(grandTotal)}
+              </p>
+            </div>
+            <div className="w-64 bg-slate-100 p-2.5 rounded-lg border border-slate-200 grid grid-cols-2 text-right text-xs shrink-0">
               <span className="font-bold text-slate-900">Total</span>
               <span className="font-bold text-slate-900">
                 {getCurrencySymbol(invoiceData.currency)}{" "}
@@ -626,37 +699,157 @@ export default function InvoicePreviewPage({
                 })}
               </span>
             </div>
-            {((invoiceData.paymentStatus || "").toLowerCase() === "paid" && (invoiceData.currency && !invoiceData.currency.includes("INR") && !invoiceData.currency.includes("₹"))) && (
-              <div className="w-64 bg-emerald-50/90 p-2.5 rounded-lg border border-emerald-200 mt-1.5 text-right text-[11px] text-emerald-900 space-y-0.5">
-                <div className="flex justify-between items-center font-bold">
-                  <span>Settled in INR:</span>
-                  <span className="font-black text-emerald-700">
-                    ₹{(invoiceData.paidAmountINR || convertToINR(grandTotal, invoiceData.currency)).toLocaleString("en-IN", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                </div>
-                <div className="text-[9px] text-emerald-600 font-semibold">
-                  Exchange Rate: 1 {getCurrencyCode(invoiceData.currency)} = ₹{(invoiceData.exchangeRate || getLiveExchangeRate(invoiceData.currency)).toFixed(2)}
+          </div>
+
+          {/* INR Settlement block (for paid foreign-currency invoices) */}
+          {(invoiceData.paymentStatus || "").toLowerCase() === "paid" &&
+            invoiceData.currency &&
+            !invoiceData.currency.includes("INR") &&
+            !invoiceData.currency.includes("₹") && (
+              <div className="flex justify-end">
+                <div className="w-64 bg-emerald-50/90 p-2.5 rounded-lg border border-emerald-200 mt-1.5 text-right text-[11px] text-emerald-900 space-y-0.5">
+                  <div className="flex justify-between items-center font-bold">
+                    <span>Settled in INR:</span>
+                    <span className="font-black text-emerald-700">
+                      ₹
+                      {(
+                        invoiceData.paidAmountINR ||
+                        convertToINR(grandTotal, invoiceData.currency)
+                      ).toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                  <div className="text-[9px] text-emerald-600 font-semibold">
+                    Exchange Rate: 1 {getCurrencyCode(invoiceData.currency)} = ₹
+                    {(
+                      invoiceData.exchangeRate ||
+                      getLiveExchangeRate(invoiceData.currency)
+                    ).toFixed(2)}
+                  </div>
                 </div>
               </div>
             )}
-          </div>
 
-          {/* 6. Amount in words & footer footnotes */}
-          <div className="pt-8 border-t border-slate-200 space-y-2">
-            <p className="text-[10px] font-bold text-slate-900">
-              Amount in Words:{" "}
-              <span className="text-slate-700 font-normal">
-                {numberToWords(grandTotal)}
-              </span>
-            </p>
+          {/* Payment Details — shown only when invoice is Paid */}
+          {(invoiceData.paymentStatus || "").toLowerCase() === "paid" &&
+            (() => {
+              const cur = getCurrencyCode(invoiceData.currency);
+              const total = Number(invoiceData.totalAmount || grandTotal);
+              const charges = Number(invoiceData.bankCharges || 0);
+              const fmt = (n) =>
+                `${cur} ${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+              const hasCharges = charges > 0;
+
+              const Cell = ({ icon: Icon, label, children }) => (
+                <div className="flex flex-col gap-2 px-3 py-2 min-w-0 border-l border-slate-300/70 first:border-l-0">
+                  <div className="flex items-center gap-1.5 text-[9px] text-slate-700 leading-tight">
+                    <Icon
+                      className="h-4 w-4 shrink-0 text-[#1A3FBF]"
+                      strokeWidth={1.75}
+                    />
+                    <span>{label}</span>
+                  </div>
+                  {children}
+                </div>
+              );
+
+              return (
+                <div className="mt-3 rounded-xl border border-[#DCE6F7] bg-[#F4F8FE] px-4 py-3">
+                  {/* Header */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <CreditCard
+                      className="h-4 w-4 text-[#1A3FBF]"
+                      strokeWidth={1.75}
+                    />
+                    <span className="text-xs font-bold text-[#1A3FBF]">
+                      Payment Details
+                    </span>
+                  </div>
+
+                  {/* Single-row grid */}
+                  <div
+                    className={`grid ${hasCharges ? "grid-cols-6" : "grid-cols-5"}`}
+                  >
+                    <Cell icon={DollarSign} label="Invoice Amount">
+                      <span className="text-[11px] text-slate-900 pl-0.5">
+                        {fmt(total)}
+                      </span>
+                    </Cell>
+
+                    <Cell icon={CheckCircle} label="Payment Status">
+                      <span className="inline-flex w-fit items-center px-4 py-1 rounded-md border border-emerald-400 bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+                        Paid
+                      </span>
+                    </Cell>
+
+                    <Cell icon={CalendarCheck} label="Payment Date">
+                      <span className="text-[11px] text-slate-900 pl-0.5">
+                        {invoiceData.paidAt
+                          ? new Date(invoiceData.paidAt).toLocaleDateString(
+                              "en-IN",
+                              {
+                                day: "numeric",
+                                month: "long",
+                                year: "numeric",
+                              },
+                            )
+                          : "—"}
+                      </span>
+                    </Cell>
+
+                    <Cell icon={FileText} label="Payment Reference">
+                      <span className="text-[11px] text-slate-900 pl-0.5 break-words">
+                        {invoiceData.paymentReference || "—"}
+                      </span>
+                    </Cell>
+
+                    <Cell icon={Building2} label="Amount Received in Bank">
+                      <span className="text-[11px] text-slate-900 pl-0.5">
+                        {fmt(total - charges)}
+                      </span>
+                    </Cell>
+
+                    {hasCharges && (
+                      <Cell icon={Landmark} label="Bank / Intermediary Charges">
+                        <div className="pl-0.5">
+                          <span className="text-[11px] text-slate-900 block">
+                            {fmt(charges)}
+                          </span>
+                          {invoiceData.bankChargesDescription && (
+                            <span className="text-[8px] text-slate-500 leading-tight block mt-0.5">
+                              ({invoiceData.bankChargesDescription})
+                            </span>
+                          )}
+                        </div>
+                      </Cell>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+          {/* 6. Amount in Words & footer footnotes */}
+          <div className="pt-4 border-t border-slate-200 space-y-2">
             {(invoiceData.notes || config.invoiceTerms) && (
-              <div className="mt-2 text-[10px] text-slate-600">
-                <span className="font-bold text-slate-700 block">Terms & Footnotes:</span>
-                <p className="font-normal italic whitespace-pre-line text-slate-500 mt-0.5">
-                  {invoiceData.notes || config.invoiceTerms}
+              <div className="mt-1 text-[10px] text-slate-600">
+                <span className="font-bold text-slate-800 block mb-1">
+                  Terms &amp; Footnotes:
+                </span>
+                <ol className="list-decimal list-inside space-y-0.5 text-slate-600 font-normal">
+                  {(invoiceData.notes || config.invoiceTerms)
+                    .split("\n")
+                    .filter((line) => line.trim())
+                    .map((line, idx) => (
+                      <li key={idx} className="leading-relaxed">
+                        {line.replace(/^\d+\.\s*/, "")}
+                      </li>
+                    ))}
+                </ol>
+                <p className="mt-2 italic text-[9px] text-slate-400 font-medium">
+                  This invoice is system generated and does not require a
+                  signature.
                 </p>
               </div>
             )}
@@ -689,7 +882,11 @@ export default function InvoicePreviewPage({
           onClick={handleBack}
           className="px-6 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-650 hover:bg-slate-50 text-xs font-bold transition-all cursor-pointer shadow-sm"
         >
-          {isDummyPreview ? "Back to Invoices" : (location.state?.readOnly || location.state?.returnTo ? "Back" : "Back to Edit")}
+          {isDummyPreview
+            ? "Back to Invoices"
+            : location.state?.readOnly || location.state?.returnTo
+              ? "Back"
+              : "Back to Edit"}
         </button>
         <button
           type="button"

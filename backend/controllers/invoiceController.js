@@ -407,6 +407,9 @@ export const createInvoice = async (req, res) => {
       paymentStatus,
       projectId,
       milestoneId,
+      bankCharges,
+      bankChargesDescription,
+      paymentReference,
     } = req.body;
 
     if (
@@ -453,6 +456,9 @@ export const createInvoice = async (req, res) => {
       paymentStatus: paymentStatus || "Pending",
       projectId: projectId || null,
       milestoneId: milestoneId || null,
+      bankCharges: Number(bankCharges) || 0,
+      bankChargesDescription: bankChargesDescription || "",
+      paymentReference: paymentReference || "",
     });
 
     const savedInvoice = await newInvoice.save();
@@ -486,6 +492,9 @@ export const updateInvoice = async (req, res) => {
       paymentStatus,
       projectId,
       milestoneId,
+      bankCharges,
+      bankChargesDescription,
+      paymentReference,
     } = req.body;
 
     const invoice = await Invoice.findById(req.params.id);
@@ -547,6 +556,9 @@ export const updateInvoice = async (req, res) => {
     invoice.paymentStatus = paymentStatus ?? invoice.paymentStatus;
     if (projectId !== undefined) invoice.projectId = projectId || null;
     if (milestoneId !== undefined) invoice.milestoneId = milestoneId || null;
+    if (bankCharges !== undefined) invoice.bankCharges = Number(bankCharges) || 0;
+    if (bankChargesDescription !== undefined) invoice.bankChargesDescription = bankChargesDescription;
+    if (paymentReference !== undefined) invoice.paymentReference = paymentReference;
 
     const updatedInvoice = await invoice.save();
 

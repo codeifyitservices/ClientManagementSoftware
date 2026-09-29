@@ -221,6 +221,9 @@ export default function InvoiceFormPage({
             setInvoiceType(data.invoiceType || "Tax Invoice");
             setCurrency(data.currency || "INR (₹)");
             setNotes(data.notes || "");
+            setBankCharges(data.bankCharges || 0);
+            setBankChargesDescription(data.bankChargesDescription || "");
+            setShowBankCharges(!!(data.bankCharges > 0));
             if (data.projectId) setProjectId(data.projectId);
             if (data.milestoneId) setMilestoneId(data.milestoneId);
             if (data.items && data.items.length > 0) {
@@ -249,6 +252,9 @@ export default function InvoiceFormPage({
   const [invoiceType, setInvoiceType] = useState("Tax Invoice");
   const [currency, setCurrency] = useState("INR (₹)");
   const [notes, setNotes] = useState("");
+  const [bankCharges, setBankCharges] = useState(0);
+  const [bankChargesDescription, setBankChargesDescription] = useState("");
+  const [showBankCharges, setShowBankCharges] = useState(false);
   const [projectId, setProjectId] = useState(
     invoice?.projectId || draftInvoice?.projectId || location.state?.projectId || null,
   );
@@ -298,6 +304,9 @@ export default function InvoiceFormPage({
       setInvoiceType(sourceInvoice.invoiceType || "Tax Invoice");
       setCurrency(sourceInvoice.currency || "INR (₹)");
       setNotes(sourceInvoice.notes || "");
+      setBankCharges(sourceInvoice.bankCharges || 0);
+      setBankChargesDescription(sourceInvoice.bankChargesDescription || "");
+      setShowBankCharges(!!(sourceInvoice.bankCharges > 0));
       if (sourceInvoice.items && sourceInvoice.items.length > 0) {
         setItems(
           sourceInvoice.items.map((i) => ({
@@ -531,8 +540,8 @@ export default function InvoiceFormPage({
         serviceName: selectedM.service || "",
         description: selectedM.name
           ? (invoiced > 0
-              ? `${activeProject.projectName} - ${selectedM.name} (Part Payment)`
-              : `${activeProject.projectName} - ${selectedM.name}`)
+              ? `${activeClient.companyName || activeClient.clientName || ""} - ${selectedM.name} (Part Payment)`
+              : `${activeClient.companyName || activeClient.clientName || ""} - ${selectedM.name}`)
           : selectedM.service || "",
         sacCode: sacCode,
         amount: isIncl ? remainingAmount : baseRate,
@@ -819,6 +828,8 @@ export default function InvoiceFormPage({
       shouldSendEmail,
       projectId: projectId || null,
       milestoneId: milestoneId || null,
+      bankCharges: showBankCharges ? (Number(bankCharges) || 0) : 0,
+      bankChargesDescription: showBankCharges ? bankChargesDescription : "",
     };
 
     onSubmit(payload);
@@ -922,6 +933,8 @@ export default function InvoiceFormPage({
           _id: invoice?._id || null,
           projectId: projectId || draftInvoice?.projectId || invoice?.projectId || null,
           milestoneId: milestoneId || draftInvoice?.milestoneId || invoice?.milestoneId || null,
+          bankCharges: showBankCharges ? (Number(bankCharges) || 0) : 0,
+          bankChargesDescription: showBankCharges ? bankChargesDescription : "",
         },
         returnTo: isEdit ? `/invoices/${invoice?._id || id}/edit` : "/invoices/create",
       },
@@ -1436,16 +1449,74 @@ export default function InvoiceFormPage({
 
           {/* Invoice Footnotes & Terms Input */}
           <div className="space-y-1.5 pt-2">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Invoice Footnotes & Terms / Bank Payment Details
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Terms &amp; Footnotes{" "}
+                <span className="text-slate-400 normal-case font-medium">(specific to this invoice — not from settings)</span>
+              </label>
+              <span className="text-[9px] text-slate-400 font-medium select-none">
+                One term per line → numbered list on invoice
+              </span>
+            </div>
             <textarea
-              rows={3}
+              rows={5}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Enter custom invoice footnotes, payment terms, or bank transfer details (e.g. Bank Account: XYZ, IFSC: ABC0123)..."
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500"
+              placeholder={`Enter invoice-specific terms, one per line:\nThis invoice is issued for export of software development services.\nSupply meant for export under bond or Letter of Undertaking (LUT) without payment of IGST.\nPayment received from overseas client towards software development.\nAny bank charges deducted by intermediary/correspondent banks are borne by the beneficiary.`}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 font-mono leading-relaxed"
             />
+            <p className="text-[10px] text-slate-400 font-medium">
+              💡 One line = one numbered footnote on the printed invoice. A system-generated signature disclaimer is always auto-appended.
+            </p>
+          </div>
+
+          {/* Bank / Intermediary Charges Toggle */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="bankChargesToggle"
+                checked={showBankCharges}
+                onChange={(e) => setShowBankCharges(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 accent-indigo-600 cursor-pointer"
+              />
+              <label
+                htmlFor="bankChargesToggle"
+                className="text-[10px] font-bold uppercase tracking-wider text-slate-500 cursor-pointer select-none"
+              >
+                Include Bank / Intermediary Charges
+              </label>
+            </div>
+
+            {showBankCharges && (
+              <div className="grid grid-cols-2 gap-3 pt-1 pl-6 animate-fade-in">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Charges Amount ({getCurrencySymbol(currency)})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={bankCharges}
+                    onChange={(e) => setBankCharges(e.target.value)}
+                    placeholder="e.g. 35"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Charges Description
+                  </label>
+                  <input
+                    type="text"
+                    value={bankChargesDescription}
+                    onChange={(e) => setBankChargesDescription(e.target.value)}
+                    placeholder="e.g. Deducted as per remittance instruction – BEN"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -77,6 +77,20 @@ const invoiceSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    bankCharges: {
+      type: Number,
+      default: 0,
+    },
+    bankChargesDescription: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    paymentReference: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     items: {
       type: [invoiceItemSchema],
       required: true,
