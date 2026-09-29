@@ -380,6 +380,10 @@ export default function InvoicePreviewPage({
   const isTaxExempt = !!activeClient.isForeign || isNonINR;
 
   const items = invoiceData.items || [];
+  const serviceDescriptions = items
+    .map((item) => item.description?.trim())
+    .filter(Boolean)
+    .join(", ");
   let subTotal = 0;
   let totalGstAmount = 0;
   items.forEach((item) => {
@@ -505,6 +509,62 @@ export default function InvoicePreviewPage({
               <p className="text-xs font-bold text-slate-600 mt-1">
                 # {displayInvoiceNum}
               </p>
+              <table className="text-[10px] mt-5 ml-auto">
+                <tbody>
+                  <tr>
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
+                      Invoice Date :
+                    </td>
+                    <td className="text-slate-900 font-normal py-0.5 text-left">
+                      {new Date(
+                        invoiceData.invoiceDate || Date.now(),
+                      ).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
+                      Due Date :
+                    </td>
+                    <td className="text-slate-900 font-normal py-0.5 text-left">
+                      {invoiceData.dueDate
+                        ? new Date(invoiceData.dueDate).toLocaleDateString(
+                            "en-IN",
+                            { day: "numeric", month: "long", year: "numeric" },
+                          )
+                        : "—"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
+                      Currency :
+                    </td>
+                    <td className="text-slate-900 font-normal py-0.5 text-left">
+                      {invoiceData.currency || "INR (Indian Rupee)"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="text-slate-500 font-medium pr-3 py-0.5 text-right">
+                      Status :
+                    </td>
+                    <td className="py-0.5 text-left">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded text-[9px] font-bold border ${
+                          (invoiceData.paymentStatus || "").toLowerCase() ===
+                          "paid"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-400"
+                            : "bg-amber-50 text-amber-800 border-amber-400"
+                        }`}
+                      >
+                        {invoiceData.paymentStatus || "Pending"}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -531,7 +591,7 @@ export default function InvoicePreviewPage({
             </div>
 
             {/* Right: Invoice Metadata */}
-            <div className="text-right flex flex-col justify-end items-end">
+            <div className="hidden text-right flex flex-col justify-end items-end">
               <table className="text-[10px]">
                 <tbody>
                   <tr>
@@ -702,7 +762,8 @@ export default function InvoicePreviewPage({
           </div>
 
           {/* INR Settlement block (for paid foreign-currency invoices) */}
-          {(invoiceData.paymentStatus || "").toLowerCase() === "paid" &&
+          {false &&
+            (invoiceData.paymentStatus || "").toLowerCase() === "paid" &&
             invoiceData.currency &&
             !invoiceData.currency.includes("INR") &&
             !invoiceData.currency.includes("₹") && (
@@ -784,23 +845,28 @@ export default function InvoicePreviewPage({
                       </span>
                     </Cell>
 
-                    <Cell icon={CalendarCheck} label="Payment Date">
+                    <Cell icon={CalendarCheck} label="Invoice Date">
                       <span className="text-[11px] text-slate-900 pl-0.5">
-                        {invoiceData.paidAt
-                          ? new Date(invoiceData.paidAt).toLocaleDateString(
-                              "en-IN",
-                              {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              },
-                            )
+                        {invoiceData.invoiceDate
+                          ? new Date(
+                              invoiceData.invoiceDate,
+                            ).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })
                           : "—"}
                       </span>
                     </Cell>
 
                     <Cell icon={FileText} label="Payment Reference">
-                      <span className="text-[11px] text-slate-900 pl-0.5 break-words">
+                      <span
+                        className="block max-w-full truncate text-[11px] text-slate-900 pl-0.5"
+                        title={serviceDescriptions || "No service description"}
+                      >
+                        {serviceDescriptions || "No service description"}
+                      </span>
+                      <span className="hidden">
                         {invoiceData.paymentReference || "—"}
                       </span>
                     </Cell>
