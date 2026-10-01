@@ -1,8 +1,19 @@
 import fs from "fs";
 import path from "path";
 
-const numberToWords = (num) => {
-  if (!num) return "Zero Rupees Only";
+const currencyName = (currency) => {
+  const text = String(currency || "INR").toUpperCase();
+  if (text.includes("USD")) return "Dollars";
+  if (text.includes("AED")) return "Dirhams";
+  if (text.includes("GBP")) return "Pounds";
+  if (text.includes("EUR")) return "Euros";
+  if (text.includes("AUD") || text.includes("A$")) return "Australian Dollars";
+  return "Rupees";
+};
+
+const numberToWords = (num, currency) => {
+  const name = currencyName(currency);
+  if (!num) return `Zero ${name} Only`;
   const ones = [
     "",
     "One",
@@ -60,7 +71,7 @@ const numberToWords = (num) => {
     n %= 100;
   }
   if (n) result += `${n < 20 ? ones[n] : group(n)} `;
-  return `${result.trim()} Rupees Only`;
+  return `${result.trim()} ${name} Only`;
 };
 
 const currencySymbol = (currency) => {
@@ -324,7 +335,7 @@ export const renderSyncedInvoicePage = (
   rule(y);
   y += 12;
   text("Amount in Words:", 40, y, 130, { bold: true });
-  text(numberToWords(total), 40, y + 14, 340, { color: "#475569" });
+  text(numberToWords(total, invoice.currency), 40, y + 14, 340, { color: "#475569" });
   y += 40;
 
   if (paid) {

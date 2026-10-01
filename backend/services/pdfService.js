@@ -13,8 +13,19 @@ const createArchiver =
 
 
 
-const numberToWords = (num) => {
-  if (num === 0) return "Zero Only";
+const currencyName = (currency) => {
+  const text = String(currency || "INR").toUpperCase();
+  if (text.includes("USD")) return "Dollars";
+  if (text.includes("AED")) return "Dirhams";
+  if (text.includes("GBP")) return "Pounds";
+  if (text.includes("EUR")) return "Euros";
+  if (text.includes("AUD") || text.includes("A$")) return "Australian Dollars";
+  return "Rupees";
+};
+
+const numberToWords = (num, currency) => {
+  const name = currencyName(currency);
+  if (num === 0) return `Zero ${name} Only`;
   const a = [
     "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
     "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"
@@ -39,7 +50,7 @@ const numberToWords = (num) => {
 
   let cleanNum = Math.floor(num);
   let words = "";
-  if (cleanNum === 0) return "Zero Rupees Only";
+  if (cleanNum === 0) return `Zero ${name} Only`;
 
   let initialGroup = cleanNum % 1000;
   if (initialGroup > 0) {
@@ -67,7 +78,7 @@ const numberToWords = (num) => {
     words = makeGroup(cleanNum) + " Crore " + words;
   }
 
-  return (words.trim() + " Rupees Only").replace(/\s+/g, " ");
+  return (words.trim() + ` ${name} Only`).replace(/\s+/g, " ");
 };
 
 /**
@@ -312,7 +323,7 @@ const renderInvoicePage = (doc, invoice, config = {}, isFirstPage = true) => {
   currentY += 12;
 
   doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0F172A").text("Amount in Words: ", 40, currentY, { continued: true })
-    .font("Helvetica").fillColor("#475569").text(numberToWords(grandTotal));
+    .font("Helvetica").fillColor("#475569").text(numberToWords(grandTotal, invoice.currency));
 
   currentY += 20;
   doc.font("Helvetica").fontSize(8).fillColor("#64748B").text(invoiceTerms, 40, currentY, { width: 515, align: "left", italic: true });
@@ -410,4 +421,3 @@ export const generateInvoicesZIP = async (invoices = [], config = {}) => {
     }
   });
 };
-

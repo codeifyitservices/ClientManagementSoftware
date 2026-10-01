@@ -22,9 +22,18 @@ import {
   getLiveExchangeRate,
 } from "../utils/currencyUtils";
 
-// Helper function to convert numeric value into Indian English word format
-const numberToWords = (num) => {
-  if (num === 0) return "Zero Only";
+// Helper function to convert numeric value into Indian English word format.
+const numberToWords = (num, currency) => {
+  const currencyNames = {
+    INR: "Rupees",
+    AED: "Dirhams",
+    USD: "Dollars",
+    GBP: "Pounds",
+    EUR: "Euros",
+    AUD: "Australian Dollars",
+  };
+  const currencyName = currencyNames[getCurrencyCode(currency)] || "Rupees";
+  if (num === 0) return `Zero ${currencyName} Only`;
 
   const a = [
     "",
@@ -82,7 +91,7 @@ const numberToWords = (num) => {
   let cleanNum = Math.floor(num);
   let words = "";
 
-  if (cleanNum === 0) return "Zero Rupees Only";
+  if (cleanNum === 0) return `Zero ${currencyName} Only`;
 
   let initialGroup = cleanNum % 1000;
   if (initialGroup > 0) {
@@ -110,7 +119,7 @@ const numberToWords = (num) => {
     words = makeGroup(cleanNum) + " Crore " + words;
   }
 
-  return (words.trim() + " Rupees Only").replace(/\s+/g, " ");
+  return (words.trim() + ` ${currencyName} Only`).replace(/\s+/g, " ");
 };
 
 export default function InvoicePreviewPage({
@@ -770,7 +779,7 @@ export default function InvoicePreviewPage({
                 Amount in Words:
               </p>
               <p className="text-[10px] text-slate-600 font-normal mt-0.5 max-w-[360px]">
-                {numberToWords(grandTotal)}
+                {numberToWords(grandTotal, invoiceData.currency)}
               </p>
             </div>
             <div className="w-64 bg-slate-100 p-2.5 rounded-lg border border-slate-200 grid grid-cols-2 text-right text-xs shrink-0">
