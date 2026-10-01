@@ -488,12 +488,14 @@ export function useAppService() {
   const handleInvoiceSubmit = async (data) => {
     setIsSavingInvoice(true);
     const invoiceId = data._id;
+    const downloadAfterSave = !!data.downloadAfterSave;
+    const { downloadAfterSave: _downloadAfterSave, ...invoicePayload } = data;
     const url = invoiceId ? `${API_INVOICES}/${invoiceId}` : API_INVOICES;
     try {
       const res = await authenticatedFetch(url, {
         method: invoiceId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(invoicePayload),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Failed to save invoice.");
@@ -503,6 +505,9 @@ export function useAppService() {
         "success",
       );
 
+      if (downloadAfterSave) {
+        await handleDownloadPdf(result);
+      }
       navigate("/invoices");
       fetchInvoices();
       fetchProjects();

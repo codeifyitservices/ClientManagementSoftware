@@ -116,6 +116,7 @@ const numberToWords = (num) => {
 export default function InvoicePreviewPage({
   clients = [],
   onSend,
+  onDownload,
   isSaving = false,
   token,
 }) {
@@ -174,6 +175,28 @@ export default function InvoicePreviewPage({
 
   // Dynamic invoice number resolution
   const [fetchedInvNumber, setFetchedInvNumber] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (isDummyPreview) {
+      alert("Save the invoice first to download its PDF.");
+      return;
+    }
+
+    if (invoiceData._id && onDownload) {
+      setIsDownloading(true);
+      try {
+        await onDownload(invoiceData);
+      } finally {
+        setIsDownloading(false);
+      }
+      return;
+    }
+
+    // New invoices are saved first, then the API-generated PDF is downloaded.
+    // This does not send an email or require a separate Save action.
+    onSend({ ...invoiceData, shouldSendEmail: false, downloadAfterSave: true });
+  };
 
   useEffect(() => {
     if (
@@ -913,10 +936,6 @@ export default function InvoicePreviewPage({
                       </li>
                     ))}
                 </ol>
-                <p className="mt-2 italic text-[9px] text-slate-400 font-medium">
-                  This invoice is system generated and does not require a
-                  signature.
-                </p>
               </div>
             )}
           </div>
@@ -956,17 +975,16 @@ export default function InvoicePreviewPage({
         </button>
         <button
           type="button"
-          onClick={() => {
-            alert(
-              isDummyPreview
-                ? "Dummy preview is not saved, so a PDF cannot be downloaded."
-                : "Please save and send the invoice first to download PDF.",
-            );
-          }}
-          className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+          onClick={handleDownload}
+          disabled={isSaving || isDownloading}
+          className="bg-[#5D5FEF] hover:bg-[#4d4fdf] text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
         >
-          <Download className="h-4 w-4" />
-          <span>Download PDF</span>
+          {isDownloading || (isSaving && !invoiceData._id) ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          <span>{isDownloading ? "Downloading..." : "Download PDF"}</span>
         </button>
         {!isDummyPreview && (
           <button

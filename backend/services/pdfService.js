@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import * as archiverModule from "archiver";
+import { renderSyncedInvoicePage } from "./syncedInvoicePdf.js";
 
 const createArchiver =
   typeof archiverModule.default === "function"
@@ -344,7 +345,7 @@ export const generateInvoicePDF = (invoice, config = {}) => {
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", (err) => reject(err));
 
-      renderInvoicePage(doc, invoice, config, true);
+      renderSyncedInvoicePage(doc, invoice, config, true);
 
       doc.end();
     } catch (error) {
@@ -370,7 +371,7 @@ export const generateCombinedInvoicesPDF = (invoices = [], config = {}) => {
       doc.on("error", (err) => reject(err));
 
       invoices.forEach((inv, index) => {
-        renderInvoicePage(doc, inv, config, index === 0);
+        renderSyncedInvoicePage(doc, inv, config, index === 0);
       });
 
       doc.end();
@@ -409,5 +410,4 @@ export const generateInvoicesZIP = async (invoices = [], config = {}) => {
     }
   });
 };
-
 

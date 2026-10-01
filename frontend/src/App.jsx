@@ -1025,6 +1025,7 @@ export default function App() {
                   clients={clients}
                   isSaving={isSavingInvoice}
                   onSend={handleInvoiceSubmit}
+                  onDownload={handleDownloadPdf}
                   token={token}
                 />
               </AdminRoute>
