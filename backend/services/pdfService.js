@@ -23,9 +23,16 @@ const currencyName = (currency) => {
   return "Rupees";
 };
 
+const minorCurrencyName = (currency) => {
+  const text = String(currency || "INR").toUpperCase();
+  if (text.includes("AED")) return "Fils";
+  if (text.includes("USD") || text.includes("GBP") || text.includes("EUR") || text.includes("AUD")) return text.includes("GBP") ? "Pence" : "Cents";
+  return "Paise";
+};
+
 const numberToWords = (num, currency) => {
   const name = currencyName(currency);
-  if (num === 0) return `Zero ${name} Only`;
+  const value = Math.max(0, Number(num) || 0);
   const a = [
     "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
     "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"
@@ -39,8 +46,9 @@ const numberToWords = (num, currency) => {
       n %= 100;
     }
     if (n >= 20) {
-      s += b[Math.floor(n / 10)] + " ";
+      s += b[Math.floor(n / 10)];
       n %= 10;
+      if (n > 0) s += "-";
     }
     if (n > 0) {
       s += a[n] + " ";
@@ -48,9 +56,9 @@ const numberToWords = (num, currency) => {
     return s.trim();
   };
 
-  let cleanNum = Math.floor(num);
+  let cleanNum = Math.floor(value);
+  const minor = Math.round((value - cleanNum) * 100);
   let words = "";
-  if (cleanNum === 0) return `Zero ${name} Only`;
 
   let initialGroup = cleanNum % 1000;
   if (initialGroup > 0) {
@@ -78,7 +86,9 @@ const numberToWords = (num, currency) => {
     words = makeGroup(cleanNum) + " Crore " + words;
   }
 
-  return (words.trim() + ` ${name} Only`).replace(/\s+/g, " ");
+  const majorWords = words.trim() || "Zero";
+  const minorWords = minor > 0 ? ` and ${makeGroup(minor)} ${minorCurrencyName(currency)}` : "";
+  return `${majorWords} ${name}${minorWords} Only`.replace(/\s+/g, " ");
 };
 
 /**

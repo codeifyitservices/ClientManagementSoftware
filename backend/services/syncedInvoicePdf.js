@@ -11,9 +11,17 @@ const currencyName = (currency) => {
   return "Rupees";
 };
 
+const minorCurrencyName = (currency) => {
+  const text = String(currency || "INR").toUpperCase();
+  if (text.includes("AED")) return "Fils";
+  if (text.includes("GBP")) return "Pence";
+  if (text.includes("USD") || text.includes("EUR") || text.includes("AUD")) return "Cents";
+  return "Paise";
+};
+
 const numberToWords = (num, currency) => {
   const name = currencyName(currency);
-  if (!num) return `Zero ${name} Only`;
+  const value = Math.max(0, Number(num) || 0);
   const ones = [
     "",
     "One",
@@ -51,8 +59,9 @@ const numberToWords = (num, currency) => {
   const group = (n) =>
     n < 20
       ? ones[n]
-      : `${tens[Math.floor(n / 10)]}${n % 10 ? ` ${ones[n % 10]}` : ""}`;
-  let n = Math.floor(Number(num));
+      : `${tens[Math.floor(n / 10)]}${n % 10 ? `-${ones[n % 10]}` : ""}`;
+  let n = Math.floor(value);
+  const minor = Math.round((value - n) * 100);
   let result = "";
   if (n >= 10000000) {
     result += `${group(Math.floor(n / 10000000))} Crore `;
@@ -71,7 +80,9 @@ const numberToWords = (num, currency) => {
     n %= 100;
   }
   if (n) result += `${n < 20 ? ones[n] : group(n)} `;
-  return `${result.trim()} ${name} Only`;
+  const majorWords = result.trim() || "Zero";
+  const minorWords = minor > 0 ? ` and ${group(minor)} ${minorCurrencyName(currency)}` : "";
+  return `${majorWords} ${name}${minorWords} Only`;
 };
 
 const currencySymbol = (currency) => {

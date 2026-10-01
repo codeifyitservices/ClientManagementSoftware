@@ -33,7 +33,16 @@ const numberToWords = (num, currency) => {
     AUD: "Australian Dollars",
   };
   const currencyName = currencyNames[getCurrencyCode(currency)] || "Rupees";
-  if (num === 0) return `Zero ${currencyName} Only`;
+  const value = Math.max(0, Number(num) || 0);
+  const minorNames = {
+    INR: "Paise",
+    AED: "Fils",
+    USD: "Cents",
+    GBP: "Pence",
+    EUR: "Cents",
+    AUD: "Cents",
+  };
+  const minorName = minorNames[getCurrencyCode(currency)] || "Paise";
 
   const a = [
     "",
@@ -79,8 +88,9 @@ const numberToWords = (num, currency) => {
       n %= 100;
     }
     if (n >= 20) {
-      s += b[Math.floor(n / 10)] + " ";
+      s += b[Math.floor(n / 10)];
       n %= 10;
+      if (n > 0) s += "-";
     }
     if (n > 0) {
       s += a[n] + " ";
@@ -88,10 +98,9 @@ const numberToWords = (num, currency) => {
     return s.trim();
   };
 
-  let cleanNum = Math.floor(num);
+  let cleanNum = Math.floor(value);
+  const minor = Math.round((value - cleanNum) * 100);
   let words = "";
-
-  if (cleanNum === 0) return `Zero ${currencyName} Only`;
 
   let initialGroup = cleanNum % 1000;
   if (initialGroup > 0) {
@@ -119,7 +128,9 @@ const numberToWords = (num, currency) => {
     words = makeGroup(cleanNum) + " Crore " + words;
   }
 
-  return (words.trim() + ` ${currencyName} Only`).replace(/\s+/g, " ");
+  const majorWords = words.trim() || "Zero";
+  const minorWords = minor > 0 ? ` and ${makeGroup(minor)} ${minorName}` : "";
+  return `${majorWords} ${currencyName}${minorWords} Only`.replace(/\s+/g, " ");
 };
 
 export default function InvoicePreviewPage({

@@ -1054,7 +1054,7 @@ export default function InvoiceFormPage({
               >
                 {SUPPORTED_CURRENCIES.map((c) => (
                   <option key={c.code} value={c.label}>
-                    {c.label}
+                    {c.code}
                   </option>
                 ))}
               </select>
