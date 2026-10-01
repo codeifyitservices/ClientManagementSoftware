@@ -95,6 +95,18 @@ const currencySymbol = (currency) => {
   return "Rs.";
 };
 
+// PDFKit's built-in Helvetica font cannot render the Arabic symbol in labels
+// such as "AED (د.إ)", so expose only the ASCII currency code in PDF metadata.
+const currencyDisplay = (currency) => {
+  const text = String(currency || "INR").toUpperCase();
+  if (text.includes("AED")) return "AED";
+  if (text.includes("USD")) return "USD";
+  if (text.includes("GBP")) return "GBP";
+  if (text.includes("EUR")) return "EUR";
+  if (text.includes("AUD") || text.includes("A$")) return "AUD";
+  return "INR";
+};
+
 const stateCode = (client) => {
   if (client?.gstNumber && /^\d{2}/.test(client.gstNumber))
     return client.gstNumber.slice(0, 2);
@@ -224,7 +236,7 @@ export const renderSyncedInvoicePage = (
       date(invoice.invoiceDate || invoice.createdAt || Date.now()),
     ],
     ["Due Date :", date(invoice.dueDate)],
-    ["Currency :", invoice.currency || "INR (Indian Rupee)"],
+    ["Currency :", currencyDisplay(invoice.currency)],
     ["Status :", paid ? "Paid" : "Pending"],
   ].forEach(([k, v], i) => {
     label(k, 350, 96 + i * 15, 92, "right");
